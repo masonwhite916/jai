@@ -8,10 +8,12 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 const JAI_LOGO = require('../assets/images/jai-logo.png');
 const { width, height } = Dimensions.get('window');
+const CARD_H = height * 0.48;
 
 export default function Onboarding() {
   const insets = useSafeAreaInsets();
@@ -19,7 +21,7 @@ export default function Onboarding() {
   const { markOnboardingDone } = useApp();
   const { t, isRTL, font } = useLanguage();
   const flatRef = useRef<FlatList>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [idx, setIdx] = useState(0);
 
   const SLIDES = [
     {
@@ -27,25 +29,29 @@ export default function Onboarding() {
       title: t('slide1Title'),
       subtitle: t('slide1Sub'),
       image: require('../assets/images/onboard1.png'),
-      gradient: ['#2D1B69', '#5B2C91'] as const,
+      gradients: ['#1A0845', '#4A1580'] as const,
+      accentColor: '#C21875',
     },
     {
       id: '2',
       title: t('slide2Title'),
       subtitle: t('slide2Sub'),
       image: require('../assets/images/onboard2.png'),
-      gradient: ['#5B2C91', '#8B35BB'] as const,
+      gradients: ['#2D0E72', '#6A24A0'] as const,
+      accentColor: '#8B35BB',
     },
     {
       id: '3',
       title: t('slide3Title'),
       subtitle: t('slide3Sub'),
       image: require('../assets/images/onboard3.png'),
-      gradient: ['#7B2A9E', '#C21875'] as const,
+      gradients: ['#4A1070', '#C21875'] as const,
+      accentColor: '#C21875',
     },
   ];
 
-  const isLast = activeIndex === SLIDES.length - 1;
+  const isLast = idx === SLIDES.length - 1;
+  const slide = SLIDES[idx];
 
   async function handleNext() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -53,7 +59,7 @@ export default function Onboarding() {
       await markOnboardingDone();
       router.replace('/auth');
     } else {
-      flatRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
+      flatRef.current?.scrollToIndex({ index: idx + 1, animated: true });
     }
   }
 
@@ -64,56 +70,97 @@ export default function Onboarding() {
 
   return (
     <View style={styles.root}>
+      {/* Full-bleed slide */}
       <FlatList
         ref={flatRef}
         data={SLIDES}
-        keyExtractor={(item) => item.id}
-        horizontal
-        pagingEnabled
+        keyExtractor={(s) => s.id}
+        horizontal pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
         onMomentumScrollEnd={(e) => {
-          const idx = Math.round(e.nativeEvent.contentOffset.x / width);
-          setActiveIndex(idx);
+          setIdx(Math.round(e.nativeEvent.contentOffset.x / width));
         }}
         renderItem={({ item }) => (
-          <LinearGradient colors={item.gradient} style={styles.slide}>
-            <View style={styles.imageContainer}>
-              <Image source={JAI_LOGO} style={styles.logoImg} resizeMode="contain" />
-              <Image source={item.image} style={styles.illustration} resizeMode="contain" />
+          <LinearGradient colors={item.gradients} style={styles.slide}>
+            {/* Logo top */}
+            <View style={[styles.logoWrap, { paddingTop: insets.top + 20 + (Platform.OS === 'web' ? 67 : 0) }]}>
+              <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
             </View>
+
+            {/* Illustration */}
+            <View style={styles.illustrationWrap}>
+              <Image source={item.image} style={styles.illustration} resizeMode="cover" />
+              {/* Gradient fade at bottom of illustration */}
+              <LinearGradient
+                colors={['transparent', item.gradients[1]]}
+                style={styles.illustrationFade}
+              />
+            </View>
+
+            {/* Decorative ring */}
+            <View style={[styles.decorRing, { borderColor: 'rgba(255,255,255,0.06)' }]} />
           </LinearGradient>
         )}
       />
 
-      <View style={[styles.bottomContainer, { paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }]}>
-        <View style={styles.textContent}>
-          <Text style={[styles.title, { fontFamily: font.bold, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-            {SLIDES[activeIndex].title}
-          </Text>
-          <Text style={[styles.subtitle, { fontFamily: font.regular, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
-            {SLIDES[activeIndex].subtitle}
-          </Text>
-        </View>
+      {/* Bottom content card */}
+      <View style={[styles.card, { paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }]}>
 
-        <View style={styles.dotsRow}>
-          {SLIDES.map((_, i) => (
-            <View key={i} style={[styles.dot, i === activeIndex && styles.dotActive]} />
-          ))}
-        </View>
+        {/* Drag indicator */}
+        <View style={styles.handle} />
 
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.85}>
-          <LinearGradient
-            colors={['#C21875', '#8B35BB']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={styles.nextGradient}
+        {/* Accent line */}
+        <LinearGradient
+          colors={[slide.accentColor, 'transparent']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+          style={[styles.accentLine, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
+        />
+
+        {/* Text */}
+        <Text style={[styles.title, { fontFamily: font.bold, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+          {slide.title}
+        </Text>
+        <Text style={[styles.subtitle, { fontFamily: font.regular, textAlign: isRTL ? 'right' : 'left', writingDirection: isRTL ? 'rtl' : 'ltr' }]}>
+          {slide.subtitle}
+        </Text>
+
+        {/* Dots + action row */}
+        <View style={[styles.actionRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+          {/* Dots */}
+          <View style={[styles.dotsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
+            {SLIDES.map((_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.dot,
+                  i === idx && styles.dotActive,
+                  i === idx && { backgroundColor: slide.accentColor, width: 28 },
+                ]}
+              />
+            ))}
+          </View>
+
+          {/* Next / Get Started button */}
+          <TouchableOpacity
+            onPress={handleNext}
+            activeOpacity={0.85}
+            style={styles.nextBtn}
           >
-            <Text style={[styles.nextText, { fontFamily: font.bold }]}>
-              {isLast ? t('getStarted') : t('next')}
-            </Text>
-          </LinearGradient>
-        </TouchableOpacity>
+            <LinearGradient
+              colors={[slide.accentColor, '#8B35BB']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={styles.nextGrad}
+            >
+              {isLast
+                ? <Text style={[styles.nextLabel, { fontFamily: font.bold }]}>{t('getStarted')}</Text>
+                : <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={22} color="#FFF" />
+              }
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
 
+        {/* Skip */}
         {!isLast && (
           <TouchableOpacity onPress={handleSkip} style={styles.skipBtn}>
             <Text style={[styles.skipText, { fontFamily: font.regular }]}>{t('skip')}</Text>
@@ -125,41 +172,61 @@ export default function Onboarding() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#2D1B69' },
-  slide: { width, height },
-  imageContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingBottom: 260,
-    gap: 16,
+  root: { flex: 1, backgroundColor: '#1A0845' },
+
+  slide: { width, height, position: 'relative', overflow: 'hidden' },
+  logoWrap: { alignItems: 'center', zIndex: 2, paddingBottom: 8 },
+  logo: { width: 140, height: 58 },
+  illustrationWrap: { flex: 1, position: 'relative', marginTop: 8, marginBottom: CARD_H - 40 },
+  illustration: { width: '100%', height: '100%' },
+  illustrationFade: {
+    position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
   },
-  logoImg: { width: 160, height: 70 },
-  illustration: { width: width * 0.75, height: height * 0.32 },
-  bottomContainer: {
-    position: 'absolute',
-    bottom: 0, left: 0, right: 0,
+  decorRing: {
+    position: 'absolute', bottom: CARD_H - 60, right: -40,
+    width: 180, height: 180, borderRadius: 90,
+    borderWidth: 1,
+  },
+
+  // Card
+  card: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    height: CARD_H,
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    paddingHorizontal: 28,
-    paddingTop: 32,
+    borderTopLeftRadius: 36, borderTopRightRadius: 36,
+    paddingHorizontal: 28, paddingTop: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 24,
+    elevation: 16,
   },
-  textContent: { marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700', color: '#1A1A1A', lineHeight: 38, marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 24 },
-  dotsRow: { flexDirection: 'row', gap: 8, marginBottom: 28 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#EBEBF5' },
-  dotActive: { width: 24, backgroundColor: '#C21875' },
-  nextButton: { borderRadius: 16, overflow: 'hidden', marginBottom: 16 },
-  nextGradient: { paddingVertical: 18, alignItems: 'center' },
-  nextText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  skipBtn: { alignItems: 'center', paddingVertical: 4 },
-  skipText: { color: '#6B7280', fontSize: 15 },
+  handle: {
+    alignSelf: 'center', width: 40, height: 4,
+    borderRadius: 2, backgroundColor: '#E0E0EA', marginBottom: 20,
+  },
+  accentLine: { width: 40, height: 3, borderRadius: 2, marginBottom: 14 },
+  title: {
+    fontSize: 30, lineHeight: 38, color: '#120840', marginBottom: 12,
+  },
+  subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 24, marginBottom: 28 },
+
+  actionRow: { justifyContent: 'space-between', alignItems: 'center' },
+  dotsRow: { gap: 8, alignItems: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E0E0EA' },
+  dotActive: { borderRadius: 4 },
+
+  nextBtn: {
+    borderRadius: 32, overflow: 'hidden',
+    shadowColor: '#C21875', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 8,
+  },
+  nextGrad: {
+    width: 58, height: 58, borderRadius: 29,
+    justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16,
+  },
+  nextLabel: { color: '#FFFFFF', fontSize: 14 },
+
+  skipBtn: { alignItems: 'center', marginTop: 18 },
+  skipText: { color: '#9CA3AF', fontSize: 14 },
 });
