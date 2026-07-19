@@ -1,0 +1,162 @@
+[
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d001",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide01Cover.tsx",
+    "title": "JAI Roadside Assistance",
+    "description": "Cover slide — hero highway image with headline and JAI brand",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d002",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide02Problem.tsx",
+    "title": "The Problem",
+    "description": "4-point breakdown of the Saudi roadside assistance gap",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d003",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide03Introducing.tsx",
+    "title": "Introducing JAI",
+    "description": "Split layout introducing JAI brand and value proposition",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d004",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide04Mission.tsx",
+    "title": "Our Mission",
+    "description": "Mission statement and 4 brand pillars",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d005",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide05Coverage.tsx",
+    "title": "Current Coverage",
+    "description": "Riyadh coverage with image and expansion roadmap",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d006",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide06Services.tsx",
+    "title": "Services We Provide",
+    "description": "Grid of 7 roadside services",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d007",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide07Battery.tsx",
+    "title": "Battery & Towing",
+    "description": "Battery charge and emergency towing service deep dive",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d008",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide08FuelTire.tsx",
+    "title": "Fuel, Tire & Lockout",
+    "description": "Fuel supply, tire change, and lockout service detail",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d009",
+    "position": 9,
+    "filepath": "src/pages/slides/Slide09Mechanical.tsx",
+    "title": "Mechanical & Diagnostics",
+    "description": "Light mechanical repair and fault diagnostics services",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d010",
+    "position": 10,
+    "filepath": "src/pages/slides/Slide10Plans.tsx",
+    "title": "Membership Plans",
+    "description": "3-column overview of all membership tiers",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d011",
+    "position": 11,
+    "filepath": "src/pages/slides/Slide11Basic.tsx",
+    "title": "Basic Plan — 199 SAR / Year",
+    "description": "Basic plan detail with price hero and feature list",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d012",
+    "position": 12,
+    "filepath": "src/pages/slides/Slide12Accidents.tsx",
+    "title": "Accidents Plan — 299 SAR / Year",
+    "description": "Most popular plan with priority dispatch and accident coverage",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d013",
+    "position": 13,
+    "filepath": "src/pages/slides/Slide13Rental.tsx",
+    "title": "Rental Plan — 600 SAR / Year",
+    "description": "Premium complete plan for high-mileage drivers",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d014",
+    "position": 14,
+    "filepath": "src/pages/slides/Slide14HowItWorks.tsx",
+    "title": "How It Works",
+    "description": "4-step process: Subscribe, Request, Dispatch, Resolved",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d015",
+    "position": 15,
+    "filepath": "src/pages/slides/Slide15MobileApp.tsx",
+    "title": "The JAI Mobile App",
+    "description": "Mobile app overview with smartphone image",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d016",
+    "position": 16,
+    "filepath": "src/pages/slides/Slide16AppHighlights.tsx",
+    "title": "App Highlights",
+    "description": "7 key app features in 2-column layout",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d017",
+    "position": 17,
+    "filepath": "src/pages/slides/Slide17Website.tsx",
+    "title": "Marketing Website",
+    "description": "Website features and wireframe mockup",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d018",
+    "position": 18,
+    "filepath": "src/pages/slides/Slide18SaudiArabia.tsx",
+    "title": "Built for Saudi Arabia",
+    "description": "Localization features: bilingual, RTL, SAR pricing, WhatsApp",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d019",
+    "position": 19,
+    "filepath": "src/pages/slides/Slide19WhyJAI.tsx",
+    "title": "Why Choose JAI",
+    "description": "6 differentiators in 3-column grid",
+    "speakerNotes": ""
+  },
+  {
+    "id": "f47ac10b-58cc-4372-a001-0e02b2c3d020",
+    "position": 20,
+    "filepath": "src/pages/slides/Slide20GetStarted.tsx",
+    "title": "Get Started with JAI",
+    "description": "Closing slide with logo, contact details, and CTA",
+    "speakerNotes": ""
+  }
+]

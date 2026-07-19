@@ -1,0 +1,27 @@
+kind = "slides"
+previewPath = "/jai-deck/"
+title = "JAI Roadside Assistance — Client Deck"
+version = "1.0.0"
+id = "artifacts/jai-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/jai-deck/" ]
+localPort = 21441
+
+[services.development]
+run = "pnpm --filter @workspace/jai-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jai-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jai-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21441"
+BASE_PATH = "/jai-deck/"
