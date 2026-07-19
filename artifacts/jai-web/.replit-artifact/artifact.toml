@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/jai-web/"
+title = "JAI Roadside Assistance — Website"
+version = "1.0.0"
+id = "artifacts/jai-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/jai-web/" ]
+localPort = 24752
+
+[services.development]
+run = "pnpm --filter @workspace/jai-web run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jai-web", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jai-web/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24752"
+BASE_PATH = "/jai-web/"
