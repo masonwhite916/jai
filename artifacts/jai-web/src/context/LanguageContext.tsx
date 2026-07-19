@@ -23,8 +23,8 @@ const translations = {
     trust_body: "When your car dies at 2 AM on a desert highway, you don't want excuses. You want highly-trained professionals, rapid response, and the certainty that everything will be fine. That's JAI.",
     trust_f1_title: 'Rapid Dispatch',
     trust_f1_desc: "Our nearest unit is routed instantly. We don't make you wait in the dark.",
-    trust_f2_title: 'Kingdom-Wide Coverage',
-    trust_f2_desc: 'From busy city centers to remote desert highways, we\'ve got you covered.',
+    trust_f2_title: 'Riyadh Coverage',
+    trust_f2_desc: 'Currently serving Riyadh and its surrounding areas, with more cities coming soon.',
     trust_f3_title: 'Premium Care',
     trust_f3_desc: 'Highly-trained professionals handling your vehicle with the utmost respect.',
 
@@ -118,8 +118,8 @@ const translations = {
     trust_body: 'حين تتعطل سيارتك في الساعة الثانية صباحاً على طريق صحراوي، لا تريد أعذاراً. تريد محترفين مدربين، استجابة فورية، ويقيناً بأن كل شيء سيكون على ما يرام. هذا هو جاي.',
     trust_f1_title: 'استجابة فورية',
     trust_f1_desc: 'يصلك أقرب فريق لنا فوراً. لن ندعك تنتظر في الظلام.',
-    trust_f2_title: 'تغطية شاملة للمملكة',
-    trust_f2_desc: 'من قلب المدن المزدحمة إلى أبعد الطرق الصحراوية، نحن هنا.',
+    trust_f2_title: 'تغطية الرياض',
+    trust_f2_desc: 'نخدم حالياً الرياض ومحيطها، مع التوسع لمزيد من المدن قريباً.',
     trust_f3_title: 'رعاية متميزة',
     trust_f3_desc: 'متخصصون مدربون يتعاملون مع سيارتك باحترافية وأمان تامين.',
 
