@@ -14,7 +14,7 @@ export interface User {
   id: string;
   name: string;
   phone: string;
-  membership: 'basic' | 'premium' | 'business' | 'enterprise' | 'none';
+  membership: 'none' | 'basic' | 'accidents' | 'rental';
   vehicles: Vehicle[];
   points: number;
 }

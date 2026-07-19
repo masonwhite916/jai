@@ -1,16 +1,15 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Platform, Linking,
+  TouchableOpacity, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-
-const WA_NUMBER = '966555616449';
 
 type Plan = {
   id: string;
@@ -116,16 +115,14 @@ export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useApp();
   const { isRTL, font, t } = useLanguage();
+  const router = useRouter();
 
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
 
   function handleSubscribe(plan: Plan) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const msgEn = `Hello JAI! I'd like to subscribe to the ${plan.nameEn} (SAR ${plan.price}/year).`;
-    const msgAr = `مرحباً جاي! أرغب في الاشتراك في ${plan.nameAr} (${plan.price} ريال / سنة).`;
-    const msg = encodeURIComponent(isRTL ? msgAr : msgEn);
-    Linking.openURL(`https://wa.me/${WA_NUMBER}?text=${msg}`);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/subscribe/${plan.id}` as any);
   }
 
   return (
