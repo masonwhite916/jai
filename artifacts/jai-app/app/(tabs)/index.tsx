@@ -206,7 +206,11 @@ export default function HomeScreen() {
               <Text style={[styles.contactLabel, { fontFamily: font.semibold }]}>{t('whatsapp')}</Text>
               <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={14} color="rgba(255,255,255,0.7)" />
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.contactCard, { backgroundColor: '#2D1B69' }]} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[styles.contactCard, { backgroundColor: '#2D1B69' }]}
+              activeOpacity={0.85}
+              onPress={() => Linking.openURL('tel:+966555616449')}
+            >
               <View style={[styles.contactIconRing, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                 <Ionicons name="call" size={22} color="#FFFFFF" />
               </View>
