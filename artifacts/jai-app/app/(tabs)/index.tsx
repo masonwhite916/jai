@@ -375,10 +375,13 @@ const styles = StyleSheet.create({
   },
   sosCardGrad: { paddingVertical: 16, paddingHorizontal: 18, alignItems: 'center', gap: 14 },
   sosBtnWrap: { justifyContent: 'center', alignItems: 'center' },
-  sosHitArea: { justifyContent: 'center', alignItems: 'center' },
+  sosHitArea: {
+    width: 70, height: 70,
+    justifyContent: 'center', alignItems: 'center',
+  },
   sosRing: {
     position: 'absolute',
-    width: 66, height: 66, borderRadius: 33,
+    width: 70, height: 70, borderRadius: 35,
     backgroundColor: 'rgba(255,80,80,0.35)',
   },
   sosCore: {
