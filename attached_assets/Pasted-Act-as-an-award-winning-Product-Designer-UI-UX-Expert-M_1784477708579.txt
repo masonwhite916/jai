@@ -1,0 +1,538 @@
+Act as an award-winning Product Designer, UI/UX Expert, Mobile App Architect, and Senior Flutter Engineer.
+
+Design and build a premium mobile application for "JAI Roadside Assistance", the leading roadside assistance company in Saudi Arabia.
+
+The application should reflect the JAI brand identity shown in the attached logo.
+
+----------------------------------
+BRAND IDENTITY
+----------------------------------
+
+Brand Name:
+JAI
+
+Industry:
+Roadside Assistance
+
+Target Market:
+Saudi Arabia
+
+Languages:
+Arabic (RTL) as default
+English (LTR)
+
+Design Style:
+Premium
+Modern
+Minimal
+Fast
+Professional
+Luxury
+Technology-driven
+
+The entire UI should be inspired by the logo.
+
+Brand Colors
+
+Primary
+Deep Indigo
+#2D1B69
+
+Secondary
+Royal Purple
+#5B2C91
+
+Accent
+Magenta
+#C21875
+
+Background
+White
+#FFFFFF
+
+Light Background
+#F8F9FC
+
+Text
+#1A1A1A
+
+Success
+#2ECC71
+
+Warning
+#F39C12
+
+Danger
+#E74C3C
+
+The application should use soft gradients inspired by the logo.
+
+Gradient Example
+
+Deep Indigo
+↓
+
+Royal Purple
+↓
+
+Magenta
+
+Use rounded cards.
+
+24px border radius.
+
+Soft shadows.
+
+Glassmorphism where appropriate.
+
+Smooth animations.
+
+Apple-quality interface.
+
+----------------------------------
+APP PURPOSE
+----------------------------------
+
+Users can request roadside assistance within seconds.
+
+Services include
+
+• Battery Jump Start
+
+• Tire Replacement
+
+• Fuel Delivery
+
+• Vehicle Towing
+
+• Lockout Assistance
+
+• Light Mechanical Repairs
+
+• Light Electrical Repairs
+
+----------------------------------
+USER TYPES
+----------------------------------
+
+Customer
+
+Technician
+
+Dispatcher
+
+Corporate Client
+
+Admin
+
+----------------------------------
+ONBOARDING
+----------------------------------
+
+Beautiful onboarding with illustrations.
+
+Three screens:
+
+"We arrive when you need us."
+
+"Track technicians live."
+
+"24/7 Roadside Assistance."
+
+Login
+
+Register
+
+OTP Verification
+
+Guest Mode
+
+----------------------------------
+HOME SCREEN
+----------------------------------
+
+Large greeting
+
+Current location
+
+Weather (optional)
+
+Search Bar
+
+Emergency Button
+
+Horizontal cards for:
+
+Battery
+
+Fuel
+
+Tire
+
+Tow Truck
+
+Lockout
+
+Mechanic
+
+Electrician
+
+Quick Contact
+
+WhatsApp
+
+Call Center
+
+Membership Banner
+
+Latest Offers
+
+Nearby Technician Status
+
+----------------------------------
+REQUEST FLOW
+----------------------------------
+
+Choose Service
+
+↓
+
+Choose Vehicle
+
+↓
+
+Describe Problem
+
+↓
+
+Upload Photos
+
+↓
+
+Auto Detect Location
+
+↓
+
+Estimated Arrival Time
+
+↓
+
+Estimated Cost
+
+↓
+
+Confirm Request
+
+----------------------------------
+LIVE TRACKING
+----------------------------------
+
+Google Maps
+
+Animated technician movement
+
+Estimated arrival
+
+Technician photo
+
+Vehicle information
+
+Phone
+
+Chat
+
+Cancel request
+
+Arrival notification
+
+----------------------------------
+PAYMENTS
+----------------------------------
+
+Apple Pay
+
+Mada
+
+Visa
+
+Mastercard
+
+Cash
+
+Generate invoice automatically.
+
+----------------------------------
+CUSTOMER PROFILE
+----------------------------------
+
+Saved Vehicles
+
+Saved Locations
+
+Membership
+
+Invoices
+
+History
+
+Notifications
+
+Rewards
+
+Promo Codes
+
+Referral Program
+
+----------------------------------
+MEMBERSHIP
+----------------------------------
+
+Basic
+
+Premium
+
+Business
+
+Enterprise
+
+Display benefits using elegant pricing cards.
+
+----------------------------------
+CORPORATE PORTAL
+----------------------------------
+
+Fleet Management
+
+Add Vehicles
+
+Employee Requests
+
+Reports
+
+Invoices
+
+Analytics
+
+Company Dashboard
+
+----------------------------------
+TECHNICIAN APP
+----------------------------------
+
+Accept Request
+
+Reject Request
+
+Google Navigation
+
+Call Customer
+
+Chat
+
+Start Service
+
+Upload Photos
+
+Collect Payment
+
+Complete Job
+
+Signature
+
+----------------------------------
+ADMIN DASHBOARD
+----------------------------------
+
+Manage Customers
+
+Manage Requests
+
+Manage Fleet
+
+Manage Technicians
+
+Manage Companies
+
+Reports
+
+Revenue
+
+Maps
+
+Performance
+
+Real-time Analytics
+
+----------------------------------
+CRM
+----------------------------------
+
+Customer Profiles
+
+Lead Tracking
+
+Corporate Accounts
+
+History
+
+Invoices
+
+Subscriptions
+
+----------------------------------
+NOTIFICATIONS
+----------------------------------
+
+Technician Assigned
+
+Technician Arriving
+
+Technician Arrived
+
+Service Completed
+
+Membership Expiry
+
+Offers
+
+----------------------------------
+BOTTOM NAVIGATION
+----------------------------------
+
+Home
+
+Requests
+
+Membership
+
+Notifications
+
+Profile
+
+----------------------------------
+ANIMATIONS
+----------------------------------
+
+Use smooth premium animations.
+
+Micro-interactions.
+
+Floating buttons.
+
+Animated loading.
+
+Animated cards.
+
+Animated map markers.
+
+----------------------------------
+UI STYLE
+----------------------------------
+
+Inspired by Uber
+
+Google Maps
+
+Tesla
+
+Apple
+
+Careem
+
+Simple
+
+Minimal
+
+Premium
+
+Elegant
+
+Fast
+
+----------------------------------
+ICONS
+----------------------------------
+
+Rounded outline icons.
+
+Minimal.
+
+Consistent.
+
+----------------------------------
+TYPOGRAPHY
+----------------------------------
+
+Arabic
+
+IBM Plex Sans Arabic
+
+English
+
+Inter
+
+Large readable typography.
+
+----------------------------------
+SPECIAL FEATURES
+----------------------------------
+
+SOS Button
+
+Roadside Safety Tips
+
+FAQ
+
+AI Chat Assistant
+
+WhatsApp Support
+
+Call Center
+
+Voice Request
+
+Dark Mode
+
+Offline Request Cache
+
+Push Notifications
+
+Google Analytics
+
+Firebase
+
+Google Tag Manager
+
+Google Ads Conversion Tracking
+
+----------------------------------
+TECH STACK
+----------------------------------
+
+Flutter
+
+Firebase Authentication
+
+Firestore
+
+Firebase Storage
+
+Firebase Cloud Messaging
+
+Google Maps API
+
+Google Places API
+
+Cloud Functions
+
+Stripe-compatible payment gateway supporting Apple Pay and Mada
+
+----------------------------------
+FINAL GOAL
+----------------------------------
+
+Create a production-ready mobile application with a premium Saudi market experience that feels like a combination of Uber, Careem, and Tesla, while remaining true to the JAI brand identity.
+
+The interface should immediately communicate speed, reliability, trust, and emergency support.
+
+Every screen should be fully designed with polished UI, responsive layouts, reusable components, accessibility support, and smooth transitions.
