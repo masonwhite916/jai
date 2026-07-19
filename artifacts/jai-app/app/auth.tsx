@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
-  TextInput, Platform, ScrollView, KeyboardAvoidingView,
+  TextInput, Platform, ScrollView, KeyboardAvoidingView, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,8 +59,11 @@ export default function Auth() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <LinearGradient colors={['#2D1B69', '#5B2C91']} style={[styles.header, { paddingTop: insets.top + 24 + (Platform.OS === 'web' ? 67 : 0) }]}>
-        <Text style={styles.logo}>JAI</Text>
-        <Text style={styles.tagline}>Roadside Assistance</Text>
+        <Image
+          source={require('../assets/images/jai-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </LinearGradient>
 
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent} keyboardShouldPersistTaps="handled">
@@ -149,8 +152,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
     alignItems: 'center',
   },
-  logo: { fontSize: 42, fontWeight: '900', color: '#FFFFFF', letterSpacing: 6, fontFamily: 'Inter_700Bold' },
-  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.7)', marginTop: 4, fontFamily: 'Inter_400Regular', letterSpacing: 1 },
+  logo: { width: 180, height: 80 },
   body: { flex: 1, backgroundColor: '#FFFFFF' },
   bodyContent: { padding: 28 },
   heading: { fontSize: 22, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Inter_700Bold', marginBottom: 8 },

@@ -1,8 +1,10 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Dimensions,
-  TouchableOpacity, Image, Platform,
+  TouchableOpacity, Image, Platform, ImageSourcePropType,
 } from 'react-native';
+
+const JAI_LOGO = require('../assets/images/jai-logo.png');
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +41,7 @@ function SlideItem({ item }: { item: typeof SLIDES[0] }) {
   return (
     <LinearGradient colors={item.gradient} style={styles.slide}>
       <View style={styles.imageContainer}>
+        <Image source={JAI_LOGO} style={styles.logoImg} resizeMode="contain" />
         <Image source={item.image} style={styles.illustration} resizeMode="contain" />
       </View>
     </LinearGradient>
@@ -129,10 +132,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 80,
+    paddingTop: 60,
     paddingBottom: 260,
+    gap: 16,
   },
-  illustration: { width: width * 0.8, height: height * 0.38 },
+  logoImg: { width: 160, height: 70 },
+  illustration: { width: width * 0.75, height: height * 0.32 },
   bottomContainer: {
     position: 'absolute',
     bottom: 0,

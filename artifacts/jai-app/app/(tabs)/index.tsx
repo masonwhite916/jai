@@ -1,8 +1,10 @@
 import React, { useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Dimensions, Platform,
+  Dimensions, Platform, Image,
 } from 'react-native';
+
+const JAI_LOGO = require('../../assets/images/jai-logo.png');
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons, Feather } from '@expo/vector-icons';
@@ -87,13 +89,14 @@ export default function HomeScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
         <View style={styles.headerTop}>
-          <View>
-            <Text style={styles.greeting}>Good morning,</Text>
-            <Text style={styles.userName}>{firstName} 👋</Text>
-          </View>
+          <Image source={JAI_LOGO} style={styles.headerLogo} resizeMode="contain" />
           <TouchableOpacity style={styles.notifBtn}>
             <Ionicons name="notifications-outline" size={22} color="#FFFFFF" />
           </TouchableOpacity>
+        </View>
+        <View style={styles.greetingRow}>
+          <Text style={styles.greeting}>Good morning,</Text>
+          <Text style={styles.userName}>{firstName} 👋</Text>
         </View>
 
         <TouchableOpacity style={styles.locationRow}>
@@ -205,9 +208,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 28,
   },
-  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 },
-  greeting: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter_400Regular' },
-  userName: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
+  headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  headerLogo: { width: 120, height: 52 },
+  greetingRow: { marginBottom: 6 },
+  greeting: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter_400Regular' },
+  userName: { fontSize: 20, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
   notifBtn: {
     width: 42, height: 42, borderRadius: 21,
     backgroundColor: 'rgba(255,255,255,0.15)',
