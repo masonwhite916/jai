@@ -300,16 +300,10 @@ export default function SubscribeScreen() {
             font={font}
             rowDir={rowDir}
           />
-          <Row
-            label={isRTL ? 'الضريبة (15%)' : 'VAT (15%)'}
-            value={`${Math.round(Number(plan.price) * 0.15)} ${isRTL ? 'ريال' : 'SAR'}`}
-            font={font}
-            rowDir={rowDir}
-          />
           <View style={styles.orderDivider} />
           <Row
-            label={isRTL ? 'الإجمالي' : 'Total'}
-            value={`${Math.round(Number(plan.price) * 1.15)} ${isRTL ? 'ريال' : 'SAR'}`}
+            label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT included)'}
+            value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
             font={font}
             rowDir={rowDir}
             bold
@@ -341,8 +335,8 @@ export default function SubscribeScreen() {
                 <Ionicons name="lock-closed" size={20} color="#FFF" />
                 <Text style={[styles.submitText, { fontFamily: font.bold }]}>
                   {isRTL
-                    ? `ادفع ${Math.round(Number(plan.price) * 1.15)} ريال واشترك`
-                    : `Pay SAR ${Math.round(Number(plan.price) * 1.15)} & Subscribe`}
+                    ? `ادفع ${plan.price} ريال واشترك`
+                    : `Pay SAR ${plan.price} & Subscribe`}
                 </Text>
               </>
             )}
