@@ -198,7 +198,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[styles.contactCard, { backgroundColor: '#1DA851' }]}
               activeOpacity={0.85}
-              onPress={() => Linking.openURL('https://wa.me/966567616724')}
+              onPress={() => Linking.openURL('https://wa.me/966555616449')}
             >
               <View style={styles.contactIconRing}>
                 <Ionicons name="logo-whatsapp" size={22} color="#1DA851" />
