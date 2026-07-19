@@ -1,19 +1,23 @@
 import { motion } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
+import { useLocation } from 'wouter';
 
 export default function Pricing() {
   const { t, isRTL } = useLanguage();
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
+  const [, navigate] = useLocation();
 
   const plans = [
     {
+      id: 'basic',
       nameKey: 'plan_basic_name',
       arabicKey: 'plan_basic_arabic',
       price: '199',
       featureKeys: ['plan_basic_f1', 'plan_basic_f2', 'plan_basic_f3', 'plan_basic_f4', 'plan_basic_f5'],
     },
     {
+      id: 'accidents',
       nameKey: 'plan_accidents_name',
       arabicKey: 'plan_accidents_arabic',
       price: '299',
@@ -21,6 +25,7 @@ export default function Pricing() {
       featureKeys: ['plan_accidents_f1', 'plan_accidents_f2', 'plan_accidents_f3', 'plan_accidents_f4'],
     },
     {
+      id: 'rental',
       nameKey: 'plan_rental_name',
       arabicKey: 'plan_rental_arabic',
       price: '600',
@@ -90,14 +95,12 @@ export default function Pricing() {
                 ))}
               </div>
 
-              <a
-                href="https://wa.me/966555616449"
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                onClick={() => navigate(`/subscribe?plan=${p.id}`)}
                 className={`block w-full py-4 text-center rounded-full font-bold transition-all ${p.popular ? 'bg-[#C21875] hover:bg-[#C21875]/90 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'} ${arabic}`}
               >
                 {t('price_cta')}
-              </a>
+              </button>
             </motion.div>
           ))}
         </div>
