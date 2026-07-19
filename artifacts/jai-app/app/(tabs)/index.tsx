@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Dimensions, Platform, Image,
+  Dimensions, Platform, Image, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -195,7 +195,11 @@ export default function HomeScreen() {
             {t('quickContact')}
           </Text>
           <View style={[styles.contactRow, { flexDirection: rowDir }]}>
-            <TouchableOpacity style={[styles.contactCard, { backgroundColor: '#1DA851' }]} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[styles.contactCard, { backgroundColor: '#1DA851' }]}
+              activeOpacity={0.85}
+              onPress={() => Linking.openURL('https://wa.me/966567616724')}
+            >
               <View style={styles.contactIconRing}>
                 <Ionicons name="logo-whatsapp" size={22} color="#1DA851" />
               </View>
