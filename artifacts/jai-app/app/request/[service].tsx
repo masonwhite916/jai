@@ -8,16 +8,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
+import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 import * as Haptics from 'expo-haptics';
 
-const SERVICE_INFO: Record<string, { label: string; icon: string; lib: string; basePrice: number }> = {
-  battery: { label: 'Battery Jump Start', icon: 'battery-charging', lib: 'Ionicons', basePrice: 120 },
-  fuel: { label: 'Fuel Delivery', icon: 'gas-station', lib: 'MCIcons', basePrice: 80 },
-  tire: { label: 'Tire Replacement', icon: 'tire', lib: 'MCIcons', basePrice: 350 },
-  tow: { label: 'Vehicle Towing', icon: 'tow-truck', lib: 'MCIcons', basePrice: 500 },
-  lockout: { label: 'Lockout Assistance', icon: 'key', lib: 'Ionicons', basePrice: 200 },
-  mechanic: { label: 'Light Mechanical Repair', icon: 'wrench', lib: 'MCIcons', basePrice: 300 },
-  electric: { label: 'Electrical Repair', icon: 'flash', lib: 'Ionicons', basePrice: 280 },
+type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
+
+const SERVICE_INFO: Record<string, ServiceDef> = {
+  battery: { labelKey: 'serviceBattery', icon: 'battery-charging', lib: 'Ionicons', basePrice: 120 },
+  fuel: { labelKey: 'serviceFuel', icon: 'gas-station', lib: 'MCIcons', basePrice: 80 },
+  tire: { labelKey: 'serviceTire', icon: 'tire', lib: 'MCIcons', basePrice: 350 },
+  tow: { labelKey: 'serviceTow', icon: 'tow-truck', lib: 'MCIcons', basePrice: 500 },
+  lockout: { labelKey: 'serviceLockout', icon: 'key', lib: 'Ionicons', basePrice: 200 },
+  mechanic: { labelKey: 'serviceMechanic', icon: 'wrench', lib: 'MCIcons', basePrice: 300 },
+  electric: { labelKey: 'serviceElectric', icon: 'flash', lib: 'Ionicons', basePrice: 280 },
 };
 
 function ServiceIcon({ icon, lib }: { icon: string; lib: string }) {
@@ -25,28 +28,20 @@ function ServiceIcon({ icon, lib }: { icon: string; lib: string }) {
   return <MaterialCommunityIcons name={icon as any} size={28} color="#FFFFFF" />;
 }
 
-function StepIndicator({ current, total }: { current: number; total: number }) {
-  return (
-    <View style={styles.stepIndicator}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View key={i} style={[styles.stepDot, i < current && styles.stepDotDone, i === current - 1 && styles.stepDotActive]} />
-      ))}
-    </View>
-  );
-}
-
 export default function ServiceRequest() {
   const { service } = useLocalSearchParams<{ service: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user } = useApp();
+  const { t, isRTL, font } = useLanguage();
+  const rowDir = isRTL ? 'row-reverse' : 'row';
+  const align = isRTL ? 'right' : 'left';
 
   const info = SERVICE_INFO[service ?? 'battery'] ?? SERVICE_INFO.battery;
   const [step, setStep] = useState(1);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
   const TOTAL_STEPS = 4;
 
   async function handleNext() {
@@ -61,32 +56,38 @@ export default function ServiceRequest() {
     }
   }
 
-  function canProceed() {
-    if (step === 1) return !!selectedVehicle;
-    return true;
-  }
+  const canProceed = step === 1 ? !!selectedVehicle : true;
+
+  const PAYMENT_OPTIONS: { label: TranslationKeys; iconName: string }[] = [
+    { label: 'applePay', iconName: 'logo-apple' },
+    { label: 'madaCard', iconName: 'card-outline' },
+    { label: 'visaMaster', iconName: 'card-outline' },
+    { label: 'cash', iconName: 'cash-outline' },
+  ];
+
+  const selectedVehicleData = user?.vehicles?.find(v => v.id === selectedVehicle);
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FC' }}>
-      {/* Header */}
-      <LinearGradient
-        colors={['#2D1B69', '#5B2C91']}
-        style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
-      >
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => step > 1 ? setStep(step - 1) : router.back()} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={22} color="#FFFFFF" />
+      <LinearGradient colors={['#2D1B69', '#5B2C91']} style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}>
+        <View style={[styles.headerRow, { flexDirection: rowDir }]}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => step > 1 ? setStep(step - 1) : router.back()}>
+            <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={22} color="#FFFFFF" />
           </TouchableOpacity>
           <View style={styles.headerCenter}>
-            <View style={styles.serviceIconBg}>
-              <ServiceIcon icon={info.icon} lib={info.lib} />
-            </View>
-            <Text style={styles.headerTitle}>{info.label}</Text>
+            <View style={styles.serviceIconBg}><ServiceIcon icon={info.icon} lib={info.lib} /></View>
+            <Text style={[styles.headerTitle, { fontFamily: font.bold }]}>{t(info.labelKey)}</Text>
           </View>
           <View style={{ width: 38 }} />
         </View>
-        <StepIndicator current={step} total={TOTAL_STEPS} />
-        <Text style={styles.stepLabel}>Step {step} of {TOTAL_STEPS}</Text>
+        <View style={styles.stepIndicator}>
+          {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <View key={i} style={[styles.stepDot, i < step && styles.stepDotDone, i === step - 1 && styles.stepDotActive]} />
+          ))}
+        </View>
+        <Text style={[styles.stepLabel, { fontFamily: font.regular }]}>
+          {t('stepWord')} {step} {t('ofWord')} {TOTAL_STEPS}
+        </Text>
       </LinearGradient>
 
       <ScrollView
@@ -95,14 +96,13 @@ export default function ServiceRequest() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: 20, paddingBottom: 120 + (Platform.OS === 'web' ? 34 : 0) }}
       >
-        {/* Step 1: Vehicle */}
         {step === 1 && (
           <View>
-            <Text style={styles.stepTitle}>Select Your Vehicle</Text>
+            <Text style={[styles.stepTitle, { fontFamily: font.bold, textAlign: align }]}>{t('selectVehicle')}</Text>
             {user?.vehicles?.map((v) => (
               <TouchableOpacity
                 key={v.id}
-                style={[styles.vehicleOption, selectedVehicle === v.id && styles.vehicleOptionSelected]}
+                style={[styles.vehicleOption, selectedVehicle === v.id && styles.vehicleOptionSelected, { flexDirection: rowDir }]}
                 onPress={() => setSelectedVehicle(v.id)}
                 activeOpacity={0.85}
               >
@@ -110,27 +110,28 @@ export default function ServiceRequest() {
                   <Ionicons name="car" size={22} color={selectedVehicle === v.id ? '#2D1B69' : '#6B7280'} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={[styles.vehicleName, selectedVehicle === v.id && { color: '#2D1B69' }]}>{v.year} {v.make} {v.model}</Text>
-                  <Text style={styles.vehiclePlate}>{v.plate} · {v.color}</Text>
+                  <Text style={[styles.vehicleName, selectedVehicle === v.id && { color: '#2D1B69' }, { fontFamily: font.semibold, textAlign: align }]}>
+                    {v.year} {v.make} {v.model}
+                  </Text>
+                  <Text style={[styles.vehiclePlate, { fontFamily: font.regular, textAlign: align }]}>{v.plate} · {v.color}</Text>
                 </View>
                 {selectedVehicle === v.id && <Ionicons name="checkmark-circle" size={22} color="#2D1B69" />}
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={styles.addVehicleBtn}>
+            <TouchableOpacity style={[styles.addVehicleBtn, { flexDirection: rowDir }]}>
               <Ionicons name="add-circle-outline" size={20} color="#2D1B69" />
-              <Text style={styles.addVehicleText}>Add New Vehicle</Text>
+              <Text style={[styles.addVehicleText, { fontFamily: font.semibold }]}>{t('addNewVehicle')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Step 2: Problem Description */}
         {step === 2 && (
           <View>
-            <Text style={styles.stepTitle}>Describe the Problem</Text>
-            <Text style={styles.stepSubtitle}>Help our technician understand the issue better</Text>
+            <Text style={[styles.stepTitle, { fontFamily: font.bold, textAlign: align }]}>{t('describeProblem')}</Text>
+            <Text style={[styles.stepSubtitle, { fontFamily: font.regular, textAlign: align }]}>{t('describeProblemHint')}</Text>
             <TextInput
-              style={styles.notesInput}
-              placeholder="e.g., Car won't start, battery seems completely dead..."
+              style={[styles.notesInput, { fontFamily: font.regular, textAlign: align, writingDirection: isRTL ? 'rtl' : 'ltr' }]}
+              placeholder={t('problemPlaceholder')}
               placeholderTextColor="#9CA3AF"
               value={notes}
               onChangeText={setNotes}
@@ -138,73 +139,63 @@ export default function ServiceRequest() {
               numberOfLines={5}
               textAlignVertical="top"
             />
-            <Text style={styles.optionalLabel}>Optional — add photos</Text>
-            <TouchableOpacity style={styles.uploadBtn}>
+            <Text style={[styles.optionalLabel, { fontFamily: font.regular, textAlign: align }]}>{t('optionalPhotos')}</Text>
+            <TouchableOpacity style={[styles.uploadBtn, { flexDirection: rowDir }]}>
               <Ionicons name="camera-outline" size={22} color="#2D1B69" />
-              <Text style={styles.uploadText}>Upload Photos</Text>
+              <Text style={[styles.uploadText, { fontFamily: font.semibold }]}>{t('uploadPhotos')}</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Step 3: Location */}
         {step === 3 && (
           <View>
-            <Text style={styles.stepTitle}>Confirm Your Location</Text>
+            <Text style={[styles.stepTitle, { fontFamily: font.bold, textAlign: align }]}>{t('confirmLocation')}</Text>
             <View style={styles.mapPlaceholder}>
               <LinearGradient colors={['#EDE8F8', '#F8F9FC']} style={styles.mapInner}>
                 <Ionicons name="map" size={48} color="#5B2C91" />
-                <Text style={styles.mapPlaceholderText}>Location Detected</Text>
-                <Text style={styles.mapAddress}>King Fahd Road, Riyadh</Text>
+                <Text style={[styles.mapPlaceholderText, { fontFamily: font.semibold }]}>{t('locationDetected')}</Text>
+                <Text style={[styles.mapAddress, { fontFamily: font.regular }]}>{t('addressKingFahd')}</Text>
               </LinearGradient>
             </View>
-            <View style={styles.locationCard}>
+            <View style={[styles.locationCard, { flexDirection: rowDir }]}>
               <Ionicons name="location-sharp" size={18} color="#C21875" />
               <View style={{ flex: 1 }}>
-                <Text style={styles.locationLabel}>Current Location</Text>
-                <Text style={styles.locationAddress}>King Fahd Road, Al Olaya District, Riyadh 12244</Text>
+                <Text style={[styles.locationLabel, { fontFamily: font.regular, textAlign: align }]}>{t('currentLocation')}</Text>
+                <Text style={[styles.locationAddress, { fontFamily: font.medium, textAlign: align }]}>{t('addressKingFahdFull')}</Text>
               </View>
               <TouchableOpacity>
-                <Text style={styles.changeText}>Change</Text>
+                <Text style={[styles.changeText, { fontFamily: font.semibold }]}>{t('change')}</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
 
-        {/* Step 4: Summary & Confirm */}
         {step === 4 && (
           <View>
-            <Text style={styles.stepTitle}>Order Summary</Text>
+            <Text style={[styles.stepTitle, { fontFamily: font.bold, textAlign: align }]}>{t('orderSummary')}</Text>
             <View style={styles.summaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Service</Text>
-                <Text style={styles.summaryValue}>{info.label}</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Vehicle</Text>
-                <Text style={styles.summaryValue}>
-                  {user?.vehicles?.find(v => v.id === selectedVehicle)?.make ?? 'N/A'}{' '}
-                  {user?.vehicles?.find(v => v.id === selectedVehicle)?.model ?? ''}
-                </Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Location</Text>
-                <Text style={styles.summaryValue} numberOfLines={1}>King Fahd Road, Riyadh</Text>
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryKey}>Est. Arrival</Text>
-                <Text style={[styles.summaryValue, { color: '#2ECC71', fontFamily: 'Inter_700Bold' }]}>~8 minutes</Text>
-              </View>
-              <View style={[styles.summaryRow, styles.summaryTotal]}>
-                <Text style={styles.totalLabel}>Estimated Cost</Text>
-                <Text style={styles.totalValue}>{info.basePrice} SAR</Text>
+              {[
+                { key: t('serviceLabel'), val: t(info.labelKey) },
+                { key: t('vehicleLabel'), val: selectedVehicleData ? `${selectedVehicleData.make} ${selectedVehicleData.model}` : 'N/A' },
+                { key: t('locationLabel'), val: t('addressKingFahd') },
+                { key: t('estArrivalLabel'), val: `~8 ${isRTL ? 'دقائق' : 'minutes'}`, green: true },
+              ].map(({ key, val, green }) => (
+                <View key={key} style={[styles.summaryRow, { flexDirection: rowDir }]}>
+                  <Text style={[styles.summaryKey, { fontFamily: font.regular }]}>{key}</Text>
+                  <Text style={[styles.summaryValue, { fontFamily: font.medium, color: green ? '#2ECC71' : '#1A1A1A' }]} numberOfLines={1}>{val}</Text>
+                </View>
+              ))}
+              <View style={[styles.summaryRow, styles.summaryTotal, { flexDirection: rowDir }]}>
+                <Text style={[styles.totalLabel, { fontFamily: font.bold }]}>{t('estimatedCost')}</Text>
+                <Text style={[styles.totalValue, { fontFamily: font.bold }]}>{info.basePrice} SAR</Text>
               </View>
             </View>
 
-            <Text style={styles.paymentTitle}>Payment Method</Text>
-            {['Apple Pay', 'Mada Card', 'Visa / Mastercard', 'Cash'].map((method, i) => (
-              <TouchableOpacity key={method} style={[styles.paymentOption, i === 0 && styles.paymentOptionSelected]}>
-                <Ionicons name={i === 0 ? 'logo-apple' : i === 3 ? 'cash-outline' : 'card-outline'} size={20} color={i === 0 ? '#2D1B69' : '#6B7280'} />
-                <Text style={[styles.paymentLabel, i === 0 && { color: '#2D1B69', fontFamily: 'Inter_600SemiBold' }]}>{method}</Text>
+            <Text style={[styles.paymentTitle, { fontFamily: font.bold, textAlign: align }]}>{t('paymentMethod')}</Text>
+            {PAYMENT_OPTIONS.map((opt, i) => (
+              <TouchableOpacity key={opt.label} style={[styles.paymentOption, i === 0 && styles.paymentOptionSelected, { flexDirection: rowDir }]}>
+                <Ionicons name={opt.iconName as any} size={20} color={i === 0 ? '#2D1B69' : '#6B7280'} />
+                <Text style={[styles.paymentLabel, i === 0 && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
                 {i === 0 && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
               </TouchableOpacity>
             ))}
@@ -212,23 +203,22 @@ export default function ServiceRequest() {
         )}
       </ScrollView>
 
-      {/* Bottom CTA */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 + (Platform.OS === 'web' ? 34 : 0) }]}>
         <TouchableOpacity
-          style={[styles.nextBtn, (!canProceed() || submitting) && styles.nextBtnDisabled]}
+          style={[styles.nextBtn, (!canProceed || submitting) && styles.nextBtnDisabled]}
           onPress={handleNext}
-          disabled={!canProceed() || submitting}
+          disabled={!canProceed || submitting}
           activeOpacity={0.85}
         >
           <LinearGradient
-            colors={canProceed() ? ['#2D1B69', '#5B2C91'] : ['#C0C0D0', '#C0C0D0']}
+            colors={canProceed ? ['#2D1B69', '#5B2C91'] : ['#C0C0D0', '#C0C0D0']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={styles.nextBtnGradient}
+            style={[styles.nextBtnGradient, { flexDirection: rowDir }]}
           >
-            <Text style={styles.nextBtnText}>
-              {submitting ? 'Confirming...' : step === TOTAL_STEPS ? 'Confirm Request' : 'Continue'}
+            <Text style={[styles.nextBtnText, { fontFamily: font.bold }]}>
+              {submitting ? t('confirming') : step === TOTAL_STEPS ? t('confirmRequest') : t('continueBtn')}
             </Text>
-            {!submitting && <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />}
+            {!submitting && <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={18} color="#FFFFFF" />}
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -238,51 +228,75 @@ export default function ServiceRequest() {
 
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 20, paddingBottom: 20 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
+  headerRow: { alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   backBtn: { width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.15)', justifyContent: 'center', alignItems: 'center' },
   headerCenter: { alignItems: 'center', gap: 8 },
   serviceIconBg: { width: 52, height: 52, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
+  headerTitle: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
   stepIndicator: { flexDirection: 'row', gap: 6, justifyContent: 'center', marginBottom: 8 },
   stepDot: { width: 28, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' },
   stepDotDone: { backgroundColor: 'rgba(255,255,255,0.6)' },
   stepDotActive: { backgroundColor: '#FFFFFF' },
-  stepLabel: { textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.65)', fontFamily: 'Inter_400Regular' },
-  stepTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Inter_700Bold', marginBottom: 8 },
-  stepSubtitle: { fontSize: 14, color: '#6B7280', fontFamily: 'Inter_400Regular', marginBottom: 20 },
-  vehicleOption: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 10, borderWidth: 2, borderColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
+  stepLabel: { textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.65)' },
+  stepTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', marginBottom: 8 },
+  stepSubtitle: { fontSize: 14, color: '#6B7280', marginBottom: 20 },
+  vehicleOption: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
+    alignItems: 'center', gap: 12, marginBottom: 10,
+    borderWidth: 2, borderColor: 'transparent',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
   vehicleOptionSelected: { borderColor: '#2D1B69' },
   vehicleOptionIcon: { width: 46, height: 46, borderRadius: 14, backgroundColor: '#F8F9FC', justifyContent: 'center', alignItems: 'center' },
-  vehicleName: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', fontFamily: 'Inter_600SemiBold' },
-  vehiclePlate: { fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular', marginTop: 2 },
-  addVehicleBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10 },
-  addVehicleText: { fontSize: 14, color: '#2D1B69', fontFamily: 'Inter_600SemiBold' },
-  notesInput: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, fontSize: 15, color: '#1A1A1A', fontFamily: 'Inter_400Regular', minHeight: 140, borderWidth: 1.5, borderColor: '#EBEBF5', marginBottom: 20 },
-  optionalLabel: { fontSize: 13, color: '#9CA3AF', fontFamily: 'Inter_400Regular', marginBottom: 10 },
-  uploadBtn: { backgroundColor: '#EDE8F8', borderRadius: 14, paddingVertical: 16, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10, borderWidth: 1.5, borderColor: '#D0C8F0', borderStyle: 'dashed' },
-  uploadText: { fontSize: 15, color: '#2D1B69', fontFamily: 'Inter_600SemiBold' },
+  vehicleName: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
+  vehiclePlate: { fontSize: 13, color: '#6B7280', marginTop: 2 },
+  addVehicleBtn: { alignItems: 'center', gap: 8, paddingVertical: 10 },
+  addVehicleText: { fontSize: 14, color: '#2D1B69' },
+  notesInput: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 16, fontSize: 15, color: '#1A1A1A',
+    minHeight: 140, borderWidth: 1.5, borderColor: '#EBEBF5', marginBottom: 20,
+  },
+  optionalLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 10 },
+  uploadBtn: {
+    backgroundColor: '#EDE8F8', borderRadius: 14, paddingVertical: 16,
+    justifyContent: 'center', alignItems: 'center', gap: 10,
+    borderWidth: 1.5, borderColor: '#D0C8F0', borderStyle: 'dashed',
+  },
+  uploadText: { fontSize: 15, color: '#2D1B69' },
   mapPlaceholder: { borderRadius: 20, overflow: 'hidden', height: 180, marginBottom: 16 },
   mapInner: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
-  mapPlaceholderText: { fontSize: 16, fontWeight: '600', color: '#5B2C91', fontFamily: 'Inter_600SemiBold' },
-  mapAddress: { fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular' },
-  locationCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 },
-  locationLabel: { fontSize: 12, color: '#6B7280', fontFamily: 'Inter_400Regular' },
-  locationAddress: { fontSize: 14, color: '#1A1A1A', fontFamily: 'Inter_500Medium', marginTop: 2 },
-  changeText: { fontSize: 13, color: '#C21875', fontFamily: 'Inter_600SemiBold' },
-  summaryCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 24, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F8' },
-  summaryKey: { fontSize: 14, color: '#6B7280', fontFamily: 'Inter_400Regular' },
-  summaryValue: { fontSize: 14, color: '#1A1A1A', fontFamily: 'Inter_500Medium', maxWidth: '60%', textAlign: 'right' },
+  mapPlaceholderText: { fontSize: 16, fontWeight: '600', color: '#5B2C91' },
+  mapAddress: { fontSize: 13, color: '#6B7280' },
+  locationCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
+    alignItems: 'center', gap: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  locationLabel: { fontSize: 12, color: '#6B7280' },
+  locationAddress: { fontSize: 14, color: '#1A1A1A', marginTop: 2 },
+  changeText: { fontSize: 13, color: '#C21875' },
+  summaryCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 24,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
+  },
+  summaryRow: { justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F0F0F8' },
+  summaryKey: { fontSize: 14, color: '#6B7280' },
+  summaryValue: { fontSize: 14, maxWidth: '60%', textAlign: 'right' },
   summaryTotal: { borderBottomWidth: 0, marginTop: 4 },
-  totalLabel: { fontSize: 16, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Inter_700Bold' },
-  totalValue: { fontSize: 20, fontWeight: '700', color: '#2D1B69', fontFamily: 'Inter_700Bold' },
-  paymentTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Inter_700Bold', marginBottom: 12 },
-  paymentOption: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 8, borderWidth: 1.5, borderColor: 'transparent', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  totalLabel: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
+  totalValue: { fontSize: 20, fontWeight: '700', color: '#2D1B69' },
+  paymentTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 },
+  paymentOption: {
+    backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
+    alignItems: 'center', gap: 12, marginBottom: 8,
+    borderWidth: 1.5, borderColor: 'transparent',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
+  },
   paymentOptionSelected: { borderColor: '#2D1B69', backgroundColor: '#F8F7FF' },
-  paymentLabel: { flex: 1, fontSize: 15, color: '#1A1A1A', fontFamily: 'Inter_500Medium' },
+  paymentLabel: { fontSize: 15, color: '#1A1A1A' },
   bottomBar: { backgroundColor: '#FFFFFF', padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F8' },
   nextBtn: { borderRadius: 16, overflow: 'hidden' },
   nextBtnDisabled: { opacity: 0.6 },
-  nextBtnGradient: { paddingVertical: 18, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
+  nextBtnGradient: { paddingVertical: 18, justifyContent: 'center', alignItems: 'center', gap: 10 },
+  nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 });

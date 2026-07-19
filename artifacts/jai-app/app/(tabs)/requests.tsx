@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
 } from 'react-native';
@@ -6,62 +6,19 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useLanguage } from '@/context/LanguageContext';
 
-interface Request {
-  id: string;
-  service: string;
-  icon: string;
-  date: string;
-  address: string;
-  status: 'completed' | 'active' | 'cancelled';
-  cost: string;
-  technician: string;
-  rating?: number;
-}
-
-const REQUESTS: Request[] = [
-  {
-    id: 'r1', service: 'Battery Jump Start', icon: 'battery-charging',
-    date: 'Today, 10:24 AM', address: 'King Fahd Road, Riyadh',
-    status: 'active', cost: '120 SAR', technician: 'Ahmed Al-Ghamdi',
-  },
-  {
-    id: 'r2', service: 'Tire Replacement', icon: 'tire',
-    date: 'Jul 15, 2026', address: 'Olaya Street, Riyadh',
-    status: 'completed', cost: '350 SAR', technician: 'Khalid Hassan', rating: 5,
-  },
-  {
-    id: 'r3', service: 'Fuel Delivery', icon: 'gas-station',
-    date: 'Jul 10, 2026', address: 'Prince Mohammed Bin Salman Road',
-    status: 'completed', cost: '80 SAR', technician: 'Omar Al-Shehri', rating: 4,
-  },
-  {
-    id: 'r4', service: 'Lockout Assistance', icon: 'key',
-    date: 'Jun 28, 2026', address: 'Al Nakheel District, Riyadh',
-    status: 'cancelled', cost: '-', technician: '-', 
-  },
-];
-
-function StatusBadge({ status }: { status: Request['status'] }) {
+function StatusBadge({ status }: { status: 'active' | 'completed' | 'cancelled' }) {
+  const { t, font } = useLanguage();
   const map = {
-    active: { label: 'Active', color: '#2ECC71', bg: '#E8F8F0' },
-    completed: { label: 'Completed', color: '#2D1B69', bg: '#EDE8F8' },
-    cancelled: { label: 'Cancelled', color: '#E74C3C', bg: '#FEE8E6' },
+    active: { label: t('statusActive'), color: '#2ECC71', bg: '#E8F8F0' },
+    completed: { label: t('statusCompleted'), color: '#2D1B69', bg: '#EDE8F8' },
+    cancelled: { label: t('statusCancelled'), color: '#E74C3C', bg: '#FEE8E6' },
   };
   const s = map[status];
   return (
     <View style={[styles.badge, { backgroundColor: s.bg }]}>
-      <Text style={[styles.badgeText, { color: s.color }]}>{s.label}</Text>
-    </View>
-  );
-}
-
-function Stars({ rating }: { rating: number }) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 2 }}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Ionicons key={i} name={i <= rating ? 'star' : 'star-outline'} size={13} color="#F39C12" />
-      ))}
+      <Text style={[styles.badgeText, { color: s.color, fontFamily: font.semibold }]}>{s.label}</Text>
     </View>
   );
 }
@@ -69,6 +26,17 @@ function Stars({ rating }: { rating: number }) {
 export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { t, isRTL, font } = useLanguage();
+  const rowDir = isRTL ? 'row-reverse' : 'row';
+  const align = isRTL ? 'right' : 'left';
+
+  const REQUESTS = [
+    { id: 'r1', service: t('reqBattery'), icon: 'battery-charging', date: isRTL ? 'اليوم، ١٠:٢٤ ص' : 'Today, 10:24 AM', address: t('reqAddrFahd'), status: 'active' as const, cost: '120 SAR', technician: t('reqTechAhmed') },
+    { id: 'r2', service: t('reqTire'), icon: 'tire', date: t('notifDate15'), address: t('reqAddrOlaya'), status: 'completed' as const, cost: '350 SAR', technician: t('reqTechKhalid'), rating: 5 },
+    { id: 'r3', service: t('reqFuel'), icon: 'gas-station', date: t('notifDate10'), address: t('reqAddrPMBS'), status: 'completed' as const, cost: '80 SAR', technician: t('reqTechOmar'), rating: 4 },
+    { id: 'r4', service: t('reqLockout'), icon: 'key', date: isRTL ? '٢٨ يونيو ٢٠٢٦' : 'Jun 28, 2026', address: t('reqAddrNakheel'), status: 'cancelled' as const, cost: '-', technician: '-' },
+  ];
+
   const activeRequest = REQUESTS.find(r => r.status === 'active');
 
   return (
@@ -77,7 +45,7 @@ export default function RequestsScreen() {
         colors={['#2D1B69', '#5B2C91']}
         style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
-        <Text style={styles.headerTitle}>My Requests</Text>
+        <Text style={[styles.headerTitle, { fontFamily: font.bold, textAlign: align }]}>{t('myRequests')}</Text>
       </LinearGradient>
 
       <ScrollView
@@ -85,30 +53,24 @@ export default function RequestsScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 20, paddingBottom: 100 + (Platform.OS === 'web' ? 34 : 0) }}
       >
-        {/* Active Request Banner */}
         {activeRequest && (
-          <TouchableOpacity
-            style={styles.activeBanner}
-            onPress={() => router.push('/tracking' as any)}
-            activeOpacity={0.9}
-          >
-            <LinearGradient colors={['#C21875', '#8B35BB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.activeBannerGradient}>
+          <TouchableOpacity style={styles.activeBanner} onPress={() => router.push('/tracking' as any)} activeOpacity={0.9}>
+            <LinearGradient colors={['#C21875', '#8B35BB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.activeBannerGradient, { flexDirection: rowDir }]}>
               <View style={styles.activePulse} />
               <View style={{ flex: 1 }}>
-                <Text style={styles.activeBannerTitle}>Request in Progress</Text>
-                <Text style={styles.activeBannerSub}>{activeRequest.service} · Ahmed is on the way</Text>
+                <Text style={[styles.activeBannerTitle, { fontFamily: font.bold, textAlign: align }]}>{t('inProgress')}</Text>
+                <Text style={[styles.activeBannerSub, { fontFamily: font.regular, textAlign: align }]}>{activeRequest.service} · {t('enRoute')}</Text>
               </View>
-              <Ionicons name="navigate" size={20} color="#FFFFFF" />
+              <Ionicons name={isRTL ? 'navigate-outline' : 'navigate'} size={20} color="#FFFFFF" />
             </LinearGradient>
           </TouchableOpacity>
         )}
 
-        {/* Request List */}
-        <Text style={styles.sectionTitle}>Request History</Text>
+        <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('requestHistory')}</Text>
         {REQUESTS.map((req) => (
           <TouchableOpacity
             key={req.id}
-            style={styles.requestCard}
+            style={[styles.requestCard, { flexDirection: rowDir }]}
             activeOpacity={0.85}
             onPress={req.status === 'active' ? () => router.push('/tracking' as any) : undefined}
           >
@@ -116,17 +78,21 @@ export default function RequestsScreen() {
               <MaterialCommunityIcons name={req.icon as any} size={24} color="#2D1B69" />
             </View>
             <View style={{ flex: 1, gap: 4 }}>
-              <View style={styles.reqTopRow}>
-                <Text style={styles.reqService}>{req.service}</Text>
+              <View style={[styles.reqTopRow, { flexDirection: rowDir }]}>
+                <Text style={[styles.reqService, { fontFamily: font.semibold, textAlign: align }]} numberOfLines={1}>{req.service}</Text>
                 <StatusBadge status={req.status} />
               </View>
-              <Text style={styles.reqAddress} numberOfLines={1}>{req.address}</Text>
-              <Text style={styles.reqDate}>{req.date}</Text>
-              {req.rating ? <Stars rating={req.rating} /> : null}
+              <Text style={[styles.reqAddress, { fontFamily: font.regular, textAlign: align }]} numberOfLines={1}>{req.address}</Text>
+              <Text style={[styles.reqDate, { fontFamily: font.regular, textAlign: align }]}>{req.date}</Text>
+              {req.rating ? (
+                <View style={[{ flexDirection: rowDir }]}>
+                  {[1,2,3,4,5].map(i => <Ionicons key={i} name={i <= req.rating! ? 'star' : 'star-outline'} size={13} color="#F39C12" />)}
+                </View>
+              ) : null}
             </View>
-            <View style={{ alignItems: 'flex-end', gap: 4 }}>
-              <Text style={styles.reqCost}>{req.cost}</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C0C0D0" />
+            <View style={{ alignItems: isRTL ? 'flex-start' : 'flex-end', gap: 4 }}>
+              <Text style={[styles.reqCost, { fontFamily: font.bold }]}>{req.cost}</Text>
+              <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#C0C0D0" />
             </View>
           </TouchableOpacity>
         ))}
@@ -136,36 +102,28 @@ export default function RequestsScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-  },
-  headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
+  header: { paddingHorizontal: 20, paddingBottom: 24 },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
   activeBanner: { borderRadius: 16, overflow: 'hidden', marginBottom: 24 },
-  activeBannerGradient: { padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  activeBannerGradient: { padding: 16, alignItems: 'center', gap: 12 },
   activePulse: {
     width: 12, height: 12, borderRadius: 6, backgroundColor: '#FFFFFF',
     shadowColor: '#FFFFFF', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.8, shadowRadius: 6,
   },
-  activeBannerTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', fontFamily: 'Inter_700Bold' },
-  activeBannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', fontFamily: 'Inter_400Regular', marginTop: 2 },
-  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', fontFamily: 'Inter_700Bold', marginBottom: 14 },
+  activeBannerTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
+  activeBannerSub: { fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', marginBottom: 14 },
   requestCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    marginBottom: 12,
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16,
+    alignItems: 'center', gap: 14, marginBottom: 12,
     shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3,
   },
   reqIconBg: { width: 52, height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-  reqTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  reqService: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', fontFamily: 'Inter_600SemiBold', flex: 1 },
-  reqAddress: { fontSize: 13, color: '#6B7280', fontFamily: 'Inter_400Regular' },
-  reqDate: { fontSize: 12, color: '#9CA3AF', fontFamily: 'Inter_400Regular' },
-  reqCost: { fontSize: 14, fontWeight: '700', color: '#2D1B69', fontFamily: 'Inter_700Bold' },
+  reqTopRow: { alignItems: 'center', gap: 8 },
+  reqService: { fontSize: 15, fontWeight: '600', color: '#1A1A1A', flex: 1 },
+  reqAddress: { fontSize: 13, color: '#6B7280' },
+  reqDate: { fontSize: 12, color: '#9CA3AF' },
+  reqCost: { fontSize: 14, fontWeight: '700', color: '#2D1B69' },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontSize: 11, fontWeight: '600', fontFamily: 'Inter_600SemiBold' },
+  badgeText: { fontSize: 11, fontWeight: '600' },
 });
