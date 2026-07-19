@@ -1,0 +1,1 @@
+- [Whop payment integration](whop-integration.md) — plan IDs, checkout flow, key lesson: use renewal_price not initial_price for recurring plans

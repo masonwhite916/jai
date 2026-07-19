@@ -105,11 +105,41 @@ export default function Subscribe() {
     e.preventDefault();
     if (!validate()) return;
     setLoading(true);
-    // Simulate async submission (replace with real API call)
-    await new Promise(r => setTimeout(r, 1400));
-    setLoading(false);
-    setSubmitted(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    try {
+      const baseUrl = import.meta.env.BASE_URL.replace(/\/$/, '');
+      const redirectUrl = `${window.location.origin}${baseUrl}/payment-success`;
+      const apiBase = baseUrl.replace(/\/jai-web$/, '');
+
+      const resp = await fetch(`${apiBase}/api/whop/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan,
+          redirect_url: redirectUrl,
+          name: form.name,
+          phone: form.phone,
+          email: form.email,
+          make: form.make,
+          model: form.model,
+          year: form.year,
+          plate: form.plate,
+          note: form.note,
+        }),
+      });
+
+      const data = await resp.json() as { purchase_url?: string; error?: string };
+
+      if (!resp.ok || !data.purchase_url) {
+        throw new Error(data.error ?? 'Checkout failed. Please try again.');
+      }
+
+      // Redirect to Whop hosted checkout
+      window.location.href = data.purchase_url;
+    } catch (err) {
+      setLoading(false);
+      alert(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    }
   }
 
   const inputBase =

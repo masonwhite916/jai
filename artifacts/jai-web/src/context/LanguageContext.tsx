@@ -72,6 +72,13 @@ const translations = {
     plan_rental_f3: 'Premium vehicle fleet access',
     plan_rental_f4: 'Extended range support',
 
+    // Payment success page
+    pay_success_h1: 'Payment confirmed!',
+    pay_success_body: 'Thank you for joining JAI. Your membership is being activated and you\'ll receive confirmation within 24 hours.',
+    pay_success_note: 'A receipt has been sent to your email by Whop. Keep an eye on your phone — our team will be in touch shortly.',
+    pay_success_home: 'Back to Home',
+    pay_success_contact: 'Contact Us',
+
     // Subscribe page
     sub_back: 'Back to Plans',
     sub_h2: 'Start your membership.',
@@ -200,6 +207,13 @@ const translations = {
     plan_rental_f2: 'تشخيص أعطال الكمبيوتر (×3)',
     plan_rental_f3: 'الوصول إلى أسطول المركبات المميزة',
     plan_rental_f4: 'دعم موسّع للمدى الجغرافي',
+
+    // Payment success page
+    pay_success_h1: 'تمّت عملية الدفع!',
+    pay_success_body: 'شكراً لانضمامك إلى جاي. جارٍ تفعيل عضويتك وستصلك رسالة تأكيد خلال 24 ساعة.',
+    pay_success_note: 'تم إرسال إيصال الدفع إلى بريدك الإلكتروني عبر Whop. فريقنا سيتواصل معك قريباً.',
+    pay_success_home: 'العودة إلى الرئيسية',
+    pay_success_contact: 'تواصل معنا',
 
     // Subscribe page
     sub_back: 'العودة إلى الباقات',
