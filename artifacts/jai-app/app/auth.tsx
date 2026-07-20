@@ -93,17 +93,6 @@ export default function Auth() {
         locations={[0, 0.6, 1]}
         style={[styles.header, { paddingTop: insets.top + 24 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
-        {/* Language toggle */}
-        <TouchableOpacity
-          style={[styles.langBtn, { alignSelf: isRTL ? 'flex-start' : 'flex-end' }]}
-          onPress={toggleLanguage}
-        >
-          <Ionicons name="language-outline" size={15} color="rgba(255,255,255,0.9)" />
-          <Text style={[styles.langBtnText, { fontFamily: font.semibold }]}>
-            {lang === 'en' ? 'العربية' : 'English'}
-          </Text>
-        </TouchableOpacity>
-
         <Image source={require('../assets/images/jai-logo.png')} style={styles.logo} resizeMode="contain" />
 
         <Text style={[styles.tagline, { fontFamily: font.regular }]}>
