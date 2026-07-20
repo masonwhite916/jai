@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  TextInput, Platform, KeyboardAvoidingView, Animated,
+  Platform, Animated, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 
 // ─── Plan data (mirrors membership screen) ───────────────────────────────────
 const PLAN_DATA = {
@@ -18,31 +19,68 @@ const PLAN_DATA = {
     subtitleEn: 'Daily Use',      subtitleAr: 'للاستخدام اليومي',
     price: '199',
     gradient: ['#5B2C91', '#7B2A9E'] as const,
+    featuresEn: [
+      '5 roadside assistance calls/year',
+      'Towing up to 50 km',
+      'Battery jump-start',
+      'Flat tyre change',
+      '24/7 phone support',
+    ],
+    featuresAr: [
+      '5 طلبات مساعدة سنوياً',
+      'سحب حتى 50 كم',
+      'تشغيل البطارية',
+      'تغيير الإطار المثقوب',
+      'دعم هاتفي 24/7',
+    ],
   },
   accidents: {
     nameEn: 'Accidents Package',  nameAr: 'باقة الحوادث',
     subtitleEn: 'Emergency',      subtitleAr: 'لحالات الطوارئ',
     price: '299',
     gradient: ['#2D1B69', '#5B2C91'] as const,
+    featuresEn: [
+      'Everything in Basic',
+      'Accident scene assistance',
+      'Police report coordination',
+      'Towing up to 100 km',
+    ],
+    featuresAr: [
+      'كل مزايا الباقة الأساسية',
+      'مساعدة في موقع الحادث',
+      'تنسيق التقارير الشرطية',
+      'سحب حتى 100 كم',
+    ],
   },
   rental: {
     nameEn: 'Rental Package',     nameAr: 'باقة الإجرة',
     subtitleEn: 'Full Coverage',  subtitleAr: 'تغطية شاملة',
     price: '600',
     gradient: ['#8B35BB', '#C21875'] as const,
+    featuresEn: [
+      'Everything in Accidents',
+      'Rental car while yours is repaired',
+      'Priority dispatch',
+      'Unlimited towing distance',
+    ],
+    featuresAr: [
+      'كل مزايا باقة الحوادث',
+      'سيارة بديلة أثناء الإصلاح',
+      'أولوية في الإرسال',
+      'سحب بدون حد للمسافة',
+    ],
   },
 };
 
 type PlanId = keyof typeof PLAN_DATA;
 
-// ─── Card number formatter ────────────────────────────────────────────────────
-function formatCard(raw: string) {
-  return raw.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
-}
-function formatExpiry(raw: string) {
-  const digits = raw.replace(/\D/g, '').slice(0, 4);
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
-}
+// API base derived from EXPO_PUBLIC_DOMAIN injected at dev start
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : '';
+
+// Deep-link redirect Whop will return the user to after payment
+const REDIRECT_URL = 'jai-app://payment-success';
 
 export default function SubscribeScreen() {
   const insets = useSafeAreaInsets();
@@ -55,61 +93,59 @@ export default function SubscribeScreen() {
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
 
-  // Form state
-  const [cardHolder, setCardHolder] = useState(user?.name ?? '');
-  const [cardNumber, setCardNumber] = useState('');
-  const [expiry, setExpiry]         = useState('');
-  const [cvv, setCvv]               = useState('');
-
-  // Flow state
-  const [loading,  setLoading]  = useState(false);
-  const [success,  setSuccess]  = useState(false);
-  const [errors,   setErrors]   = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Success animation
-  const scaleAnim  = useRef(new Animated.Value(0)).current;
+  const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  // ── Validation ──────────────────────────────────────────────────────────
-  function validate() {
-    const e: Record<string, string> = {};
-    if (!cardHolder.trim())                  e.cardHolder = isRTL ? 'مطلوب'       : 'Required';
-    if (cardNumber.replace(/\s/g,'').length < 16) e.cardNumber = isRTL ? 'رقم البطاقة غير مكتمل' : 'Incomplete card number';
-    if (expiry.length < 5)                   e.expiry     = isRTL ? 'تاريخ غير صحيح' : 'Invalid date';
-    if (cvv.length < 3)                      e.cvv        = isRTL ? 'رمز غير صحيح'  : 'Invalid CVV';
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  }
-
-  // ── Submit ───────────────────────────────────────────────────────────────
-  async function handleSubscribe() {
-    if (!validate()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+  // ── Open Whop Checkout ────────────────────────────────────────────────────
+  async function handleCheckout() {
+    setErrorMsg(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
 
-    // Simulate payment processing
-    await new Promise(r => setTimeout(r, 1800));
+    try {
+      // 1. Create a Whop checkout session via the API server
+      const resp = await fetch(`${API_BASE}/api/whop/checkout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planId ?? 'basic', redirect_url: REDIRECT_URL }),
+      });
 
-    // Update user membership in AsyncStorage
-    await updateUser({ membership: planId as any, points: (user?.points ?? 0) + 100 });
-    setLoading(false);
-    setSuccess(true);
+      const data = await resp.json() as { purchase_url?: string; error?: string };
+      if (!resp.ok || !data.purchase_url) {
+        throw new Error(data.error ?? 'Could not create checkout. Please try again.');
+      }
 
-    // Animate success
-    Animated.parallel([
-      Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
-      Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
-    ]).start();
+      // 2. Open Whop hosted checkout in an in-app browser.
+      //    openAuthSessionAsync keeps the user inside the app and resolves
+      //    when Whop redirects back to jai-app://payment-success.
+      const result = await WebBrowser.openAuthSessionAsync(data.purchase_url, REDIRECT_URL);
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Navigate back after 2.5 s
-    setTimeout(() => {
-      router.replace('/(tabs)/membership');
-    }, 2500);
+      if (result.type === 'success') {
+        // Whop redirected to our deep link — payment completed
+        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+        setSuccess(true);
+        Animated.parallel([
+          Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
+          Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
+        ]).start();
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setTimeout(() => router.replace('/(tabs)/membership'), 2500);
+      } else {
+        // User dismissed the browser without completing payment
+        setErrorMsg(isRTL ? 'تم إلغاء عملية الدفع.' : 'Payment was cancelled.');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Something went wrong.';
+      setErrorMsg(msg);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   // ── Success overlay ──────────────────────────────────────────────────────
@@ -144,23 +180,25 @@ export default function SubscribeScreen() {
     );
   }
 
-  // ── Payment form ─────────────────────────────────────────────────────────
+  const features = isRTL ? plan.featuresAr : plan.featuresEn;
+
+  // ── Main screen ──────────────────────────────────────────────────────────
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      {/* Header */}
+    <View style={{ flex: 1, backgroundColor: '#F4F2FA' }}>
+      {/* Gradient header */}
       <LinearGradient
         colors={plan.gradient}
         start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
-        <TouchableOpacity onPress={() => router.back()} style={[styles.backBtn, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={[styles.backBtn, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
+        >
           <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={22} color="#FFFFFF" />
         </TouchableOpacity>
 
-        {/* Plan summary card */}
+        {/* Plan summary */}
         <View style={styles.planSummary}>
           <Text style={[styles.planSummaryName, { fontFamily: font.bold, textAlign: 'center' }]}>
             {isRTL ? plan.nameAr : plan.nameEn}
@@ -180,105 +218,18 @@ export default function SubscribeScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
-          styles.formContainer,
+          styles.content,
           { paddingBottom: insets.bottom + 40 + (Platform.OS === 'web' ? 34 : 0) },
         ]}
-        keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Section: Card Info ── */}
-        <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align }]}>
-          {isRTL ? 'معلومات البطاقة' : 'Card Information'}
-        </Text>
-
-        {/* Cardholder */}
-        <Field
-          label={isRTL ? 'اسم حامل البطاقة' : 'Cardholder Name'}
-          error={errors.cardHolder}
-          align={align}
-          font={font.medium}
-        >
-          <TextInput
-            style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
-            value={cardHolder}
-            onChangeText={setCardHolder}
-            autoCapitalize="words"
-            placeholder={isRTL ? 'الاسم على البطاقة' : 'Name on card'}
-            placeholderTextColor="#C0C0D4"
-          />
-        </Field>
-
-        {/* Card number */}
-        <Field
-          label={isRTL ? 'رقم البطاقة' : 'Card Number'}
-          error={errors.cardNumber}
-          align={align}
-          font={font.medium}
-        >
-          <View style={[styles.inputRow, { flexDirection: rowDir }]}>
-            <TextInput
-              style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: align, letterSpacing: 2 }]}
-              value={cardNumber}
-              onChangeText={v => setCardNumber(formatCard(v))}
-              keyboardType="number-pad"
-              placeholder="0000 0000 0000 0000"
-              placeholderTextColor="#C0C0D4"
-              maxLength={19}
-            />
-            <View style={styles.cardBrandBadge}>
-              <Ionicons name="card-outline" size={20} color="#5B2C91" />
-            </View>
-          </View>
-        </Field>
-
-        {/* Expiry + CVV row */}
-        <View style={[styles.twoCol, { flexDirection: rowDir }]}>
-          <View style={{ flex: 1 }}>
-            <Field
-              label={isRTL ? 'تاريخ الانتهاء' : 'Expiry Date'}
-              error={errors.expiry}
-              align={align}
-              font={font.medium}
-            >
-              <TextInput
-                style={[styles.input, { fontFamily: font.medium, textAlign: 'center', letterSpacing: 2 }]}
-                value={expiry}
-                onChangeText={v => setExpiry(formatExpiry(v))}
-                keyboardType="number-pad"
-                placeholder="MM/YY"
-                placeholderTextColor="#C0C0D4"
-                maxLength={5}
-              />
-            </Field>
-          </View>
-          <View style={{ flex: 1 }}>
-            <Field
-              label="CVV"
-              error={errors.cvv}
-              align={align}
-              font={font.medium}
-            >
-              <TextInput
-                style={[styles.input, { fontFamily: font.medium, textAlign: 'center', letterSpacing: 4 }]}
-                value={cvv}
-                onChangeText={v => setCvv(v.replace(/\D/g, '').slice(0, 4))}
-                keyboardType="number-pad"
-                placeholder="•••"
-                placeholderTextColor="#C0C0D4"
-                secureTextEntry
-                maxLength={4}
-              />
-            </Field>
-          </View>
-        </View>
-
-        {/* Security note */}
-        <View style={[styles.secureNote, { flexDirection: rowDir }]}>
-          <Ionicons name="lock-closed" size={13} color="#5B2C91" />
-          <Text style={[styles.secureNoteText, { fontFamily: font.regular }]}>
+        {/* ── Payment methods badge ── */}
+        <View style={[styles.methodsBadge, { flexDirection: rowDir }]}>
+          <Ionicons name="shield-checkmark" size={15} color="#5B2C91" />
+          <Text style={[styles.methodsText, { fontFamily: font.medium }]}>
             {isRTL
-              ? 'بياناتك مشفرة وآمنة بالكامل'
-              : 'Your payment details are fully encrypted'}
+              ? 'Apple Pay • Google Pay • بطاقة ائتمانية'
+              : 'Apple Pay • Google Pay • Credit Card'}
           </Text>
         </View>
 
@@ -287,33 +238,51 @@ export default function SubscribeScreen() {
           <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 14 }]}>
             {isRTL ? 'ملخص الطلب' : 'Order Summary'}
           </Text>
-          <Row
-            label={isRTL ? (plan.nameAr) : (plan.nameEn)}
+
+          <SummaryRow
+            label={isRTL ? plan.nameAr : plan.nameEn}
             value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
-            font={font}
-            rowDir={rowDir}
-            bold
+            font={font} rowDir={rowDir} bold
           />
-          <Row
+          <SummaryRow
             label={isRTL ? 'المدة' : 'Duration'}
             value={isRTL ? '12 شهراً' : '12 months'}
-            font={font}
-            rowDir={rowDir}
+            font={font} rowDir={rowDir}
           />
           <View style={styles.orderDivider} />
-          <Row
+          <SummaryRow
             label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT included)'}
             value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
-            font={font}
-            rowDir={rowDir}
-            bold
-            accent
+            font={font} rowDir={rowDir} bold accent
           />
         </View>
 
-        {/* Subscribe button */}
+        {/* ── What's included ── */}
+        <View style={styles.featuresCard}>
+          <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 12 }]}>
+            {isRTL ? 'ما يشمله الاشتراك' : "What's included"}
+          </Text>
+          {features.map((f, i) => (
+            <View key={i} style={[styles.featureRow, { flexDirection: rowDir }]}>
+              <View style={styles.featureDot}>
+                <Ionicons name="checkmark" size={12} color="#5B2C91" />
+              </View>
+              <Text style={[styles.featureText, { fontFamily: font.regular, textAlign: align }]}>{f}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* ── Error message ── */}
+        {errorMsg && (
+          <View style={[styles.errorBanner, { flexDirection: rowDir }]}>
+            <Ionicons name="alert-circle-outline" size={16} color="#E74C3C" />
+            <Text style={[styles.errorText, { fontFamily: font.regular }]}>{errorMsg}</Text>
+          </View>
+        )}
+
+        {/* ── Checkout button ── */}
         <TouchableOpacity
-          onPress={handleSubscribe}
+          onPress={handleCheckout}
           disabled={loading}
           activeOpacity={0.88}
           style={styles.submitWrap}
@@ -325,9 +294,9 @@ export default function SubscribeScreen() {
           >
             {loading ? (
               <>
-                <Ionicons name="hourglass-outline" size={20} color="#FFF" />
+                <ActivityIndicator color="#FFF" size="small" />
                 <Text style={[styles.submitText, { fontFamily: font.bold }]}>
-                  {isRTL ? 'جاري المعالجة…' : 'Processing…'}
+                  {isRTL ? 'جاري التحضير…' : 'Preparing checkout…'}
                 </Text>
               </>
             ) : (
@@ -345,30 +314,16 @@ export default function SubscribeScreen() {
 
         <Text style={[styles.termsNote, { fontFamily: font.regular }]}>
           {isRTL
-            ? 'بالاشتراك فأنت توافق على الشروط والأحكام. يتجدد الاشتراك تلقائياً سنوياً.'
-            : 'By subscribing you agree to our Terms & Conditions. Auto-renews annually.'}
+            ? 'بالضغط على الزر أعلاه سيتم فتح صفحة دفع آمنة تدعم Apple Pay وGoogle Pay وبطاقات الائتمان. يتجدد الاشتراك تلقائياً سنوياً.'
+            : 'Tapping above opens a secure checkout that supports Apple Pay, Google Pay, and credit cards. Auto-renews annually.'}
         </Text>
       </ScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
-// ─── Helper components ────────────────────────────────────────────────────────
-function Field({
-  label, error, align, font, children,
-}: {
-  label: string; error?: string; align: 'left' | 'right'; font: string; children: React.ReactNode;
-}) {
-  return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={[fieldStyles.label, { fontFamily: font, textAlign: align }]}>{label}</Text>
-      {children}
-      {!!error && <Text style={[fieldStyles.error, { textAlign: align }]}>{error}</Text>}
     </View>
   );
 }
 
-function Row({
+// ─── Helper components ────────────────────────────────────────────────────────
+function SummaryRow({
   label, value, font, rowDir, bold, accent,
 }: {
   label: string; value: string;
@@ -386,10 +341,6 @@ function Row({
   );
 }
 
-const fieldStyles = StyleSheet.create({
-  label: { fontSize: 13, color: '#6B7280', marginBottom: 6 },
-  error: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
-});
 const rowStyles = StyleSheet.create({
   row:   { justifyContent: 'space-between', marginBottom: 10 },
   label: { fontSize: 14, color: '#6B7280' },
@@ -416,40 +367,50 @@ const styles = StyleSheet.create({
   planSummaryPriceNum: { fontSize: 40, color: '#FFFFFF' },
   planSummaryPriceCur: { fontSize: 15, color: 'rgba(255,255,255,0.8)' },
 
-  // Form
-  scroll: { flex: 1, backgroundColor: '#F4F2FA' },
-  formContainer: { padding: 20 },
-  sectionLabel: { fontSize: 16, color: '#120840', marginBottom: 16, marginTop: 8 },
+  // Content
+  scroll: { flex: 1 },
+  content: { padding: 20 },
+  sectionLabel: { fontSize: 16, color: '#120840', marginTop: 4 },
 
-  input: {
-    backgroundColor: '#FFFFFF', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#E0DBEF',
-    paddingHorizontal: 16, paddingVertical: 15,
-    fontSize: 16, color: '#120840',
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+  // Payment methods badge
+  methodsBadge: {
+    alignItems: 'center', gap: 8, marginBottom: 20,
+    backgroundColor: '#EDE8F8', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10,
   },
-  inputRow: { alignItems: 'center', gap: 10 },
-  cardBrandBadge: {
-    width: 44, height: 48, borderRadius: 12,
-    backgroundColor: '#EDE8F8',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  twoCol: { gap: 12 },
-
-  secureNote: {
-    alignItems: 'center', gap: 6, marginTop: -4, marginBottom: 24,
-    backgroundColor: '#EDE8F8', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
-  },
-  secureNoteText: { fontSize: 12, color: '#5B2C91' },
+  methodsText: { fontSize: 13, color: '#5B2C91' },
 
   // Order summary
   orderSummary: {
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 24,
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 16,
     shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
   },
   orderDivider: { height: 1, backgroundColor: '#E0DBEF', marginVertical: 10 },
+
+  // Features card
+  featuresCard: {
+    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 24,
+    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
+  },
+  featureRow: { alignItems: 'center', gap: 10, marginBottom: 10 },
+  featureDot: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: '#EDE8F8',
+    justifyContent: 'center', alignItems: 'center',
+    flexShrink: 0,
+  },
+  featureText: { flex: 1, fontSize: 14, color: '#374151', lineHeight: 20 },
+
+  // Error
+  errorBanner: {
+    alignItems: 'center', gap: 8, marginBottom: 16,
+    backgroundColor: '#FEF2F2', borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: '#FECACA',
+  },
+  errorText: { flex: 1, fontSize: 13, color: '#E74C3C' },
 
   // Submit
   submitWrap: {
