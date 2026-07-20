@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/jai-admin/"
+title = "JAI Admin — Dispatch Panel"
+version = "1.0.0"
+id = "artifacts/jai-admin"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/jai-admin/" ]
+localPort = 24579
+
+[services.development]
+run = "pnpm --filter @workspace/jai-admin run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jai-admin", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/jai-admin/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24579"
+BASE_PATH = "/jai-admin/"
