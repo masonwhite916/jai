@@ -130,14 +130,24 @@ export default function Onboarding() {
           {/* Dots */}
           <View style={[styles.dotsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             {SLIDES.map((_, i) => (
-              <View
+              <TouchableOpacity
                 key={i}
-                style={[
-                  styles.dot,
-                  i === idx && styles.dotActive,
-                  i === idx && { backgroundColor: slide.accentColor, width: 28 },
-                ]}
-              />
+                activeOpacity={0.7}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  flatRef.current?.scrollToIndex({ index: i, animated: true });
+                  setIdx(i);
+                }}
+                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+              >
+                <View
+                  style={[
+                    styles.dot,
+                    i === idx && styles.dotActive,
+                    i === idx && { backgroundColor: slide.accentColor, width: 28 },
+                  ]}
+                />
+              </TouchableOpacity>
             ))}
           </View>
 
