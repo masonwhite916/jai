@@ -2,3 +2,4 @@
 - [Expo web stale bundle](expo-web-stale-bundle.md) — watcher can serve an old bundle; restart the Expo workflow to verify edits
 - [JAI design sync](jai-design-sync.md) — share brand colors, fonts, and i18n keys across JAI artifacts
 - [Expo multi-artifact dev preview](expo-multi-artifact-preview.md) — only the Expo app at previewPath "/" fully loads in dev; swap slots via verifyAndReplaceArtifactToml to review the other
+- [Taqnyat OTP integration](taqnyat-otp.md) — Taqnyat Verify replaces Twilio; same public API surface; single POST endpoint; result codes not HTTP status
