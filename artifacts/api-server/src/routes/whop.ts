@@ -50,40 +50,55 @@ router.post("/whop/checkout", async (req, res) => {
   }
 });
 
-// GET /api/whop/membership-status?email=...
-// Returns { active: bool, plan: 'basic'|'accidents'|'rental'|null }
+// GET /api/whop/membership-status?email=...&plan=...
+// Query: email (required), plan (optional: 'basic'|'accidents'|'rental')
+// Returns: { active: boolean, plan: string|null, membership?: object }
 router.get("/whop/membership-status", async (req, res) => {
   try {
-    const { email } = req.query as { email?: string };
+    const { email, plan } = req.query as { email?: string; plan?: string };
 
     if (!email) {
       res.status(400).json({ error: "email is required" });
       return;
     }
 
-    // Fetch memberships filtered by email — checks all our known product plans
-    const productIds = [
-      process.env.WHOP_PRODUCT_BASIC,
-      process.env.WHOP_PRODUCT_ACCIDENTS,
-      process.env.WHOP_PRODUCT_RENTAL,
-    ].filter(Boolean);
+    // Optionally filter by plan_id to narrow results
+    const plan_id = plan ? PLAN_IDS[plan] : undefined;
 
-    // List active memberships; Whop doesn't filter by email directly so we
-    // fetch recent memberships and look for a match.
-    const result = (await whopFetch("GET", "/api/v1/memberships?status=active&limit=50")) as {
-      data?: Array<{ id: string; plan_id: string; status: string; user?: { email?: string } }>;
+    const params = new URLSearchParams({ status: "active", per: "50" });
+    if (plan_id) params.set("plan_id", plan_id);
+
+    const result = (await whopFetch(
+      "GET",
+      `/api/v1/memberships?${params.toString()}`,
+    )) as {
+      data?: Array<{
+        id: string;
+        status: string;
+        plan_id: string;
+        user?: { email?: string };
+        created_at?: number;
+      }>;
+      pagination?: { total: number };
     };
 
     const memberships = result.data ?? [];
+
+    // Find a membership whose user email matches (case-insensitive)
+    const normalizedEmail = email.trim().toLowerCase();
     const match = memberships.find(
       (m) =>
         m.status === "active" &&
-        m.user?.email?.toLowerCase() === email.toLowerCase() &&
-        PLAN_ID_TO_KEY[m.plan_id]
+        m.user?.email?.trim().toLowerCase() === normalizedEmail &&
+        PLAN_ID_TO_KEY[m.plan_id],
     );
 
     if (match) {
-      res.json({ active: true, plan: PLAN_ID_TO_KEY[match.plan_id] ?? null });
+      res.json({
+        active: true,
+        plan: PLAN_ID_TO_KEY[match.plan_id] ?? null,
+        membership: match,
+      });
     } else {
       res.json({ active: false, plan: null });
     }

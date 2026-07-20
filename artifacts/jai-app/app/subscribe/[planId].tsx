@@ -1,16 +1,17 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Animated, ActivityIndicator, TextInput,
+  TextInput, Platform, Animated, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import * as Haptics from 'expo-haptics';
-import * as WebBrowser from 'expo-web-browser';
+import { apiFetch } from '@/lib/api';
 
 // ─── Plan data (mirrors membership screen) ───────────────────────────────────
 const PLAN_DATA = {
@@ -74,13 +75,10 @@ const PLAN_DATA = {
 
 type PlanId = keyof typeof PLAN_DATA;
 
-// API base derived from EXPO_PUBLIC_DOMAIN injected at dev start
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? '';
-const API_BASE = DOMAIN ? `https://${DOMAIN}` : '';
-
 // HTTPS redirect URL for Whop (required — custom schemes are rejected).
 // Whop will redirect here after payment; the in-app browser shows the
 // website success page, then the user closes it and the app verifies.
+const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? '';
 const REDIRECT_URL = DOMAIN
   ? `https://${DOMAIN}/jai-web/payment-success`
   : 'https://example.com/payment-success';
@@ -95,45 +93,50 @@ export default function SubscribeScreen() {
   const plan = PLAN_DATA[planId as PlanId] ?? PLAN_DATA.basic;
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
+  const features = isRTL ? plan.featuresAr : plan.featuresEn;
 
-  const [email, setEmail]       = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [verifying, setVerifying] = useState(false);
-  const [success, setSuccess]   = useState(false);
-  const [pending, setPending]   = useState(false);   // paid but not yet verified
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Pre-checkout form state
+  const [name,        setName]        = useState(user?.name ?? '');
+  const [email,       setEmail]       = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
+  // Flow state
+  const [loading,        setLoading]        = useState(false);
+  const [verifying,      setVerifying]      = useState(false);
+  const [success,        setSuccess]        = useState(false);
+  const [paymentPending, setPaymentPending] = useState(false);
+  const [errorMsg,       setErrorMsg]       = useState<string | null>(null);
 
   // Success animation
   const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  function validateEmail() {
-    if (!email.trim()) {
-      setEmailError(isRTL ? 'البريد الإلكتروني مطلوب' : 'Email is required');
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setEmailError(isRTL ? 'بريد إلكتروني غير صحيح' : 'Invalid email address');
-      return false;
-    }
-    setEmailError('');
-    return true;
+  // ── Validation ───────────────────────────────────────────────────────────
+  function validate() {
+    const e: Record<string, string> = {};
+    if (!name.trim())  e.name  = isRTL ? 'مطلوب' : 'Required';
+    if (!email.trim()) e.email = isRTL ? 'البريد الإلكتروني مطلوب' : 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
+      e.email = isRTL ? 'بريد إلكتروني غير صحيح' : 'Invalid email address';
+    setFieldErrors(e);
+    return Object.keys(e).length === 0;
   }
 
-  // ── Verify membership with Whop after successful redirect ────────────────
+  // ── Verify membership with Whop (with retries) ───────────────────────────
   async function verifyMembership(userEmail: string) {
     setVerifying(true);
     try {
-      // Retry a few times — Whop may take a moment to activate the membership
+      // Retry up to 4 times — Whop may take a moment to activate the membership
       for (let attempt = 0; attempt < 4; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
-        const resp = await fetch(
-          `${API_BASE}/api/whop/membership-status?email=${encodeURIComponent(userEmail)}`
+        const data = await apiFetch<{ active?: boolean; plan?: string | null }>(
+          `/whop/membership-status?email=${encodeURIComponent(userEmail)}&plan=${encodeURIComponent(planId ?? 'basic')}`,
         );
-        const data = await resp.json() as { active?: boolean; plan?: string | null };
         if (data.active) {
-          await updateUser({ membership: (data.plan ?? planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+          await updateUser({
+            membership: (data.plan ?? planId ?? 'basic') as any,
+            points: (user?.points ?? 0) + 100,
+          });
           setVerifying(false);
           setSuccess(true);
           Animated.parallel([
@@ -145,19 +148,19 @@ export default function SubscribeScreen() {
           return;
         }
       }
-      // Membership not yet visible — show pending state
+      // Membership not yet visible after retries — show pending state
       setVerifying(false);
-      setPending(true);
+      setPaymentPending(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch {
       setVerifying(false);
-      setPending(true); // still likely paid — show pending rather than error
+      setPaymentPending(true); // still likely paid — show pending rather than error
     }
   }
 
   // ── Open Whop Checkout ────────────────────────────────────────────────────
   async function handleCheckout() {
-    if (!validateEmail()) {
+    if (!validate()) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -167,16 +170,21 @@ export default function SubscribeScreen() {
 
     try {
       // 1. Create a Whop checkout session via the API server
-      const resp = await fetch(`${API_BASE}/api/whop/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan: planId ?? 'basic', redirect_url: REDIRECT_URL }),
-      });
+      const data = await apiFetch<{ purchase_url: string; checkout_id: string }>(
+        '/whop/checkout',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            plan: planId ?? 'basic',
+            redirect_url: REDIRECT_URL,
+            subscriber_name: name.trim(),
+            subscriber_email: email.trim(),
+          }),
+        },
+      );
 
-      const data = await resp.json() as { purchase_url?: string; error?: string };
-      if (!resp.ok || !data.purchase_url) {
-        throw new Error(data.error ?? 'Could not create checkout. Please try again.');
-      }
+      setLoading(false);
 
       // 2. Open Whop hosted checkout in a modal browser.
       //    openBrowserAsync shows a dismissible in-app browser; it resolves
@@ -193,13 +201,36 @@ export default function SubscribeScreen() {
       await verifyMembership(email.trim());
     } catch (err) {
       setLoading(false);
+      setVerifying(false);
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
       setErrorMsg(msg);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }
 
-  // ── Success overlay ──────────────────────────────────────────────────────
+  // ── Verifying overlay ─────────────────────────────────────────────────────
+  if (verifying) {
+    return (
+      <View style={styles.successRoot}>
+        <LinearGradient
+          colors={plan.gradient}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[styles.successCard, { gap: 20 }]}>
+          <ActivityIndicator size="large" color="#5B2C91" />
+          <Text style={[styles.successTitle, { fontFamily: font.bold, marginTop: 16 }]}>
+            {isRTL ? 'جاري التحقق من الدفع…' : 'Verifying payment…'}
+          </Text>
+          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
+            {isRTL ? 'يرجى الانتظار لحظة' : 'Please wait a moment'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Success overlay ───────────────────────────────────────────────────────
   if (success) {
     return (
       <View style={styles.successRoot}>
@@ -231,30 +262,8 @@ export default function SubscribeScreen() {
     );
   }
 
-  // ── Verifying overlay ────────────────────────────────────────────────────
-  if (verifying) {
-    return (
-      <View style={styles.successRoot}>
-        <LinearGradient
-          colors={plan.gradient}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.successCard}>
-          <ActivityIndicator size="large" color="#5B2C91" />
-          <Text style={[styles.successTitle, { fontFamily: font.bold, marginTop: 16 }]}>
-            {isRTL ? 'جاري التحقق من الدفع…' : 'Verifying payment…'}
-          </Text>
-          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
-            {isRTL ? 'يرجى الانتظار لحظة' : 'Please wait a moment'}
-          </Text>
-        </View>
-      </View>
-    );
-  }
-
-  // ── Payment pending screen ───────────────────────────────────────────────
-  if (pending) {
+  // ── Payment pending screen ────────────────────────────────────────────────
+  if (paymentPending) {
     return (
       <View style={styles.successRoot}>
         <LinearGradient
@@ -288,9 +297,7 @@ export default function SubscribeScreen() {
     );
   }
 
-  const features = isRTL ? plan.featuresAr : plan.featuresEn;
-
-  // ── Main screen ──────────────────────────────────────────────────────────
+  // ── Main screen ───────────────────────────────────────────────────────────
   return (
     <View style={{ flex: 1, backgroundColor: '#F4F2FA' }}>
       {/* Gradient header */}
@@ -341,12 +348,57 @@ export default function SubscribeScreen() {
           </Text>
         </View>
 
+        {/* ── Contact info ── */}
+        <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align }]}>
+          {isRTL ? 'معلومات التواصل' : 'Contact Information'}
+        </Text>
+        <Text style={[styles.sectionHint, { fontFamily: font.regular, textAlign: align }]}>
+          {isRTL
+            ? 'ستُستخدم هذه البيانات للتحقق من اشتراكك وإرسال الفواتير.'
+            : 'These details are used to verify your subscription and send receipts.'}
+        </Text>
+
+        {/* Full name */}
+        <FormField
+          label={isRTL ? 'الاسم الكامل' : 'Full Name'}
+          error={fieldErrors.name}
+          align={align}
+          font={font.medium}
+        >
+          <TextInput
+            style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
+            value={name}
+            onChangeText={setName}
+            autoCapitalize="words"
+            placeholder={isRTL ? 'الاسم الكامل' : 'Your full name'}
+            placeholderTextColor="#C0C0D4"
+          />
+        </FormField>
+
+        {/* Email (also used to confirm payment after checkout) */}
+        <FormField
+          label={isRTL ? 'البريد الإلكتروني (للتحقق من الدفع)' : 'Email (used to confirm your payment)'}
+          error={fieldErrors.email}
+          align={align}
+          font={font.medium}
+        >
+          <TextInput
+            style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
+            value={email}
+            onChangeText={v => { setEmail(v); setFieldErrors(prev => ({ ...prev, email: '' })); }}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder={isRTL ? 'example@email.com' : 'your@email.com'}
+            placeholderTextColor="#C0C0D4"
+          />
+        </FormField>
+
         {/* ── Order summary ── */}
         <View style={styles.orderSummary}>
           <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 14 }]}>
             {isRTL ? 'ملخص الطلب' : 'Order Summary'}
           </Text>
-
           <SummaryRow
             label={isRTL ? plan.nameAr : plan.nameEn}
             value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
@@ -378,30 +430,6 @@ export default function SubscribeScreen() {
               <Text style={[styles.featureText, { fontFamily: font.regular, textAlign: align }]}>{f}</Text>
             </View>
           ))}
-        </View>
-
-        {/* ── Email field for post-payment verification ── */}
-        <View style={{ marginBottom: 20 }}>
-          <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>
-            {isRTL ? 'البريد الإلكتروني (للتحقق من الدفع)' : 'Email (used to confirm your payment)'}
-          </Text>
-          <TextInput
-            style={[
-              styles.emailInput,
-              { fontFamily: font.medium, textAlign: align },
-              emailError ? styles.emailInputError : null,
-            ]}
-            value={email}
-            onChangeText={v => { setEmail(v); setEmailError(''); }}
-            placeholder={isRTL ? 'example@email.com' : 'your@email.com'}
-            placeholderTextColor="#C0C0D4"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          {!!emailError && (
-            <Text style={[styles.inlineError, { textAlign: align }]}>{emailError}</Text>
-          )}
         </View>
 
         {/* ── Error message ── */}
@@ -455,6 +483,20 @@ export default function SubscribeScreen() {
 }
 
 // ─── Helper components ────────────────────────────────────────────────────────
+function FormField({
+  label, error, align, font, children,
+}: {
+  label: string; error?: string; align: 'left' | 'right'; font: string; children: React.ReactNode;
+}) {
+  return (
+    <View style={{ marginBottom: 16 }}>
+      <Text style={[fieldStyles.label, { fontFamily: font, textAlign: align }]}>{label}</Text>
+      {children}
+      {!!error && <Text style={[fieldStyles.error, { textAlign: align }]}>{error}</Text>}
+    </View>
+  );
+}
+
 function SummaryRow({
   label, value, font, rowDir, bold, accent,
 }: {
@@ -473,6 +515,10 @@ function SummaryRow({
   );
 }
 
+const fieldStyles = StyleSheet.create({
+  label: { fontSize: 13, color: '#6B7280', marginBottom: 6 },
+  error: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
+});
 const rowStyles = StyleSheet.create({
   row:   { justifyContent: 'space-between', marginBottom: 10 },
   label: { fontSize: 14, color: '#6B7280' },
@@ -503,6 +549,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { padding: 20 },
   sectionLabel: { fontSize: 16, color: '#120840', marginTop: 4 },
+  sectionHint:  { fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 20 },
 
   // Payment methods badge
   methodsBadge: {
@@ -511,6 +558,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10,
   },
   methodsText: { fontSize: 13, color: '#5B2C91' },
+
+  // Input
+  input: {
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#E0DBEF',
+    paddingHorizontal: 16, paddingVertical: 15,
+    fontSize: 16, color: '#120840',
+    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+  },
 
   // Order summary
   orderSummary: {
@@ -557,27 +614,7 @@ const styles = StyleSheet.create({
   submitText: { color: '#FFFFFF', fontSize: 16 },
   termsNote: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18 },
 
-  // Email field
-  fieldLabel: { fontSize: 13, color: '#6B7280', marginBottom: 8 },
-  emailInput: {
-    backgroundColor: '#FFFFFF', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#E0DBEF',
-    paddingHorizontal: 16, paddingVertical: 14,
-    fontSize: 15, color: '#120840',
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
-  },
-  emailInputError: { borderColor: '#E74C3C' },
-  inlineError: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
-
-  // Pending
-  pendingBtn: {
-    marginTop: 8, backgroundColor: '#F4F2FA', borderRadius: 14,
-    paddingHorizontal: 28, paddingVertical: 12,
-  },
-  pendingBtnText: { fontSize: 14, color: '#2D1B69' },
-
-  // Success
+  // Success / Pending overlays
   successRoot: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
   successCard: {
     backgroundColor: '#FFFFFF', borderRadius: 28, padding: 32,
@@ -594,4 +631,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8, marginTop: 4,
   },
   successPointsText: { fontSize: 13, color: '#B8860B' },
+
+  // Pending
+  pendingBtn: {
+    marginTop: 8, backgroundColor: '#F4F2FA', borderRadius: 14,
+    paddingHorizontal: 28, paddingVertical: 12,
+  },
+  pendingBtnText: { fontSize: 14, color: '#2D1B69' },
 });
