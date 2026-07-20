@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Smartphone, Apple, Play } from 'lucide-react';
+import { Smartphone, Apple, Play, Instagram, Twitter, Facebook } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function AppDownload() {
@@ -41,6 +41,44 @@ export default function AppDownload() {
             >
               {t('app_sub')}
             </motion.p>
+
+            {/* Social media links */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.25 }}
+              className={`flex items-center gap-4 mb-10 ${isRTL ? 'justify-end' : ''}`}
+            >
+              <a
+                href="https://instagram.com/jai.saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
+              >
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a
+                href="https://x.com/jai_saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X / Twitter"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
+              >
+                <Twitter className="w-5 h-5" />
+              </a>
+              <a
+                href="https://facebook.com/jai.saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
+              >
+                <Facebook className="w-5 h-5" />
+              </a>
+            </motion.div>
+
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}

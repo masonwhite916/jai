@@ -19,33 +19,33 @@ export default function Footer() {
             <p className={`text-white/60 max-w-sm mb-6 leading-relaxed ${arabic} ${isRTL ? 'mr-0 ml-auto md:ml-0' : ''}`}>
               {t('footer_desc')}
             </p>
-            <div className={`flex items-center gap-4 text-white/80 mb-8 ${isRTL ? 'justify-end md:justify-start' : ''}`}>
+            <div className={`flex items-center gap-4 text-white mb-8 ${isRTL ? 'justify-end md:justify-start' : ''}`}>
               <a
                 href="https://instagram.com/jai.saudi"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram"
-                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
               >
-                <Instagram className="w-5 h-5" />
+                <Instagram className="w-5 h-5 text-white" />
               </a>
               <a
                 href="https://x.com/jai_saudi"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="X / Twitter"
-                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
               >
-                <Twitter className="w-5 h-5" />
+                <Twitter className="w-5 h-5 text-white" />
               </a>
               <a
                 href="https://facebook.com/jai.saudi"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Facebook"
-                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+                className="w-10 h-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center hover:bg-[#C21875] hover:border-[#C21875] transition-colors"
               >
-                <Facebook className="w-5 h-5" />
+                <Facebook className="w-5 h-5 text-white" />
               </a>
             </div>
             <div className={`flex items-center gap-4 text-white/80 ${isRTL ? 'justify-end md:justify-start' : ''}`}>

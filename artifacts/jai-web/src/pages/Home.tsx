@@ -4,7 +4,9 @@ import Trust from '@/components/home/Trust';
 import Services from '@/components/home/Services';
 import Pricing from '@/components/home/Pricing';
 import AppDownload from '@/components/home/AppDownload';
-import Footer from '@/components/layout/Footer';
+import { Suspense, lazy } from 'react';
+
+const Footer = lazy(() => import('@/components/layout/Footer'));
 
 export default function Home() {
   return (
@@ -17,7 +19,9 @@ export default function Home() {
         <Pricing />
         <AppDownload />
       </main>
-      <Footer />
+      <Suspense fallback={<div className="h-48 bg-[#05020D]" />}>
+        <Footer />
+      </Suspense>
     </div>
   );
 }
