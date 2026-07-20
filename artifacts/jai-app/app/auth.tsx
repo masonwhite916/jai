@@ -11,6 +11,10 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : '';
+
 type Step = 'phone' | 'otp';
 
 export default function Auth() {
@@ -27,11 +31,31 @@ export default function Auth() {
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
 
-  function handlePhoneSubmit() {
-    if (phone.length < 9) { setError(t('phoneError')); return; }
+  async function handlePhoneSubmit() {
+    if (phone.replace(/\D/g, '').length < 9) { setError(t('phoneError')); return; }
     setError('');
+    setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setStep('otp');
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await resp.json() as { ok?: boolean; error?: string };
+      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Failed to send OTP');
+      setStep('otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send code. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleResend() {
+    setError('');
+    setOtp('');
+    await handlePhoneSubmit();
   }
 
   async function handleOtpSubmit() {
@@ -39,10 +63,20 @@ export default function Auth() {
     setError('');
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await new Promise(r => setTimeout(r, 800));
-    await login(DEFAULT_USER);
-    setLoading(false);
-    router.replace('/(tabs)');
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp }),
+      });
+      const data = await resp.json() as { ok?: boolean; error?: string };
+      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');
+      await login(DEFAULT_USER);
+      router.replace('/(tabs)');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed. Try again.');
+      setLoading(false);
+    }
   }
 
   async function handleGuest() {
@@ -164,7 +198,12 @@ export default function Auth() {
               </LinearGradient>
             </TouchableOpacity>
 
-            <TouchableOpacity style={{ alignItems: 'center', marginTop: 16 }}>
+            <TouchableOpacity
+              style={{ alignItems: 'center', marginTop: 16 }}
+              onPress={handleResend}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
               <Text style={[styles.resendText, { fontFamily: font.regular }]}>{t('resendCode')}</Text>
             </TouchableOpacity>
           </>
