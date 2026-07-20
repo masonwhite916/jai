@@ -130,7 +130,7 @@ export default function DriverRequestsScreen() {
   }, [refreshJobs]);
 
   const handleAccept = async (id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     await acceptJob(id);
     router.push(`/job/${id}` as any);
   };
@@ -166,7 +166,7 @@ export default function DriverRequestsScreen() {
           onPress={() => router.push(`/job/${activeJob.id}` as any)}
           style={[styles.activeBanner, { flexDirection: rowDir }]}
         >
-          <LinearGradient colors={['#2D1B69', '#C21875']} start={[0, 0]} end={[1, 0]} style={StyleSheet.absoluteFill} />
+          <LinearGradient colors={['#2D1B69', '#C21875']} start={[0, 0]} end={[1, 0]} style={StyleSheet.absoluteFill} pointerEvents="none" />
           <Feather name="zap" size={18} color="#FFFFFF" />
           <View style={{ flex: 1, marginHorizontal: 12 }}>
             <Text style={[styles.bannerTitle, { fontFamily: font.semibold, color: '#FFFFFF' }]}>{t('driverActiveJob')}</Text>
