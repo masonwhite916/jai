@@ -118,7 +118,7 @@ export default function ServiceRequest() {
                 {selectedVehicle === v.id && <Ionicons name="checkmark-circle" size={22} color="#2D1B69" />}
               </TouchableOpacity>
             ))}
-            <TouchableOpacity style={[styles.addVehicleBtn, { flexDirection: rowDir }]}>
+            <TouchableOpacity style={[styles.addVehicleBtn, { flexDirection: rowDir }]} onPress={() => router.push('/add-vehicle')} activeOpacity={0.8}>
               <Ionicons name="add-circle-outline" size={20} color="#2D1B69" />
               <Text style={[styles.addVehicleText, { fontFamily: font.semibold }]}>{t('addNewVehicle')}</Text>
             </TouchableOpacity>

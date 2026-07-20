@@ -111,7 +111,7 @@ export default function ProfileScreen() {
               <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#C0C0D0" />
             </TouchableOpacity>
           ))}
-          <TouchableOpacity style={[styles.addBtn, { flexDirection: rowDir }]}>
+          <TouchableOpacity style={[styles.addBtn, { flexDirection: rowDir }]} onPress={() => router.push('/add-vehicle')} activeOpacity={0.8}>
             <Ionicons name="add-circle-outline" size={20} color="#2D1B69" />
             <Text style={[styles.addBtnText, { fontFamily: font.semibold }]}>{t('addVehicle')}</Text>
           </TouchableOpacity>

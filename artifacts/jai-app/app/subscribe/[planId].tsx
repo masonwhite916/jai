@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, Animated, ActivityIndicator,
+  Platform, Animated, ActivityIndicator, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -93,16 +93,71 @@ export default function SubscribeScreen() {
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
 
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [email, setEmail]       = useState('');
+  const [emailError, setEmailError] = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [success, setSuccess]   = useState(false);
+  const [pending, setPending]   = useState(false);   // paid but not yet verified
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Success animation
   const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
+  function validateEmail() {
+    if (!email.trim()) {
+      setEmailError(isRTL ? 'البريد الإلكتروني مطلوب' : 'Email is required');
+      return false;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setEmailError(isRTL ? 'بريد إلكتروني غير صحيح' : 'Invalid email address');
+      return false;
+    }
+    setEmailError('');
+    return true;
+  }
+
+  // ── Verify membership with Whop after successful redirect ────────────────
+  async function verifyMembership(userEmail: string) {
+    setVerifying(true);
+    try {
+      // Retry a few times — Whop may take a moment to activate the membership
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+        const resp = await fetch(
+          `${API_BASE}/api/whop/membership-status?email=${encodeURIComponent(userEmail)}`
+        );
+        const data = await resp.json() as { active?: boolean; plan?: string | null };
+        if (data.active) {
+          await updateUser({ membership: (data.plan ?? planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+          setVerifying(false);
+          setSuccess(true);
+          Animated.parallel([
+            Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
+            Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
+          ]).start();
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setTimeout(() => router.replace('/(tabs)/membership'), 2500);
+          return;
+        }
+      }
+      // Membership not yet visible — show pending state
+      setVerifying(false);
+      setPending(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch {
+      setVerifying(false);
+      setPending(true); // still likely paid — show pending rather than error
+    }
+  }
+
   // ── Open Whop Checkout ────────────────────────────────────────────────────
   async function handleCheckout() {
+    if (!validateEmail()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
     setErrorMsg(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
@@ -124,27 +179,20 @@ export default function SubscribeScreen() {
       //    openAuthSessionAsync keeps the user inside the app and resolves
       //    when Whop redirects back to jai-app://payment-success.
       const result = await WebBrowser.openAuthSessionAsync(data.purchase_url, REDIRECT_URL);
+      setLoading(false);
 
       if (result.type === 'success') {
-        // Whop redirected to our deep link — payment completed
-        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
-        setSuccess(true);
-        Animated.parallel([
-          Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
-          Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
-        ]).start();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        setTimeout(() => router.replace('/(tabs)/membership'), 2500);
+        // Whop redirected to our deep link — verify the payment on the server
+        await verifyMembership(email.trim());
       } else {
         // User dismissed the browser without completing payment
         setErrorMsg(isRTL ? 'تم إلغاء عملية الدفع.' : 'Payment was cancelled.');
       }
     } catch (err) {
+      setLoading(false);
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
       setErrorMsg(msg);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -176,6 +224,63 @@ export default function SubscribeScreen() {
             </Text>
           </View>
         </Animated.View>
+      </View>
+    );
+  }
+
+  // ── Verifying overlay ────────────────────────────────────────────────────
+  if (verifying) {
+    return (
+      <View style={styles.successRoot}>
+        <LinearGradient
+          colors={plan.gradient}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.successCard}>
+          <ActivityIndicator size="large" color="#5B2C91" />
+          <Text style={[styles.successTitle, { fontFamily: font.bold, marginTop: 16 }]}>
+            {isRTL ? 'جاري التحقق من الدفع…' : 'Verifying payment…'}
+          </Text>
+          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
+            {isRTL ? 'يرجى الانتظار لحظة' : 'Please wait a moment'}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  // ── Payment pending screen ───────────────────────────────────────────────
+  if (pending) {
+    return (
+      <View style={styles.successRoot}>
+        <LinearGradient
+          colors={plan.gradient}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.successCard}>
+          <View style={[styles.successCheck, { backgroundColor: '#FFF8E1', borderRadius: 50, padding: 12 }]}>
+            <Ionicons name="time-outline" size={52} color="#F59E0B" />
+          </View>
+          <Text style={[styles.successTitle, { fontFamily: font.bold }]}>
+            {isRTL ? '⏳ تأكيد الدفع قيد المعالجة' : '⏳ Payment Pending'}
+          </Text>
+          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
+            {isRTL
+              ? 'تمت عملية الدفع ويتم التحقق منها. سيتم تفعيل عضويتك وإعلامك خلال 24 ساعة.'
+              : "Your payment was received and is being verified. Your membership will be activated and you'll be notified within 24 hours."}
+          </Text>
+          <TouchableOpacity
+            onPress={() => router.replace('/(tabs)/membership')}
+            activeOpacity={0.85}
+            style={styles.pendingBtn}
+          >
+            <Text style={[styles.pendingBtnText, { fontFamily: font.semibold }]}>
+              {isRTL ? 'العودة إلى الرئيسية' : 'Back to Home'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
@@ -270,6 +375,30 @@ export default function SubscribeScreen() {
               <Text style={[styles.featureText, { fontFamily: font.regular, textAlign: align }]}>{f}</Text>
             </View>
           ))}
+        </View>
+
+        {/* ── Email field for post-payment verification ── */}
+        <View style={{ marginBottom: 20 }}>
+          <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>
+            {isRTL ? 'البريد الإلكتروني (للتحقق من الدفع)' : 'Email (used to confirm your payment)'}
+          </Text>
+          <TextInput
+            style={[
+              styles.emailInput,
+              { fontFamily: font.medium, textAlign: align },
+              emailError ? styles.emailInputError : null,
+            ]}
+            value={email}
+            onChangeText={v => { setEmail(v); setEmailError(''); }}
+            placeholder={isRTL ? 'example@email.com' : 'your@email.com'}
+            placeholderTextColor="#C0C0D4"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {!!emailError && (
+            <Text style={[styles.inlineError, { textAlign: align }]}>{emailError}</Text>
+          )}
         </View>
 
         {/* ── Error message ── */}
@@ -424,6 +553,26 @@ const styles = StyleSheet.create({
   },
   submitText: { color: '#FFFFFF', fontSize: 16 },
   termsNote: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18 },
+
+  // Email field
+  fieldLabel: { fontSize: 13, color: '#6B7280', marginBottom: 8 },
+  emailInput: {
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#E0DBEF',
+    paddingHorizontal: 16, paddingVertical: 14,
+    fontSize: 15, color: '#120840',
+    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+  },
+  emailInputError: { borderColor: '#E74C3C' },
+  inlineError: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
+
+  // Pending
+  pendingBtn: {
+    marginTop: 8, backgroundColor: '#F4F2FA', borderRadius: 14,
+    paddingHorizontal: 28, paddingVertical: 12,
+  },
+  pendingBtnText: { fontSize: 14, color: '#2D1B69' },
 
   // Success
   successRoot: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
