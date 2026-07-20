@@ -207,7 +207,7 @@ const styles = StyleSheet.create({
   activeBanner: { marginHorizontal: 16, marginBottom: 12, padding: 16, borderRadius: 16, overflow: 'hidden', alignItems: 'center' },
   bannerTitle: { fontSize: 15 },
   bannerSub: { fontSize: 13, marginTop: 2 },
-  card: { borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
+  card: { borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#EBEBF5' },
   cardHeader: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   serviceBadge: { alignItems: 'center', gap: 8 },
   serviceText: { fontSize: 14 },

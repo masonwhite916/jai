@@ -94,7 +94,7 @@ export default function DriverProfileScreen() {
             value={driver.isOnline}
             onValueChange={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleOnline(); }}
             trackColor={{ false: colors.muted, true: 'rgba(46,204,113,0.4)' }}
-            thumbColor={driver.isOnline ? colors.success : '#8E8A9D'}
+            thumbColor={driver.isOnline ? colors.success : '#9CA3AF'}
           />
         </View>
 
@@ -149,18 +149,18 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 16 },
   title: { fontSize: 22 },
-  profileCard: { borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 16 },
+  profileCard: { borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#EBEBF5', marginBottom: 16 },
   avatar: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
   avatarText: { color: '#FFFFFF', fontSize: 24 },
   name: { fontSize: 20, marginTop: 4 },
   phone: { fontSize: 14, marginTop: 4 },
   ratingRow: { marginTop: 12, alignItems: 'center', gap: 4 },
   ratingText: { fontSize: 14, marginLeft: 6 },
-  onlineRow: { borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 12 },
+  onlineRow: { borderRadius: 16, padding: 16, alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#EBEBF5', marginBottom: 12 },
   onlineLeft: { alignItems: 'center', gap: 10 },
   onlineDot: { width: 10, height: 10, borderRadius: 5 },
   onlineLabel: { fontSize: 15 },
-  menuItem: { borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginBottom: 12 },
+  menuItem: { borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: '#EBEBF5', marginBottom: 12 },
   menuLabel: { flex: 1, fontSize: 15, marginHorizontal: 12 },
   menuValue: { fontSize: 14, marginRight: 8 },
   switchBtn: { height: 52, borderRadius: 14, borderWidth: 1, alignItems: 'center', justifyContent: 'center', gap: 8, flexDirection: 'row', marginBottom: 12 },

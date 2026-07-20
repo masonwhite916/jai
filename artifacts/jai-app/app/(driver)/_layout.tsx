@@ -60,7 +60,7 @@ function DriverTabBar({ state, navigation }: { state: any; navigation: any }) {
       ]}
       pointerEvents="box-none"
     >
-      <View style={[styles.pill, { backgroundColor: '#1A1726', borderColor: 'rgba(255,255,255,0.08)' }]}>
+      <View style={[styles.pill, { backgroundColor: '#FFFFFF', borderColor: '#EBEBF5' }]}>
         {TABS.map((tab, index) => {
           const focused = state.index === index;
           const hasAlert = tab.name === 'active' && !!activeJob;
@@ -79,19 +79,19 @@ function DriverTabBar({ state, navigation }: { state: any; navigation: any }) {
             >
               <View style={[
                 styles.tabInner,
-                focused && { backgroundColor: 'rgba(194,24,117,0.25)', borderRadius: 36 },
+                focused && { backgroundColor: 'rgba(194,24,117,0.12)', borderRadius: 36 },
               ]}>
                 {isIOS ? (
                   <SymbolView
                     name={focused ? `${tab.sf}.fill` as any : tab.sf as any}
-                    tintColor={focused ? '#C21875' : 'rgba(255,255,255,0.38)'}
+                    tintColor={focused ? '#C21875' : 'rgba(45,27,105,0.35)'}
                     size={22}
                   />
                 ) : (
                   <Feather
                     name={tab.icon}
                     size={22}
-                    color={focused ? '#C21875' : 'rgba(255,255,255,0.38)'}
+                    color={focused ? '#C21875' : 'rgba(45,27,105,0.35)'}
                   />
                 )}
                 {hasAlert && <View style={styles.alertDot} />}
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
     gap: 4,
     alignItems: 'center',
     borderWidth: 1,
-    shadowColor: '#000',
+    shadowColor: '#2D1B69',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.6,
     shadowRadius: 32,

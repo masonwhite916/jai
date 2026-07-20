@@ -49,7 +49,7 @@ export default function DriverAuth() {
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <LinearGradient
-        colors={['#0B0A0F', '#1A1726', '#2D1B69']}
+        colors={['#2D1B69', '#5B2C91', '#C21875']}
         style={[styles.header, { paddingTop: insets.top + 24 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
         <TouchableOpacity
@@ -86,7 +86,7 @@ export default function DriverAuth() {
         <TextInput
           style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
           placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
-          placeholderTextColor="#555"
+          placeholderTextColor="#9CA3AF"
           value={name}
           onChangeText={setName}
           autoCapitalize="words"
@@ -102,7 +102,7 @@ export default function DriverAuth() {
           <TextInput
             style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
             placeholder="05X XXX XXXX"
-            placeholderTextColor="#555"
+            placeholderTextColor="#9CA3AF"
             value={phone}
             onChangeText={setPhone}
             keyboardType="phone-pad"
@@ -139,14 +139,14 @@ export default function DriverAuth() {
         </View>
 
         <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
-          <Ionicons name="person-outline" size={18} color="#8E8A9D" />
+          <Ionicons name="person-outline" size={18} color="#6B7280" />
           <Text style={[styles.guestText, { fontFamily: font.medium }]}>
             {isAR ? 'متابعة كضيف' : 'Continue as guest'}
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.7}>
-          <Ionicons name="arrow-back-outline" size={15} color="#8E8A9D" />
+          <Ionicons name="arrow-back-outline" size={15} color="#9CA3AF" />
           <Text style={[styles.backText, { fontFamily: font.regular }]}>
             {isAR ? 'العودة' : 'Back to role selection'}
           </Text>
@@ -176,24 +176,24 @@ const styles = StyleSheet.create({
   headerTitle: { color: '#FFFFFF', fontSize: 22, marginBottom: 6 },
   headerSub: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
 
-  scroll: { flex: 1, backgroundColor: '#0B0A0F' },
+  scroll: { flex: 1, backgroundColor: '#F8F9FC' },
   form: { paddingHorizontal: 24, paddingTop: 32 },
 
-  label: { color: '#8E8A9D', fontSize: 13, marginBottom: 8 },
+  label: { color: '#6B7280', fontSize: 13, marginBottom: 8 },
   input: {
-    backgroundColor: '#1A1726', borderRadius: 14,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#EBEBF5',
     paddingHorizontal: 16, paddingVertical: 15,
-    fontSize: 16, color: '#EEEDF5',
+    fontSize: 16, color: '#1A1A1A',
   },
   phoneRow: { gap: 10 },
   flag: {
-    backgroundColor: '#1A1726', borderRadius: 14,
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#FFFFFF', borderRadius: 14,
+    borderWidth: 1.5, borderColor: '#EBEBF5',
     paddingHorizontal: 14, paddingVertical: 15,
     justifyContent: 'center',
   },
-  flagText: { fontSize: 15, color: '#EEEDF5' },
+  flagText: { fontSize: 15, color: '#1A1A1A' },
 
   error: { color: '#E74C3C', fontSize: 13, marginTop: 8 },
 
@@ -209,19 +209,19 @@ const styles = StyleSheet.create({
   primaryText: { color: '#FFFFFF', fontSize: 16 },
 
   divRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
-  divLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
-  divText: { color: '#8E8A9D', fontSize: 13 },
+  divLine: { flex: 1, height: 1, backgroundColor: '#EBEBF5' },
+  divText: { color: '#9CA3AF', fontSize: 13 },
 
   guestBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
     paddingVertical: 16, borderRadius: 16,
-    backgroundColor: '#1A1726',
-    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1.5, borderColor: '#EBEBF5',
   },
-  guestText: { color: '#8E8A9D', fontSize: 15 },
+  guestText: { color: '#6B7280', fontSize: 15 },
 
   backBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20,
   },
-  backText: { color: '#8E8A9D', fontSize: 13 },
+  backText: { color: '#9CA3AF', fontSize: 13 },
 });
