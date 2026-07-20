@@ -12,27 +12,103 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
+const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
+  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+  : '';
+
+type Step = 'info' | 'otp';
+
 export default function DriverAuth() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { login: driverLogin } = useDriver();
-  const { setRole } = useApp();
+  const { login: appLogin, setRole } = useApp();
   const { lang, font, toggleLanguage } = useLanguage();
   const isAR = lang === 'ar';
+  const [step, setStep] = useState<Step>('info');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleContinue = async () => {
+  const handleSendOtp = async () => {
     if (!name.trim()) { setError(isAR ? 'أدخل اسمك الكامل' : 'Enter your full name'); return; }
+    if (!inviteCode.trim()) { setError(isAR ? 'أدخل رمز الدعوة' : 'Enter your invite code'); return; }
     if (phone.replace(/\D/g, '').length < 9) { setError(isAR ? 'أدخل رقم هاتف صحيح' : 'Enter a valid phone number'); return; }
     setError('');
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await driverLogin({ ...DEFAULT_DRIVER, name: name.trim(), phone: `+966 ${phone}` });
-    router.replace('/(driver)');
-    setLoading(false);
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/send-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone }),
+      });
+      const data = await resp.json() as { ok?: boolean; error?: string };
+      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Failed to send OTP');
+      setStep('otp');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send code. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (otp.length < 6) { setError(isAR ? 'أدخل الرمز المكوّن من ٦ أرقام' : 'Enter the 6-digit code'); return; }
+    setError('');
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, otp, name: name.trim(), invite_code: inviteCode.trim() }),
+      });
+      const data = await resp.json() as { ok?: boolean; error?: string; token?: string; user?: any };
+      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');
+      const apiUser = data.user ?? {};
+
+      // Gate on server-returned role — if the invite code was invalid the server
+      // will have created a 'customer' account and this flow should block entry.
+      if (apiUser.role !== 'technician') {
+        setError(isAR
+          ? 'رمز الدعوة غير صحيح. تواصل مع المشرف للحصول على رمز صالح.'
+          : 'Invalid invite code. Please contact your dispatcher for a valid code.');
+        setLoading(false);
+        return;
+      }
+
+      const mergedUser = {
+        id:         apiUser.id         ?? 'd1',
+        name:       apiUser.name       ?? name.trim(),
+        phone:      apiUser.phone      ?? phone,
+        membership: apiUser.membership ?? 'none',
+        points:     apiUser.points     ?? 0,
+        vehicles:   [],
+      };
+      // Store auth in AppContext and as Driver
+      await appLogin(mergedUser, data.token);
+      await setRole('technician');
+      await driverLogin({
+        ...DEFAULT_DRIVER,
+        id:   apiUser.id ? String(apiUser.id) : 'd1',
+        name: mergedUser.name,
+        phone: mergedUser.phone,
+        jobsCompleted: apiUser.jobsCompleted ?? DEFAULT_DRIVER.jobsCompleted,
+        earnings: {
+          ...DEFAULT_DRIVER.earnings,
+          total: apiUser.earningsTotal ?? DEFAULT_DRIVER.earnings.total,
+        },
+      });
+      router.replace('/(driver)');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Verification failed. Try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGuest = async () => {
@@ -42,6 +118,7 @@ export default function DriverAuth() {
   };
 
   const handleBack = async () => {
+    if (step === 'otp') { setStep('info'); setOtp(''); setError(''); return; }
     await setRole(null);
     router.replace('/role');
   };
@@ -80,75 +157,133 @@ export default function DriverAuth() {
         contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 32 + (Platform.OS === 'web' ? 34 : 0) }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
-          {isAR ? 'الاسم الكامل' : 'Full name'}
-        </Text>
-        <TextInput
-          style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
-          placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
-          placeholderTextColor="#9CA3AF"
-          value={name}
-          onChangeText={setName}
-          autoCapitalize="words"
-        />
-
-        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
-          {isAR ? 'رقم الجوال' : 'Phone number'}
-        </Text>
-        <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
-          <View style={styles.flag}>
-            <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
-          </View>
-          <TextInput
-            style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: 'left' }]}
-            placeholder="05X XXX XXXX"
-            placeholderTextColor="#9CA3AF"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            maxLength={10}
-          />
-        </View>
-
-        {!!error && (
-          <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
-        )}
-
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleContinue}
-          disabled={loading}
-          style={styles.primaryWrap}
-        >
-          <LinearGradient
-            colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-            style={styles.primaryBtn}
-          >
-            <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
-              {loading ? (isAR ? 'جارٍ التسجيل...' : 'Signing in…') : (isAR ? 'متابعة' : 'Continue')}
+        {step === 'info' ? (
+          <>
+            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
+              {isAR ? 'الاسم الكامل' : 'Full name'}
             </Text>
-            <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
-          </LinearGradient>
-        </TouchableOpacity>
+            <TextInput
+              style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+              placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
+              placeholderTextColor="#9CA3AF"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+            />
 
-        <View style={styles.divRow}>
-          <View style={styles.divLine} />
-          <Text style={[styles.divText, { fontFamily: font.regular }]}>{isAR ? 'أو' : 'or'}</Text>
-          <View style={styles.divLine} />
-        </View>
+            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
+              {isAR ? 'رمز الدعوة' : 'Invite code'}
+            </Text>
+            <TextInput
+              style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+              placeholder={isAR ? 'JAI-TECH-XXXX' : 'JAI-TECH-XXXX'}
+              placeholderTextColor="#9CA3AF"
+              value={inviteCode}
+              onChangeText={setInviteCode}
+              autoCapitalize="characters"
+              autoCorrect={false}
+            />
 
-        <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
-          <Ionicons name="person-outline" size={18} color="#6B7280" />
-          <Text style={[styles.guestText, { fontFamily: font.medium }]}>
-            {isAR ? 'متابعة كضيف' : 'Continue as guest'}
-          </Text>
-        </TouchableOpacity>
+            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
+              {isAR ? 'رقم الجوال' : 'Phone number'}
+            </Text>
+            <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
+              <View style={styles.flag}>
+                <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
+              </View>
+              <TextInput
+                style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: 'left' }]}
+                placeholder="05X XXX XXXX"
+                placeholderTextColor="#9CA3AF"
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                maxLength={10}
+              />
+            </View>
+
+            {!!error && (
+              <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
+            )}
+
+            <TouchableOpacity activeOpacity={0.85} onPress={handleSendOtp} disabled={loading} style={styles.primaryWrap}>
+              <LinearGradient
+                colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.primaryBtn}
+              >
+                <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
+                  {loading ? (isAR ? 'جارٍ الإرسال...' : 'Sending…') : (isAR ? 'إرسال الرمز' : 'Send code')}
+                </Text>
+                <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.divRow}>
+              <View style={styles.divLine} />
+              <Text style={[styles.divText, { fontFamily: font.regular }]}>{isAR ? 'أو' : 'or'}</Text>
+              <View style={styles.divLine} />
+            </View>
+
+            <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
+              <Ionicons name="person-outline" size={18} color="#6B7280" />
+              <Text style={[styles.guestText, { fontFamily: font.medium }]}>
+                {isAR ? 'متابعة كضيف' : 'Continue as guest'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
+              {isAR ? 'رمز التحقق' : 'Verification code'}
+            </Text>
+            <Text style={[styles.hint, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>
+              {isAR
+                ? `أُرسل رمز مكوّن من ٦ أرقام إلى +966 ${phone} عبر واتساب`
+                : `A 6-digit code was sent to +966 ${phone} via WhatsApp`}
+            </Text>
+            <TextInput
+              style={[styles.input, { fontFamily: font.medium, textAlign: 'center', letterSpacing: 6, fontSize: 22 }]}
+              placeholder="------"
+              placeholderTextColor="#9CA3AF"
+              value={otp}
+              onChangeText={setOtp}
+              keyboardType="number-pad"
+              maxLength={6}
+              autoFocus
+            />
+
+            {!!error && (
+              <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
+            )}
+
+            <TouchableOpacity activeOpacity={0.85} onPress={handleVerifyOtp} disabled={loading} style={styles.primaryWrap}>
+              <LinearGradient
+                colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={styles.primaryBtn}
+              >
+                <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
+                  {loading ? (isAR ? 'جارٍ التحقق...' : 'Verifying…') : (isAR ? 'تأكيد' : 'Verify')}
+                </Text>
+                <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => handleSendOtp()} style={{ alignItems: 'center', marginTop: 16 }}>
+              <Text style={[styles.backText, { fontFamily: font.regular }]}>
+                {isAR ? 'إعادة إرسال الرمز' : 'Resend code'}
+              </Text>
+            </TouchableOpacity>
+          </>
+        )}
 
         <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back-outline" size={15} color="#9CA3AF" />
           <Text style={[styles.backText, { fontFamily: font.regular }]}>
-            {isAR ? 'العودة' : 'Back to role selection'}
+            {step === 'otp'
+              ? (isAR ? 'تغيير رقم الجوال' : 'Change number')
+              : (isAR ? 'العودة' : 'Back to role selection')}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -180,6 +315,7 @@ const styles = StyleSheet.create({
   form: { paddingHorizontal: 24, paddingTop: 32 },
 
   label: { color: '#6B7280', fontSize: 13, marginBottom: 8 },
+  hint: { color: '#9CA3AF', fontSize: 13, marginBottom: 20, lineHeight: 19 },
   input: {
     backgroundColor: '#FFFFFF', borderRadius: 14,
     borderWidth: 1.5, borderColor: '#EBEBF5',

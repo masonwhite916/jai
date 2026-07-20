@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, setAuthToken, getAuthToken } from '@/lib/api';
 
 export interface Vehicle {
   id: string;
@@ -28,7 +29,7 @@ interface AppContextType {
   role: 'customer' | 'technician' | null;
   setRole: (role: 'customer' | 'technician' | null) => Promise<void>;
   markOnboardingDone: () => Promise<void>;
-  login: (user: User) => Promise<void>;
+  login: (user: User, token?: string) => Promise<void>;
   loginAsGuest: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
@@ -40,16 +41,14 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
+// Fallback for guest/offline usage
 export const DEFAULT_USER: User = {
-  id: '1',
-  name: 'Mohammed Al-Rashid',
-  phone: '+966 50 123 4567',
-  membership: 'premium',
-  points: 1240,
-  vehicles: [
-    { id: 'v1', make: 'Toyota', model: 'Camry', year: '2022', plate: 'ABC 1234', color: 'White' },
-    { id: 'v2', make: 'GMC', model: 'Yukon', year: '2021', plate: 'XYZ 5678', color: 'Black' },
-  ],
+  id: 'guest',
+  name: 'Guest',
+  phone: '',
+  membership: 'none',
+  points: 0,
+  vehicles: [],
 };
 
 interface AppProviderProps {
@@ -58,6 +57,7 @@ interface AppProviderProps {
     user: User | null;
     hasSeenOnboarding: boolean;
     role: 'customer' | 'technician' | null;
+    token?: string | null;
   } | null;
 }
 
@@ -82,66 +82,86 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
 
   const isGuestRef = useRef(isGuest);
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
-
   const userRef = useRef(user);
   useEffect(() => { userRef.current = user; }, [user]);
 
+  // Sync module-level token when preloaded session has one
   useEffect(() => {
-    // Skip the AsyncStorage fetch when the layout already supplied initial state.
+    if (preloaded && initialSession?.token) {
+      setAuthToken(initialSession.token);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!preloaded) loadState();
   }, []);
 
-  // Re-hydrate session from AsyncStorage when the app returns to the foreground
-  // after iOS unloads the JS bundle during a long background period.
+  // Re-hydrate on foreground resume
   useEffect(() => {
     const handleAppStateChange = async (nextState: AppStateStatus) => {
       if (nextState !== 'active') return;
-      // Only re-hydrate if in-memory user state is missing and this is not a
-      // guest session (guest sessions are intentionally not persisted).
       if (userRef.current !== null || isGuestRef.current) return;
       try {
-        const userData = await AsyncStorage.getItem('jai_user');
+        const [userData, token] = await Promise.all([
+          AsyncStorage.getItem('jai_user'),
+          AsyncStorage.getItem('jai_token'),
+        ]);
+        if (token) setAuthToken(token);
         if (userData) {
           setUser(JSON.parse(userData));
           setIsAuthenticated(true);
           setIsGuest(false);
         }
-      } catch {
-        // ignore errors
-      }
+      } catch { /* ignore */ }
     };
-
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription.remove();
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
   }, []);
 
   async function loadState() {
     try {
-      const [onboarding, userData, storedRole] = await Promise.all([
+      const [onboarding, userData, storedRole, token] = await Promise.all([
         AsyncStorage.getItem('jai_onboarding'),
         AsyncStorage.getItem('jai_user'),
         AsyncStorage.getItem('jai_role'),
+        AsyncStorage.getItem('jai_token'),
       ]);
+
       setHasSeenOnboarding(onboarding === 'true');
-      if (storedRole === 'customer' || storedRole === 'technician') setRoleState(storedRole);
+      if (storedRole === 'customer' || storedRole === 'technician') {
+        setRoleState(storedRole);
+      }
+
+      if (token) {
+        setAuthToken(token);
+        // Try fetching fresh user data from the server
+        try {
+          const freshUser = await apiFetch<User>('/api/users/me');
+          await AsyncStorage.setItem('jai_user', JSON.stringify(freshUser));
+          setUser(freshUser);
+          setIsAuthenticated(true);
+          setIsGuest(false);
+          return;
+        } catch {
+          // Token may have expired — fall back to cached user data
+          setAuthToken(null);
+          await AsyncStorage.removeItem('jai_token');
+        }
+      }
+
       if (userData) {
         setUser(JSON.parse(userData));
         setIsAuthenticated(true);
         setIsGuest(false);
       }
-    } catch {
-      // ignore errors
-    } finally {
+    } catch { /* ignore */ } finally {
       setIsLoading(false);
     }
   }
 
   async function setRole(r: 'customer' | 'technician' | null) {
-    if (r) {
-      await AsyncStorage.setItem('jai_role', r);
-    } else {
-      await AsyncStorage.removeItem('jai_role');
-    }
+    if (r) await AsyncStorage.setItem('jai_role', r);
+    else    await AsyncStorage.removeItem('jai_role');
     setRoleState(r);
   }
 
@@ -150,7 +170,11 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setHasSeenOnboarding(true);
   }
 
-  async function login(userData: User) {
+  async function login(userData: User, token?: string) {
+    if (token) {
+      await AsyncStorage.setItem('jai_token', token);
+      setAuthToken(token);
+    }
     await AsyncStorage.setItem('jai_user', JSON.stringify(userData));
     setUser(userData);
     setIsAuthenticated(true);
@@ -158,15 +182,24 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   }
 
   async function loginAsGuest(userData: User) {
-    // Guest sessions are intentionally not persisted — clear any residual stored session first
     await AsyncStorage.removeItem('jai_user');
+    await AsyncStorage.removeItem('jai_token');
+    setAuthToken(null);
     setUser(userData);
     setIsAuthenticated(true);
     setIsGuest(true);
   }
 
   async function logout() {
-    await AsyncStorage.removeItem('jai_user');
+    // Invalidate token server-side if we have one
+    if (getAuthToken()) {
+      try { await apiFetch('/api/users/logout', { method: 'POST' }); } catch { /* ignore */ }
+    }
+    setAuthToken(null);
+    await Promise.all([
+      AsyncStorage.removeItem('jai_user'),
+      AsyncStorage.removeItem('jai_token'),
+    ]);
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(false);
@@ -183,7 +216,19 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   async function updateUser(updates: Partial<User>) {
     if (!user) return;
     const updated = { ...user, ...updates };
-    // Never persist guest sessions to storage
+
+    if (!isGuest && getAuthToken()) {
+      try {
+        const fresh = await apiFetch<User>('/api/users/me', {
+          method: 'PUT',
+          body: JSON.stringify(updates),
+        });
+        await AsyncStorage.setItem('jai_user', JSON.stringify(fresh));
+        setUser(fresh);
+        return;
+      } catch { /* fall through to local update */ }
+    }
+
     if (!isGuest) {
       await AsyncStorage.setItem('jai_user', JSON.stringify(updated));
     }
@@ -206,4 +251,3 @@ export function useApp() {
   if (!ctx) throw new Error('useApp must be used within AppProvider');
   return ctx;
 }
-

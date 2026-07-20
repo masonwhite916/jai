@@ -67,11 +67,21 @@ export default function Auth() {
       const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp }),
+        body: JSON.stringify({ phone, otp, role: 'customer' }),
       });
-      const data = await resp.json() as { ok?: boolean; error?: string };
+      const data = await resp.json() as { ok?: boolean; error?: string; token?: string; user?: any };
       if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');
-      await login(DEFAULT_USER);
+      // Merge API user with local defaults for fields the server doesn't yet populate
+      const apiUser = data.user ?? {};
+      const mergedUser = {
+        id:         apiUser.id         ?? 'u1',
+        name:       apiUser.name       ?? 'Guest',
+        phone:      apiUser.phone      ?? phone,
+        membership: apiUser.membership ?? 'none',
+        points:     apiUser.points     ?? 0,
+        vehicles:   apiUser.vehicles   ?? [],
+      };
+      await login(mergedUser, data.token);
       router.replace('/(tabs)');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed. Try again.');

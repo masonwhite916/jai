@@ -1,17 +1,35 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLanguage } from '@/context/LanguageContext';
+import { apiFetch, getAuthToken } from '@/lib/api';
 
-function StatusBadge({ status }: { status: 'active' | 'completed' | 'cancelled' }) {
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type ReqStatus = 'active' | 'completed' | 'cancelled';
+
+interface RequestRow {
+  id: string;
+  service: string;
+  icon: string;
+  date: string;
+  address: string;
+  status: ReqStatus;
+  cost: string;
+  technician: string;
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status: ReqStatus }) {
   const { t, font } = useLanguage();
   const map = {
-    active: { label: t('statusActive'), color: '#2ECC71', bg: '#E8F8F0' },
+    active:    { label: t('statusActive'),    color: '#2ECC71', bg: '#E8F8F0' },
     completed: { label: t('statusCompleted'), color: '#2D1B69', bg: '#EDE8F8' },
     cancelled: { label: t('statusCancelled'), color: '#E74C3C', bg: '#FEE8E6' },
   };
@@ -23,6 +41,43 @@ function StatusBadge({ status }: { status: 'active' | 'completed' | 'cancelled' 
   );
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const SERVICE_ICONS: Record<string, { icon: string; lib: 'MC' | 'Ion' }> = {
+  battery:  { icon: 'battery-charging',  lib: 'Ion' },
+  fuel:     { icon: 'gas-station',       lib: 'MC'  },
+  tire:     { icon: 'tire',              lib: 'MC'  },
+  tow:      { icon: 'tow-truck',         lib: 'MC'  },
+  lockout:  { icon: 'key',               lib: 'Ion' },
+  mechanic: { icon: 'wrench',            lib: 'MC'  },
+  electric: { icon: 'flash',             lib: 'Ion' },
+};
+const SERVICE_LABELS: Record<string, string> = {
+  battery: 'Battery', fuel: 'Fuel', tire: 'Tire change',
+  tow: 'Tow truck', lockout: 'Lockout', mechanic: 'Mechanic', electric: 'Electrical',
+};
+const PAYOUTS: Record<string, number> = {
+  battery: 120, fuel: 80, tire: 350, tow: 500, lockout: 200, mechanic: 300, electric: 280,
+};
+
+function apiStatusToLocal(status: string): ReqStatus {
+  if (status === 'completed') return 'completed';
+  if (status === 'cancelled') return 'cancelled';
+  return 'active';
+}
+
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+  if (diffDays === 0) return `Today, ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Screen ────────────────────────────────────────────────────────────────────
+
 export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -30,14 +85,42 @@ export default function RequestsScreen() {
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
 
-  const REQUESTS = [
-    { id: 'r1', service: t('reqBattery'), icon: 'battery-charging', date: isRTL ? 'اليوم، ١٠:٢٤ ص' : 'Today, 10:24 AM', address: t('reqAddrFahd'), status: 'active' as const, cost: '120 SAR', technician: t('reqTechAhmed') },
-    { id: 'r2', service: t('reqTire'), icon: 'tire', date: t('notifDate15'), address: t('reqAddrOlaya'), status: 'completed' as const, cost: '350 SAR', technician: t('reqTechKhalid'), rating: 5 },
-    { id: 'r3', service: t('reqFuel'), icon: 'gas-station', date: t('notifDate10'), address: t('reqAddrPMBS'), status: 'completed' as const, cost: '80 SAR', technician: t('reqTechOmar'), rating: 4 },
-    { id: 'r4', service: t('reqLockout'), icon: 'key', date: isRTL ? '٢٨ يونيو ٢٠٢٦' : 'Jun 28, 2026', address: t('reqAddrNakheel'), status: 'cancelled' as const, cost: '-', technician: '-' },
-  ];
+  const [requests, setRequests] = useState<RequestRow[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
 
-  const activeRequest = REQUESTS.find(r => r.status === 'active');
+  const fetchRequests = useCallback(async () => {
+    if (!getAuthToken()) {
+      // Not logged in — show empty state
+      setRequests([]);
+      setLoadingData(false);
+      return;
+    }
+    try {
+      const data = await apiFetch<{ requests: Record<string, any>[] }>('/api/requests');
+      const rows: RequestRow[] = data.requests.map((r) => {
+        const svcInfo = SERVICE_ICONS[r.service_type] ?? SERVICE_ICONS.battery;
+        return {
+          id:         String(r.id),
+          service:    SERVICE_LABELS[r.service_type] ?? r.service_type,
+          icon:       svcInfo.icon,
+          date:       formatDate(r.created_at),
+          address:    r.address ?? '—',
+          status:     apiStatusToLocal(r.status),
+          cost:       r.job ? `${r.job.payout ?? PAYOUTS[r.service_type] ?? 120} SAR` : `${PAYOUTS[r.service_type] ?? 120} SAR`,
+          technician: r.techName ?? '—',
+        };
+      });
+      setRequests(rows);
+    } catch {
+      setRequests([]);
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchRequests(); }, [fetchRequests]);
+
+  const activeRequest = requests.find(r => r.status === 'active');
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FC' }}>
@@ -66,36 +149,54 @@ export default function RequestsScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('requestHistory')}</Text>
-        {REQUESTS.map((req) => (
-          <TouchableOpacity
-            key={req.id}
-            style={[styles.requestCard, { flexDirection: rowDir }]}
-            activeOpacity={0.85}
-            onPress={req.status === 'active' ? () => router.push('/tracking' as any) : undefined}
-          >
-            <View style={[styles.reqIconBg, { backgroundColor: '#2D1B6915' }]}>
-              <MaterialCommunityIcons name={req.icon as any} size={24} color="#2D1B69" />
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <View style={[styles.reqTopRow, { flexDirection: rowDir }]}>
-                <Text style={[styles.reqService, { fontFamily: font.semibold, textAlign: align }]} numberOfLines={1}>{req.service}</Text>
-                <StatusBadge status={req.status} />
-              </View>
-              <Text style={[styles.reqAddress, { fontFamily: font.regular, textAlign: align }]} numberOfLines={1}>{req.address}</Text>
-              <Text style={[styles.reqDate, { fontFamily: font.regular, textAlign: align }]}>{req.date}</Text>
-              {req.rating ? (
-                <View style={[{ flexDirection: rowDir }]}>
-                  {[1,2,3,4,5].map(i => <Ionicons key={i} name={i <= req.rating! ? 'star' : 'star-outline'} size={13} color="#F39C12" />)}
+        {loadingData ? (
+          <View style={{ alignItems: 'center', paddingTop: 60 }}>
+            <ActivityIndicator size="large" color="#2D1B69" />
+            <Text style={[styles.emptyText, { fontFamily: font.regular, marginTop: 12 }]}>
+              {isRTL ? 'جارٍ التحميل...' : 'Loading…'}
+            </Text>
+          </View>
+        ) : requests.length === 0 ? (
+          <View style={{ alignItems: 'center', paddingTop: 60 }}>
+            <Ionicons name="car-outline" size={52} color="#C0C0D0" />
+            <Text style={[styles.emptyText, { fontFamily: font.semibold, marginTop: 16, color: '#1A1A1A' }]}>
+              {isRTL ? 'لا توجد طلبات بعد' : 'No requests yet'}
+            </Text>
+            <Text style={[styles.emptyText, { fontFamily: font.regular, marginTop: 6 }]}>
+              {isRTL ? 'ستظهر طلباتك هنا بعد تقديمها' : 'Your requests will appear here'}
+            </Text>
+          </View>
+        ) : (
+          <>
+            <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('requestHistory')}</Text>
+            {requests.map((req) => (
+              <TouchableOpacity
+                key={req.id}
+                style={[styles.requestCard, { flexDirection: rowDir }]}
+                activeOpacity={0.85}
+                onPress={req.status === 'active' ? () => router.push('/tracking' as any) : undefined}
+              >
+                <View style={[styles.reqIconBg, { backgroundColor: '#2D1B6915' }]}>
+                  {SERVICE_ICONS[Object.keys(SERVICE_LABELS).find(k => SERVICE_LABELS[k] === req.service) ?? 'battery']?.lib === 'MC'
+                    ? <MaterialCommunityIcons name={req.icon as any} size={24} color="#2D1B69" />
+                    : <Ionicons name={req.icon as any} size={24} color="#2D1B69" />}
                 </View>
-              ) : null}
-            </View>
-            <View style={{ alignItems: isRTL ? 'flex-start' : 'flex-end', gap: 4 }}>
-              <Text style={[styles.reqCost, { fontFamily: font.bold }]}>{req.cost}</Text>
-              <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#C0C0D0" />
-            </View>
-          </TouchableOpacity>
-        ))}
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={[styles.reqTopRow, { flexDirection: rowDir }]}>
+                    <Text style={[styles.reqService, { fontFamily: font.semibold, textAlign: align }]} numberOfLines={1}>{req.service}</Text>
+                    <StatusBadge status={req.status} />
+                  </View>
+                  <Text style={[styles.reqAddress, { fontFamily: font.regular, textAlign: align }]} numberOfLines={1}>{req.address}</Text>
+                  <Text style={[styles.reqDate, { fontFamily: font.regular, textAlign: align }]}>{req.date}</Text>
+                </View>
+                <View style={{ alignItems: isRTL ? 'flex-start' : 'flex-end', gap: 4 }}>
+                  <Text style={[styles.reqCost, { fontFamily: font.bold }]}>{req.cost}</Text>
+                  <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#C0C0D0" />
+                </View>
+              </TouchableOpacity>
+            ))}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -126,4 +227,5 @@ const styles = StyleSheet.create({
   reqCost: { fontSize: 14, fontWeight: '700', color: '#2D1B69' },
   badge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontSize: 11, fontWeight: '600' },
+  emptyText: { fontSize: 14, color: '#9CA3AF', textAlign: 'center' },
 });

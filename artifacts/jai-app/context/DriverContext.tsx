@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiFetch, getAuthToken } from '@/lib/api';
 
 export type JobStatus = 'pending' | 'accepted' | 'en_route' | 'arrived' | 'working' | 'completed' | 'cancelled';
 
@@ -63,57 +64,63 @@ export const DEFAULT_DRIVER: Driver = {
   earnings: { today: 340, week: 1280, month: 5120, total: 18900 },
 };
 
-const MOCK_JOBS: Job[] = [
+// Transform an API job record into the local Job shape
+function apiJobToJob(j: Record<string, any>): Job {
+  const req = j.request ?? {};
+  const customer = j.customer ?? {};
+  const URGENCY_MAP: Record<string, 'urgent' | 'standard'> = {
+    tow: 'urgent', fuel: 'urgent', battery: 'urgent',
+    tire: 'standard', lockout: 'standard', mechanic: 'standard', electric: 'standard',
+  };
+  const svc = (req.service_type ?? 'battery') as Job['service'];
+  return {
+    id:            String(j.id),
+    service:       svc,
+    urgency:       URGENCY_MAP[svc] ?? 'standard',
+    status:        j.status as JobStatus,
+    customerName:  customer.name ?? 'Customer',
+    customerPhone: customer.phone ?? '',
+    vehicle: {
+      make:  req.vehicle_make  ?? '',
+      model: req.vehicle_model ?? '',
+      year:  req.vehicle_year  ?? '',
+      plate: req.vehicle_plate ?? '',
+      color: req.vehicle_color ?? '',
+    },
+    address:    req.address     ?? '',
+    coords: {
+      latitude:  req.location_lat ?? 24.7136,
+      longitude: req.location_lng ?? 46.6753,
+    },
+    distanceKm: j.distance_km ?? Math.round(Math.random() * 10 * 10) / 10,
+    etaMin:     j.eta_min     ?? Math.round(Math.random() * 20 + 5),
+    payout:     j.payout      ?? 120,
+    createdAt:  j.created_at  ?? new Date().toISOString(),
+  };
+}
+
+const FALLBACK_JOBS: Job[] = [
   {
-    id: 'j1',
-    service: 'battery',
-    urgency: 'urgent',
-    status: 'pending',
-    customerName: 'Mohammed Al-Rashid',
-    customerPhone: '+966 50 123 4567',
+    id: 'j1', service: 'battery', urgency: 'urgent', status: 'pending',
+    customerName: 'Mohammed Al-Rashid', customerPhone: '+966 50 123 4567',
     vehicle: { make: 'Toyota', model: 'Camry', year: '2022', plate: 'ABC 1234', color: 'White' },
     address: 'King Fahd Rd, Al Olaya, Riyadh',
     coords: { latitude: 24.7136, longitude: 46.6753 },
-    distanceKm: 2.3,
-    etaMin: 8,
-    payout: 120,
-    createdAt: new Date().toISOString(),
+    distanceKm: 2.3, etaMin: 8, payout: 120, createdAt: new Date().toISOString(),
   },
   {
-    id: 'j2',
-    service: 'tire',
-    urgency: 'standard',
-    status: 'pending',
-    customerName: 'Fahad Al-Harbi',
-    customerPhone: '+966 55 987 6543',
+    id: 'j2', service: 'tire', urgency: 'standard', status: 'pending',
+    customerName: 'Fahad Al-Harbi', customerPhone: '+966 55 987 6543',
     vehicle: { make: 'Hyundai', model: 'Santa Fe', year: '2020', plate: 'XYZ 9012', color: 'Black' },
     address: 'Anas bin Malik, Al Yasmin, Riyadh',
     coords: { latitude: 24.7456, longitude: 46.6234 },
-    distanceKm: 5.7,
-    etaMin: 18,
-    payout: 90,
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'j3',
-    service: 'tow',
-    urgency: 'urgent',
-    status: 'pending',
-    customerName: 'Sara Al-Otaibi',
-    customerPhone: '+966 54 444 8888',
-    vehicle: { make: 'GMC', model: 'Yukon', year: '2021', plate: 'KLM 3456', color: 'Silver' },
-    address: 'Northern Ring Rd, Al Malqa, Riyadh',
-    coords: { latitude: 24.78, longitude: 46.61 },
-    distanceKm: 9.2,
-    etaMin: 28,
-    payout: 250,
-    createdAt: new Date().toISOString(),
+    distanceKm: 5.7, etaMin: 18, payout: 90, createdAt: new Date().toISOString(),
   },
 ];
 
 export function DriverProvider({ children }: { children: ReactNode }) {
   const [driver, setDriver] = useState<Driver | null>(null);
-  const [jobs, setJobs] = useState<Job[]>(MOCK_JOBS);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -123,27 +130,45 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(stored);
           setDriver(parsed.driver ?? null);
-          setJobs(parsed.jobs ?? MOCK_JOBS);
           setActiveJob(parsed.activeJob ?? null);
-        } catch {
-          setDriver(null);
-        }
+        } catch { /* ignore */ }
       }
       setIsLoading(false);
     });
+    // Load jobs from API (or fallback)
+    loadJobs();
   }, []);
 
   useEffect(() => {
     if (!isLoading) {
-      AsyncStorage.setItem('jai_driver_session', JSON.stringify({ driver, jobs, activeJob }));
+      AsyncStorage.setItem(
+        'jai_driver_session',
+        JSON.stringify({ driver, activeJob }),
+      );
     }
-  }, [driver, jobs, activeJob, isLoading]);
+  }, [driver, activeJob, isLoading]);
+
+  async function loadJobs() {
+    const token = getAuthToken();
+    if (!token) {
+      setJobs(FALLBACK_JOBS);
+      return;
+    }
+    try {
+      const data = await apiFetch<{ jobs: Record<string, any>[] }>('/api/jobs?status=pending');
+      const mapped = data.jobs.map(apiJobToJob);
+      setJobs(mapped.length ? mapped : FALLBACK_JOBS);
+    } catch {
+      setJobs(FALLBACK_JOBS);
+    }
+  }
 
   const login = async (d: Driver) => { setDriver(d); };
 
   const logout = async () => {
     setDriver(null);
     setActiveJob(null);
+    setJobs([]);
     await AsyncStorage.removeItem('jai_driver_session');
   };
 
@@ -153,12 +178,30 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   };
 
   const acceptJob = async (id: string) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await apiFetch(`/api/jobs/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'accepted' }),
+        });
+      } catch { /* best-effort; keep local update */ }
+    }
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: 'accepted' } : j)));
     const job = jobs.find((j) => j.id === id);
     if (job) setActiveJob({ ...job, status: 'accepted' });
   };
 
   const updateJobStatus = async (id: string, status: JobStatus) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await apiFetch(`/api/jobs/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status }),
+        });
+      } catch { /* best-effort */ }
+    }
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status } : j)));
     if (activeJob?.id === id) {
       const updated = { ...activeJob, status };
@@ -169,10 +212,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
           ...driver,
           jobsCompleted: driver.jobsCompleted + 1,
           earnings: {
-            today: driver.earnings.today + payout,
-            week: driver.earnings.week + payout,
-            month: driver.earnings.month + payout,
-            total: driver.earnings.total + payout,
+            today:  driver.earnings.today + payout,
+            week:   driver.earnings.week  + payout,
+            month:  driver.earnings.month + payout,
+            total:  driver.earnings.total + payout,
           },
         });
         setActiveJob(null);
@@ -181,22 +224,28 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   };
 
   const cancelJob = async (id: string) => {
+    const token = getAuthToken();
+    if (token) {
+      try {
+        await apiFetch(`/api/jobs/${id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'cancelled' }),
+        });
+      } catch { /* best-effort */ }
+    }
     setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: 'cancelled' } : j)));
     if (activeJob?.id === id) setActiveJob(null);
   };
 
   const refreshJobs = async () => {
-    setJobs((prev) =>
-      prev.map((j) => ({
-        ...j,
-        distanceKm: Number((j.distanceKm + (Math.random() - 0.5) * 0.2).toFixed(1)),
-        etaMin: Math.max(1, Math.round(j.etaMin + (Math.random() - 0.5) * 2)),
-      }))
-    );
+    await loadJobs();
   };
 
   return (
-    <DriverContext.Provider value={{ driver, jobs, activeJob, isLoading, login, logout, toggleOnline, acceptJob, updateJobStatus, cancelJob, refreshJobs }}>
+    <DriverContext.Provider value={{
+      driver, jobs, activeJob, isLoading,
+      login, logout, toggleOnline, acceptJob, updateJobStatus, cancelJob, refreshJobs,
+    }}>
       {children}
     </DriverContext.Provider>
   );

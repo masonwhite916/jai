@@ -11,6 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 import { useJaiLocation } from '@/context/LocationContext';
+import { apiFetch, getAuthToken } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
 type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
@@ -53,9 +54,39 @@ export default function ServiceRequest() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step < TOTAL_STEPS) {
       setStep(step + 1);
-    } else {
-      setSubmitting(true);
-      await new Promise(r => setTimeout(r, 1000));
+      return;
+    }
+    // Final step — submit the service request
+    setSubmitting(true);
+    try {
+      if (getAuthToken()) {
+        // Build request body from collected form state
+        const body: Record<string, unknown> = {
+          service_type: service ?? 'battery',
+          notes:        notes.trim() || null,
+          location_lat: gps.coords?.latitude  ?? null,
+          location_lng: gps.coords?.longitude ?? null,
+          address:      gps.fullAddress       ?? null,
+        };
+        // Attach vehicle snapshot if one was selected
+        if (selectedVehicleData) {
+          body.vehicle_make  = selectedVehicleData.make;
+          body.vehicle_model = selectedVehicleData.model;
+          body.vehicle_year  = selectedVehicleData.year;
+          body.vehicle_plate = selectedVehicleData.plate;
+          body.vehicle_color = selectedVehicleData.color;
+        }
+        await apiFetch('/api/requests', {
+          method: 'POST',
+          body:   JSON.stringify(body),
+        });
+      } else {
+        // Guest / offline — simulate delay
+        await new Promise(r => setTimeout(r, 800));
+      }
+    } catch {
+      // Best-effort; still navigate to tracking so the UX isn't blocked
+    } finally {
       setSubmitting(false);
       router.replace('/tracking');
     }

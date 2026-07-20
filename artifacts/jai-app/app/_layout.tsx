@@ -34,6 +34,7 @@ interface PreloadedSession {
   user: User | null;
   hasSeenOnboarding: boolean;
   role: 'customer' | 'technician' | null;
+  token?: string | null;
 }
 
 function RootLayoutNav() {
@@ -84,7 +85,8 @@ export default function RootLayout() {
       AsyncStorage.getItem('jai_user'),
       AsyncStorage.getItem('jai_onboarding'),
       AsyncStorage.getItem('jai_role'),
-    ]).then(([storedLang, storedUser, storedOnboarding, storedRole]) => {
+      AsyncStorage.getItem('jai_token'),
+    ]).then(([storedLang, storedUser, storedOnboarding, storedRole, storedToken]) => {
       const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
@@ -98,6 +100,7 @@ export default function RootLayout() {
         user: parsedUser,
         hasSeenOnboarding: storedOnboarding === 'true',
         role,
+        token: storedToken ?? null,
       });
 
       setBootstrapReady(true);
