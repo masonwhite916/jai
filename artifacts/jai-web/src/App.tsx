@@ -7,6 +7,7 @@ import Home from '@/pages/Home';
 import Subscribe from '@/pages/Subscribe';
 import PaymentSuccess from '@/pages/PaymentSuccess';
 import { LanguageProvider } from '@/context/LanguageContext';
+import { SiteSettingsProvider } from '@/context/SiteSettingsContext';
 
 const queryClient = new QueryClient();
 
@@ -23,16 +24,18 @@ function Router() {
 
 function App() {
   return (
-    <LanguageProvider>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
-        </TooltipProvider>
-      </QueryClientProvider>
-    </LanguageProvider>
+    <QueryClientProvider client={queryClient}>
+      <SiteSettingsProvider>
+        <LanguageProvider>
+          <TooltipProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+              <Router />
+            </WouterRouter>
+            <Toaster />
+          </TooltipProvider>
+        </LanguageProvider>
+      </SiteSettingsProvider>
+    </QueryClientProvider>
   );
 }
 

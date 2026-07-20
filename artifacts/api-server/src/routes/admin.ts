@@ -5,6 +5,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { requireAdmin } from "../middlewares/requireAdmin";
 import { createAdminSession } from "../lib/adminSessions";
 import { techLocations } from "../lib/techLocations";
+import { getSiteSettings, updateBanners, updateTheme, type BannerSettings, type ThemeSettings } from "../lib/siteSettings";
 
 const router: IRouter = Router();
 
@@ -490,6 +491,35 @@ router.get("/admin/stats", requireAdmin, async (req, res) => {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });
   }
+});
+
+// ── GET /api/admin/site-settings ─────────────────────────────────────────────
+
+router.get("/admin/site-settings", requireAdmin, (_req, res) => {
+  res.json(getSiteSettings());
+});
+
+// ── PUT /api/admin/site-settings/banners ─────────────────────────────────────
+
+router.put("/admin/site-settings/banners", requireAdmin, (req, res) => {
+  const banners = req.body as BannerSettings;
+  const updated = updateBanners(banners);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/site-settings/theme ───────────────────────────────────────
+
+router.put("/admin/site-settings/theme", requireAdmin, (req, res) => {
+  const theme = req.body as ThemeSettings;
+  const updated = updateTheme(theme);
+  res.json(updated);
+});
+
+// ── GET /api/site-settings (public) ──────────────────────────────────────────
+// Registered on the router but mounted at /api — consumed by jai-web
+
+router.get("/site-settings", (_req, res) => {
+  res.json(getSiteSettings());
 });
 
 export default router;

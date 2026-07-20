@@ -153,6 +153,76 @@ paths:
                       $ref: "#/components/schemas/AdminTechnician"
                 required: [technicians]
 
+  # ── Admin site settings ─────────────────────────────────────────────────────
+  /admin/site-settings:
+    get:
+      operationId: adminGetSiteSettings
+      tags: [admin]
+      summary: Get current site settings (banners + theme)
+      description: Returns saved banner text overrides and theme colour overrides. Admin token required.
+      responses:
+        "200":
+          description: Current site settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+
+  /admin/site-settings/banners:
+    put:
+      operationId: adminUpdateBanners
+      tags: [admin]
+      summary: Save hero banner text overrides
+      description: Persists banner text for EN and AR. Admin token required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BannerSettings"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+
+  /admin/site-settings/theme:
+    put:
+      operationId: adminUpdateTheme
+      tags: [admin]
+      summary: Save theme colour overrides
+      description: Persists primary, secondary, and accent colour values. Admin token required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThemeSettings"
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+
+  # ── Public site settings (read by jai-web) ──────────────────────────────────
+  /site-settings:
+    get:
+      operationId: getSiteSettings
+      tags: [health]
+      summary: Public site settings
+      description: Returns banner and theme overrides. No auth required. Consumed by the public website.
+      responses:
+        "200":
+          description: Current site settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteSettings"
+
   # ── Admin stats ─────────────────────────────────────────────────────────────
   /admin/stats:
     get:
@@ -304,6 +374,46 @@ components:
         technician_id:
           type: integer
       required: [technician_id]
+
+    # ── Site settings ─────────────────────────────────────────────────────────
+    BannerLang:
+      type: object
+      description: Hero text for one language
+      properties:
+        hero_badge: { type: string }
+        hero_h1a:   { type: string }
+        hero_h1b:   { type: string }
+        hero_sub:   { type: string }
+        hero_cta1:  { type: string }
+        hero_cta2:  { type: string }
+      required: []
+
+    BannerSettings:
+      type: object
+      properties:
+        en:
+          $ref: "#/components/schemas/BannerLang"
+        ar:
+          $ref: "#/components/schemas/BannerLang"
+      required: []
+
+    ThemeSettings:
+      type: object
+      description: CSS colour overrides (hex values)
+      properties:
+        primary:   { type: string }
+        secondary: { type: string }
+        accent:    { type: string }
+      required: []
+
+    SiteSettings:
+      type: object
+      properties:
+        banners:
+          $ref: "#/components/schemas/BannerSettings"
+        theme:
+          $ref: "#/components/schemas/ThemeSettings"
+      required: [banners, theme]
 
     # ── Stats ──────────────────────────────────────────────────────────────────
     ServiceTypeCount:

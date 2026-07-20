@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import { useSiteSettings } from './SiteSettingsContext';
 
 type Lang = 'en' | 'ar';
 
@@ -304,7 +305,18 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('jai-lang', lang);
   }, [lang, isRTL]);
 
-  const t = (key: TranslationKey): string => translations[lang][key];
+  const { settings } = useSiteSettings();
+
+  const t = useCallback((key: TranslationKey): string => {
+    // Check for admin-saved override first
+    const overrides = lang === 'ar' ? settings?.banners?.ar : settings?.banners?.en;
+    if (overrides && key in overrides) {
+      const val = (overrides as Record<string, string>)[key];
+      if (val) return val;
+    }
+    return translations[lang][key];
+  }, [lang, settings]);
+
   const toggleLang = () => setLang(l => l === 'en' ? 'ar' : 'en');
 
   return (

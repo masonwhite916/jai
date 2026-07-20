@@ -27,9 +27,12 @@ import type {
   AdminRequest,
   AdminSession,
   AdminStats,
+  BannerSettings,
   ErrorResponse,
   HealthStatus,
-  ReassignInput
+  ReassignInput,
+  SiteSettings,
+  ThemeSettings
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -503,6 +506,306 @@ export function useAdminListTechnicians<TData = Awaited<ReturnType<typeof adminL
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getAdminListTechniciansQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminGetSiteSettingsUrl = () => {
+
+
+
+
+  return `/api/admin/site-settings`
+}
+
+/**
+ * Returns saved banner text overrides and theme colour overrides. Admin token required.
+ * @summary Get current site settings (banners + theme)
+ */
+export const adminGetSiteSettings = async ( options?: RequestInit): Promise<SiteSettings> => {
+
+  return customFetch<SiteSettings>(getAdminGetSiteSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getAdminGetSiteSettingsQueryKey = () => {
+    return [
+    `/api/admin/site-settings`
+    ] as const;
+    }
+
+
+export const getAdminGetSiteSettingsQueryOptions = <TData = Awaited<ReturnType<typeof adminGetSiteSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetSiteSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAdminGetSiteSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof adminGetSiteSettings>>> = ({ signal }) => adminGetSiteSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof adminGetSiteSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type AdminGetSiteSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof adminGetSiteSettings>>>
+export type AdminGetSiteSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get current site settings (banners + theme)
+ */
+
+export function useAdminGetSiteSettings<TData = Awaited<ReturnType<typeof adminGetSiteSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof adminGetSiteSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getAdminGetSiteSettingsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getAdminUpdateBannersUrl = () => {
+
+
+
+
+  return `/api/admin/site-settings/banners`
+}
+
+/**
+ * Persists banner text for EN and AR. Admin token required.
+ * @summary Save hero banner text overrides
+ */
+export const adminUpdateBanners = async (bannerSettings: BannerSettings, options?: RequestInit): Promise<SiteSettings> => {
+
+  return customFetch<SiteSettings>(getAdminUpdateBannersUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(bannerSettings)
+  }
+);}
+
+
+
+
+
+export const getAdminUpdateBannersMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminUpdateBanners>>, TError,{data: BodyType<BannerSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminUpdateBanners>>, TError,{data: BodyType<BannerSettings>}, TContext> => {
+
+const mutationKey = ['adminUpdateBanners'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminUpdateBanners>>, {data: BodyType<BannerSettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminUpdateBanners(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminUpdateBannersMutationResult = NonNullable<Awaited<ReturnType<typeof adminUpdateBanners>>>
+    export type AdminUpdateBannersMutationBody = BodyType<BannerSettings>
+    export type AdminUpdateBannersMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save hero banner text overrides
+ */
+export const useAdminUpdateBanners = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminUpdateBanners>>, TError,{data: BodyType<BannerSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminUpdateBanners>>,
+        TError,
+        {data: BodyType<BannerSettings>},
+        TContext
+      > => {
+      return useMutation(getAdminUpdateBannersMutationOptions(options));
+    }
+
+export const getAdminUpdateThemeUrl = () => {
+
+
+
+
+  return `/api/admin/site-settings/theme`
+}
+
+/**
+ * Persists primary, secondary, and accent colour values. Admin token required.
+ * @summary Save theme colour overrides
+ */
+export const adminUpdateTheme = async (themeSettings: ThemeSettings, options?: RequestInit): Promise<SiteSettings> => {
+
+  return customFetch<SiteSettings>(getAdminUpdateThemeUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(themeSettings)
+  }
+);}
+
+
+
+
+
+export const getAdminUpdateThemeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminUpdateTheme>>, TError,{data: BodyType<ThemeSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminUpdateTheme>>, TError,{data: BodyType<ThemeSettings>}, TContext> => {
+
+const mutationKey = ['adminUpdateTheme'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminUpdateTheme>>, {data: BodyType<ThemeSettings>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminUpdateTheme(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminUpdateThemeMutationResult = NonNullable<Awaited<ReturnType<typeof adminUpdateTheme>>>
+    export type AdminUpdateThemeMutationBody = BodyType<ThemeSettings>
+    export type AdminUpdateThemeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Save theme colour overrides
+ */
+export const useAdminUpdateTheme = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminUpdateTheme>>, TError,{data: BodyType<ThemeSettings>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminUpdateTheme>>,
+        TError,
+        {data: BodyType<ThemeSettings>},
+        TContext
+      > => {
+      return useMutation(getAdminUpdateThemeMutationOptions(options));
+    }
+
+export const getGetSiteSettingsUrl = () => {
+
+
+
+
+  return `/api/site-settings`
+}
+
+/**
+ * Returns banner and theme overrides. No auth required. Consumed by the public website.
+ * @summary Public site settings
+ */
+export const getSiteSettings = async ( options?: RequestInit): Promise<SiteSettings> => {
+
+  return customFetch<SiteSettings>(getGetSiteSettingsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSiteSettingsQueryKey = () => {
+    return [
+    `/api/site-settings`
+    ] as const;
+    }
+
+
+export const getGetSiteSettingsQueryOptions = <TData = Awaited<ReturnType<typeof getSiteSettings>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSiteSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSiteSettingsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSiteSettings>>> = ({ signal }) => getSiteSettings({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSiteSettings>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSiteSettingsQueryResult = NonNullable<Awaited<ReturnType<typeof getSiteSettings>>>
+export type GetSiteSettingsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Public site settings
+ */
+
+export function useGetSiteSettings<TData = Awaited<ReturnType<typeof getSiteSettings>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSiteSettings>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSiteSettingsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

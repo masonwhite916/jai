@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
-import { Activity, LayoutDashboard, Map as MapIcon, Users, LogOut, Search, Bell } from 'lucide-react';
+import { Activity, LayoutDashboard, Map as MapIcon, Users, LogOut, Search, Bell, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -16,6 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { label: 'Map View', path: '/map', icon: MapIcon },
     { label: 'Requests', path: '/requests', icon: Activity },
     { label: 'Technicians', path: '/technicians', icon: Users },
+    { label: 'Website', path: '/website', icon: Globe },
   ];
 
   return (

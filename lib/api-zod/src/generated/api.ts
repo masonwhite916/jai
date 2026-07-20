@@ -177,6 +177,155 @@ export const AdminListTechniciansResponse = zod.object({
 
 
 /**
+ * Returns saved banner text overrides and theme colour overrides. Admin token required.
+ * @summary Get current site settings (banners + theme)
+ */
+export const AdminGetSiteSettingsResponse = zod.object({
+  "banners": zod.object({
+  "en": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language'),
+  "ar": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language')
+}),
+  "theme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional()
+}).describe('CSS colour overrides (hex values)')
+})
+
+
+/**
+ * Persists banner text for EN and AR. Admin token required.
+ * @summary Save hero banner text overrides
+ */
+export const AdminUpdateBannersBody = zod.object({
+  "en": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language'),
+  "ar": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language')
+})
+
+export const AdminUpdateBannersResponse = zod.object({
+  "banners": zod.object({
+  "en": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language'),
+  "ar": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language')
+}),
+  "theme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional()
+}).describe('CSS colour overrides (hex values)')
+})
+
+
+/**
+ * Persists primary, secondary, and accent colour values. Admin token required.
+ * @summary Save theme colour overrides
+ */
+export const AdminUpdateThemeBody = zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional()
+}).describe('CSS colour overrides (hex values)')
+
+export const AdminUpdateThemeResponse = zod.object({
+  "banners": zod.object({
+  "en": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language'),
+  "ar": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language')
+}),
+  "theme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional()
+}).describe('CSS colour overrides (hex values)')
+})
+
+
+/**
+ * Returns banner and theme overrides. No auth required. Consumed by the public website.
+ * @summary Public site settings
+ */
+export const GetSiteSettingsResponse = zod.object({
+  "banners": zod.object({
+  "en": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language'),
+  "ar": zod.object({
+  "hero_badge": zod.string().optional(),
+  "hero_h1a": zod.string().optional(),
+  "hero_h1b": zod.string().optional(),
+  "hero_sub": zod.string().optional(),
+  "hero_cta1": zod.string().optional(),
+  "hero_cta2": zod.string().optional()
+}).optional().describe('Hero text for one language')
+}),
+  "theme": zod.object({
+  "primary": zod.string().optional(),
+  "secondary": zod.string().optional(),
+  "accent": zod.string().optional()
+}).describe('CSS colour overrides (hex values)')
+})
+
+
+/**
  * Requests today, avg response time, by service type, by status.
  * @summary Dashboard statistics
  */

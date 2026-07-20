@@ -92,6 +92,37 @@ export interface ReassignInput {
   technician_id: number;
 }
 
+/**
+ * Hero text for one language
+ */
+export interface BannerLang {
+  hero_badge?: string;
+  hero_h1a?: string;
+  hero_h1b?: string;
+  hero_sub?: string;
+  hero_cta1?: string;
+  hero_cta2?: string;
+}
+
+export interface BannerSettings {
+  en?: BannerLang;
+  ar?: BannerLang;
+}
+
+/**
+ * CSS colour overrides (hex values)
+ */
+export interface ThemeSettings {
+  primary?: string;
+  secondary?: string;
+  accent?: string;
+}
+
+export interface SiteSettings {
+  banners: BannerSettings;
+  theme: ThemeSettings;
+}
+
 export interface ServiceTypeCount {
   service_type: string;
   count: number;

@@ -10,6 +10,7 @@ import Dashboard from '@/pages/dashboard';
 import Requests from '@/pages/requests';
 import Technicians from '@/pages/technicians';
 import MapView from '@/pages/map';
+import WebsitePage from '@/pages/website';
 import Layout from '@/components/layout/shell';
 import { useEffect } from 'react';
 
@@ -77,6 +78,9 @@ function Router() {
       </Route>
       <Route path="/technicians">
         {() => <ProtectedRoute component={Technicians} />}
+      </Route>
+      <Route path="/website">
+        {() => <ProtectedRoute component={WebsitePage} />}
       </Route>
       <Route path="/">
         {() => {
