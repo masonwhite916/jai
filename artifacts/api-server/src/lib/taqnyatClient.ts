@@ -7,19 +7,20 @@
 
 const TAQNYAT_VERIFY_URL = "https://api.taqnyat.sa/verify.php";
 
-// Taqnyat result codes
+// Taqnyat result codes (from Error.ErrorCode on failure, status on success)
+// Docs: https://dev.taqnyat.sa/en/doc/verify/
 const CODE = {
-  SENT: 5,          // OTP sent successfully
-  RESEND: 7,        // Already sent — caller can retry (treat as success for send)
-  VALID: 10,        // Code is correct
-  INVALID: 11,      // Code is wrong
-  EXHAUSTED: 12,    // Too many wrong attempts
+  SENT: 5,             // OTP sent successfully
+  RESEND: 7,           // Already sent — treat as success for send
+  VALID: 10,           // Code is correct
+  INVALID: 11,         // Code is wrong
+  EXHAUSTED: 12,       // Too many wrong attempts
   ALREADY_VERIFIED: 13,
   ALREADY_VERIFIED_2: 19,
-  BAD_API_KEY: 1,
   BAD_NUMBER: 3,
   LOW_BALANCE: 4,
-  EXCEEDED_ATTEMPTS: 8, // Change requestId to try again
+  EXCEEDED_ATTEMPTS: 8,
+  SENDER_ERROR: 6,     // Sender name not activated or unknown error
 } as const;
 
 function getApiKey(): string {
@@ -57,6 +58,16 @@ function requestIdFor(e164: string): string {
   return e164.replace(/\D/g, "");
 }
 
+// Actual Taqnyat response shape:
+// Success: { status: 5|10|..., ResponseStatus: "success", Data: {...}, Error: null }
+// Failure: { status: 1,        ResponseStatus: "fail",    Data: null,  Error: { ErrorCode: 6, MessageEn: "..." } }
+type TaqnyatResponse = {
+  status: number;
+  ResponseStatus: "success" | "fail";
+  Data: unknown;
+  Error: { ErrorCode: number; MessageEn?: string; MessageAr?: string } | null;
+};
+
 async function verifyPost(body: Record<string, unknown>): Promise<{ code: number; message?: string }> {
   const resp = await fetch(TAQNYAT_VERIFY_URL, {
     method: "POST",
@@ -67,16 +78,20 @@ async function verifyPost(body: Record<string, unknown>): Promise<{ code: number
     body: JSON.stringify({ ...body, returnJson: 1 }),
   });
 
-  // Taqnyat may return 200 or 201 for all cases; the result code is in the body.
   const text = await resp.text();
+  let data: TaqnyatResponse;
   try {
-    const data = JSON.parse(text);
-    // Response may be an array or an object
-    const item = Array.isArray(data) ? data[0] : data;
-    return { code: Number(item?.code ?? item?.statusCode ?? 0), message: item?.message };
+    data = JSON.parse(text);
   } catch {
     throw new Error(`Taqnyat returned non-JSON: ${text.slice(0, 200)}`);
   }
+
+  // On failure, the specific error code lives in Error.ErrorCode.
+  // On success, the result code is in status (e.g. 5 = sent, 10 = verified).
+  if (data.ResponseStatus === "fail" && data.Error?.ErrorCode) {
+    return { code: data.Error.ErrorCode, message: data.Error.MessageEn };
+  }
+  return { code: data.status, message: undefined };
 }
 
 /**
@@ -97,9 +112,9 @@ export async function sendVerification(phone: string): Promise<string> {
 
   if (code === CODE.SENT || code === CODE.RESEND) return e164;
 
-  if (code === CODE.BAD_API_KEY)  throw new Error("Taqnyat: invalid API key — check TAQNYAT_BEARER_TOKEN");
-  if (code === CODE.BAD_NUMBER)   throw new Error("Taqnyat: mobile number not recognised");
-  if (code === CODE.LOW_BALANCE)  throw new Error("Taqnyat: account balance too low to send OTP");
+  if (code === CODE.BAD_NUMBER)    throw new Error("Taqnyat: mobile number not recognised");
+  if (code === CODE.LOW_BALANCE)   throw new Error("Taqnyat: account balance too low to send OTP");
+  if (code === CODE.SENDER_ERROR)  throw new Error("Taqnyat: sender name not activated — check TAQNYAT_SENDER env var");
   throw new Error(`Taqnyat send error (code ${code}): ${message ?? "unknown"}`);
 }
 
