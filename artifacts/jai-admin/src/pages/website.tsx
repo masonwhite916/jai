@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   useAdminGetSiteSettings,
   getAdminGetSiteSettingsQueryKey,
   useAdminUpdateBanners,
   useAdminUpdateTheme,
+  useAdminUploadHeroImage,
 } from '@workspace/api-client-react';
 import type { BannerSettings, ThemeSettings, BannerLang } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Globe, Palette, Type, Save, RotateCcw } from 'lucide-react';
+import { Globe, Palette, Type, Save, RotateCcw, ImageIcon, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 
@@ -74,13 +75,16 @@ const BANNER_FIELDS: { key: BannerKey; label: string; multiline?: boolean }[] = 
 ];
 
 // ── Tab types ──────────────────────────────────────────────────────────────────
-type Tab = 'banners' | 'theme';
+type Tab = 'banners' | 'theme' | 'hero-image';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function WebsitePage() {
   const [tab, setTab] = useState<Tab>('banners');
   const { toast } = useToast();
   const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const { data: settings, isLoading } = useAdminGetSiteSettings({
     query: { queryKey: getAdminGetSiteSettingsQueryKey() },
@@ -107,6 +111,9 @@ export default function WebsitePage() {
 
   const { mutateAsync: saveBanners, isPending: savingBanners } = useAdminUpdateBanners();
   const { mutateAsync: saveTheme,   isPending: savingTheme   } = useAdminUpdateTheme();
+  const { mutateAsync: uploadImage, isPending: uploadingImage } = useAdminUploadHeroImage(
+    () => localStorage.getItem('jai_admin_token'),
+  );
 
   const handleSaveBanners = async () => {
     try {
@@ -139,6 +146,29 @@ export default function WebsitePage() {
 
   const handleResetTheme = () => setTheme(DEFAULT_THEME);
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+  };
+
+  const handleUploadHeroImage = async () => {
+    if (!selectedFile) return;
+    try {
+      await uploadImage(selectedFile);
+      await qc.invalidateQueries({ queryKey: getAdminGetSiteSettingsQueryKey() });
+      toast({ title: 'Hero image updated', description: 'The new background is live on the website.' });
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
+      toast({ title: 'Upload failed', description: msg, variant: 'destructive' });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="p-8 space-y-4 animate-pulse">
@@ -163,7 +193,7 @@ export default function WebsitePage() {
 
       {/* Tabs */}
       <div className="flex gap-1 p-1 bg-muted rounded-lg w-fit">
-        {(['banners', 'theme'] as Tab[]).map((t) => (
+        {(['banners', 'theme', 'hero-image'] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -173,8 +203,8 @@ export default function WebsitePage() {
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >
-            {t === 'banners' ? <Type className="w-4 h-4" /> : <Palette className="w-4 h-4" />}
-            {t === 'banners' ? 'Banners' : 'Theme'}
+            {t === 'banners' ? <Type className="w-4 h-4" /> : t === 'theme' ? <Palette className="w-4 h-4" /> : <ImageIcon className="w-4 h-4" />}
+            {t === 'banners' ? 'Banners' : t === 'theme' ? 'Theme' : 'Hero Image'}
           </button>
         ))}
       </div>
@@ -359,6 +389,96 @@ export default function WebsitePage() {
             <Button onClick={handleSaveTheme} disabled={savingTheme} className="gap-2">
               <Save className="w-4 h-4" />
               {savingTheme ? 'Saving…' : 'Save Theme'}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Hero Image Tab ─────────────────────────────────────────────────────── */}
+      {tab === 'hero-image' && (
+        <div className="space-y-6 max-w-lg">
+          <Card className="border-border/50">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base">Hero Background Image</CardTitle>
+              <CardDescription>
+                Upload a JPG or PNG (max 5 MB). The new image goes live on the website immediately.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Current image preview */}
+              {settings?.heroImageUpdatedAt && !previewUrl && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Current image
+                  </p>
+                  <div className="rounded-xl overflow-hidden border border-border h-40 bg-muted">
+                    <img
+                      src={`/api/hero-image?v=${settings.heroImageUpdatedAt}`}
+                      alt="Current hero background"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Last updated: {new Date(settings.heroImageUpdatedAt).toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              {!settings?.heroImageUpdatedAt && !previewUrl && (
+                <div className="rounded-xl border border-dashed border-border h-40 bg-muted/30 flex items-center justify-center">
+                  <div className="text-center space-y-1">
+                    <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto" />
+                    <p className="text-sm text-muted-foreground">Using default hero image</p>
+                  </div>
+                </div>
+              )}
+
+              {/* New image preview */}
+              {previewUrl && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    New image preview
+                  </p>
+                  <div className="rounded-xl overflow-hidden border border-primary/40 h-40 bg-muted">
+                    <img
+                      src={previewUrl}
+                      alt="Preview of new hero background"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* File picker */}
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  id="hero-image-input"
+                />
+                <label htmlFor="hero-image-input">
+                  <Button asChild variant="outline" className="gap-2 cursor-pointer">
+                    <span>
+                      <Upload className="w-4 h-4" />
+                      {selectedFile ? selectedFile.name : 'Choose image…'}
+                    </span>
+                  </Button>
+                </label>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={handleUploadHeroImage}
+              disabled={!selectedFile || uploadingImage}
+              className="gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              {uploadingImage ? 'Uploading…' : 'Upload & Go Live'}
             </Button>
           </div>
         </div>

@@ -1,11 +1,34 @@
 import { Router, type IRouter } from "express";
+import fs from "fs";
+import multer from "multer";
 import { db, users, serviceRequests, jobs } from "@workspace/db";
 import { eq, and, desc, sql, gte, count } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { requireAdmin } from "../middlewares/requireAdmin";
 import { createAdminSession } from "../lib/adminSessions";
 import { techLocations } from "../lib/techLocations";
-import { getSiteSettings, updateBanners, updateTheme, type BannerSettings, type ThemeSettings } from "../lib/siteSettings";
+import {
+  getSiteSettings,
+  updateBanners,
+  updateTheme,
+  setHeroImageUpdatedAt,
+  HERO_IMAGE_PATH,
+  type BannerSettings,
+  type ThemeSettings,
+} from "../lib/siteSettings";
+
+// Multer: store upload in memory, validate type/size
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  fileFilter(_req, file, cb) {
+    if (file.mimetype === "image/jpeg" || file.mimetype === "image/png") {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG and PNG images are allowed"));
+    }
+  },
+});
 
 const router: IRouter = Router();
 
@@ -513,6 +536,43 @@ router.put("/admin/site-settings/theme", requireAdmin, (req, res) => {
   const theme = req.body as ThemeSettings;
   const updated = updateTheme(theme);
   res.json(updated);
+});
+
+// ── POST /api/admin/site-settings/hero-image ─────────────────────────────────
+
+router.post(
+  "/admin/site-settings/hero-image",
+  requireAdmin,
+  upload.single("image"),
+  (req, res) => {
+    if (!req.file) {
+      res.status(400).json({ error: "No image file provided" });
+      return;
+    }
+
+    // Ensure the data directory exists
+    const dir = HERO_IMAGE_PATH.replace(/\/[^/]+$/, "");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    // Write the uploaded image to data/hero.jpg (always as JPEG name regardless of PNG)
+    fs.writeFileSync(HERO_IMAGE_PATH, req.file.buffer);
+
+    const updatedAt = new Date().toISOString();
+    const settings = setHeroImageUpdatedAt(updatedAt);
+    res.json({ heroImageUpdatedAt: settings.heroImageUpdatedAt });
+  },
+);
+
+// ── GET /api/hero-image (public) ─────────────────────────────────────────────
+
+router.get("/hero-image", (_req, res) => {
+  if (!fs.existsSync(HERO_IMAGE_PATH)) {
+    res.status(404).json({ error: "No custom hero image uploaded yet" });
+    return;
+  }
+  res.setHeader("Content-Type", "image/jpeg");
+  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.sendFile(HERO_IMAGE_PATH);
 });
 
 // ── GET /api/site-settings (public) ──────────────────────────────────────────

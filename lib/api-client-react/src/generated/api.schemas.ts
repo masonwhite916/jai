@@ -121,6 +121,8 @@ export interface ThemeSettings {
 export interface SiteSettings {
   banners: BannerSettings;
   theme: ThemeSettings;
+  /** ISO timestamp of last hero image upload (used as cache-buster) */
+  heroImageUpdatedAt?: string;
 }
 
 export interface ServiceTypeCount {

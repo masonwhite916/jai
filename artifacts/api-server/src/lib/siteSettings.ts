@@ -28,12 +28,21 @@ export interface ThemeSettings {
 export interface SiteSettings {
   banners: BannerSettings;
   theme: ThemeSettings;
+  /** ISO timestamp of the last hero image upload, used as a cache-buster */
+  heroImageUpdatedAt?: string;
 }
 
 const SETTINGS_FILE = path.resolve(
   process.cwd(),
   "data",
   "siteSettings.json",
+);
+
+/** Absolute path where the uploaded hero image is stored */
+export const HERO_IMAGE_PATH = path.resolve(
+  process.cwd(),
+  "data",
+  "hero.jpg",
 );
 
 const DEFAULT_SETTINGS: SiteSettings = { banners: {}, theme: {} };
@@ -68,6 +77,13 @@ export function updateBanners(banners: BannerSettings): SiteSettings {
 export function updateTheme(theme: ThemeSettings): SiteSettings {
   const current = readSettings();
   const updated: SiteSettings = { ...current, theme };
+  writeSettings(updated);
+  return updated;
+}
+
+export function setHeroImageUpdatedAt(ts: string): SiteSettings {
+  const current = readSettings();
+  const updated: SiteSettings = { ...current, heroImageUpdatedAt: ts };
   writeSettings(updated);
   return updated;
 }
