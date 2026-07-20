@@ -1,30 +1,92 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@tanstack/react-query';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
+import { setAuthTokenGetter } from '@workspace/api-client-react';
+
 import NotFound from '@/pages/not-found';
-import { Route, Switch, Router as WouterRouter } from 'wouter';
+import Login from '@/pages/login';
+import Dashboard from '@/pages/dashboard';
+import Requests from '@/pages/requests';
+import Technicians from '@/pages/technicians';
+import MapView from '@/pages/map';
+import Layout from '@/components/layout/shell';
+import { useEffect } from 'react';
 
-const queryClient = new QueryClient();
+// Setup auth token for all api client requests
+setAuthTokenGetter(() => {
+  return localStorage.getItem('jai_admin_token');
+});
 
-function Home() {
+const queryClient = new QueryClient({
+  queryCache: new QueryCache({
+    onError: (error: any) => {
+      if (error?.status === 401 || error?.response?.status === 401) {
+        localStorage.removeItem('jai_admin_token');
+        window.location.href = import.meta.env.BASE_URL + 'login';
+      }
+    },
+  }),
+  mutationCache: new MutationCache({
+    onError: (error: any) => {
+      if (error?.status === 401 || error?.response?.status === 401) {
+        localStorage.removeItem('jai_admin_token');
+        window.location.href = import.meta.env.BASE_URL + 'login';
+      }
+    },
+  }),
+  defaultOptions: {
+    queries: {
+      retry: false,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    const token = localStorage.getItem('jai_admin_token');
+    if (!token) {
+      setLocation('/login');
+    }
+  }, [location, setLocation]);
+
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Replit Agent is building...
-        </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Your app will appear here once it's ready.
-        </p>
-      </div>
-    </div>
+    <Layout>
+      <Component />
+    </Layout>
   );
 }
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
+      
+      {/* Protected Routes */}
+      <Route path="/dashboard">
+        {() => <ProtectedRoute component={Dashboard} />}
+      </Route>
+      <Route path="/requests">
+        {() => <ProtectedRoute component={Requests} />}
+      </Route>
+      <Route path="/map">
+        {() => <ProtectedRoute component={MapView} />}
+      </Route>
+      <Route path="/technicians">
+        {() => <ProtectedRoute component={Technicians} />}
+      </Route>
+      <Route path="/">
+        {() => {
+          const token = localStorage.getItem('jai_admin_token');
+          if (token) return <ProtectedRoute component={Dashboard} />;
+          window.location.href = import.meta.env.BASE_URL + 'login';
+          return null;
+        }}
+      </Route>
+      
       <Route component={NotFound} />
     </Switch>
   );

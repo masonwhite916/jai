@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: admin
+    description: Admin & dispatch operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,148 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Admin auth ──────────────────────────────────────────────────────────────
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Admin login
+      description: Authenticate with admin password; returns a session token.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginInput"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
+        "401":
+          description: Wrong password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── Admin requests ──────────────────────────────────────────────────────────
+  /admin/requests:
+    get:
+      operationId: adminListRequests
+      tags: [admin]
+      summary: List all service requests
+      description: Full list with customer, job, and technician info. Admin token required.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: service_type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of enriched service requests
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  requests:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminRequest"
+                required: [requests]
+
+  /admin/requests/{id}/reassign:
+    patch:
+      operationId: adminReassignJob
+      tags: [admin]
+      summary: Reassign a job to a different technician
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReassignInput"
+      responses:
+        "200":
+          description: Job reassigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRequest"
+        "404":
+          description: Request not found
+
+  /admin/requests/{id}/cancel:
+    patch:
+      operationId: adminCancelRequest
+      tags: [admin]
+      summary: Cancel a request and its active job
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Request cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminRequest"
+        "404":
+          description: Request not found
+
+  # ── Admin technicians ───────────────────────────────────────────────────────
+  /admin/technicians:
+    get:
+      operationId: adminListTechnicians
+      tags: [admin]
+      summary: List all technicians
+      description: All technicians with their last known GPS position and active job count.
+      responses:
+        "200":
+          description: List of technicians
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  technicians:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminTechnician"
+                required: [technicians]
+
+  # ── Admin stats ─────────────────────────────────────────────────────────────
+  /admin/stats:
+    get:
+      operationId: adminGetStats
+      tags: [admin]
+      summary: Dashboard statistics
+      description: Requests today, avg response time, by service type, by status.
+      responses:
+        "200":
+          description: Stats summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +178,183 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    # ── Admin auth ─────────────────────────────────────────────────────────────
+    AdminLoginInput:
+      type: object
+      properties:
+        password:
+          type: string
+      required: [password]
+
+    AdminSession:
+      type: object
+      properties:
+        token:
+          type: string
+        expiresAt:
+          type: string
+      required: [token, expiresAt]
+
+    # ── Shared sub-objects ─────────────────────────────────────────────────────
+    AdminJobSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        payout:
+          type: integer
+        technician_id:
+          type: ["integer", "null"]
+        technician_name:
+          type: ["string", "null"]
+        technician_phone:
+          type: ["string", "null"]
+        accepted_at:
+          type: ["string", "null"]
+        completed_at:
+          type: ["string", "null"]
+        created_at:
+          type: string
+      required: [id, status, payout]
+
+    AdminCustomerSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: ["string", "null"]
+        phone:
+          type: string
+      required: [id, phone]
+
+    # ── Admin request (enriched) ──────────────────────────────────────────────
+    AdminRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+        status:
+          type: string
+        service_type:
+          type: string
+        address:
+          type: ["string", "null"]
+        location_lat:
+          type: ["number", "null"]
+        location_lng:
+          type: ["number", "null"]
+        vehicle_make:
+          type: ["string", "null"]
+        vehicle_model:
+          type: ["string", "null"]
+        vehicle_plate:
+          type: ["string", "null"]
+        notes:
+          type: ["string", "null"]
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        customer:
+          $ref: "#/components/schemas/AdminCustomerSummary"
+        job:
+          $ref: "#/components/schemas/AdminJobSummary"
+      required: [id, status, service_type, created_at, updated_at, customer, job]
+
+    # ── Technician (enriched) ─────────────────────────────────────────────────
+    AdminTechnician:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: ["string", "null"]
+        phone:
+          type: string
+        rating:
+          type: ["number", "null"]
+        jobs_completed:
+          type: integer
+        earnings_total:
+          type: integer
+        active_jobs:
+          type: integer
+        last_lat:
+          type: ["number", "null"]
+        last_lng:
+          type: ["number", "null"]
+        last_seen_at:
+          type: ["string", "null"]
+      required: [id, phone, jobs_completed, earnings_total, active_jobs]
+
+    # ── Reassign input ─────────────────────────────────────────────────────────
+    ReassignInput:
+      type: object
+      properties:
+        technician_id:
+          type: integer
+      required: [technician_id]
+
+    # ── Stats ──────────────────────────────────────────────────────────────────
+    ServiceTypeCount:
+      type: object
+      properties:
+        service_type:
+          type: string
+        count:
+          type: integer
+      required: [service_type, count]
+
+    StatusCount:
+      type: object
+      properties:
+        status:
+          type: string
+        count:
+          type: integer
+      required: [status, count]
+
+    AdminStats:
+      type: object
+      properties:
+        requests_today:
+          type: integer
+        requests_total:
+          type: integer
+        active_jobs:
+          type: integer
+        completed_today:
+          type: integer
+        avg_response_seconds:
+          type: ["number", "null"]
+        by_service_type:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceTypeCount"
+        by_status:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        revenue_today:
+          type: integer
+        revenue_total:
+          type: integer
+      required:
+        - requests_today
+        - requests_total
+        - active_jobs
+        - completed_today
+        - by_service_type
+        - by_status
+        - revenue_today
+        - revenue_total

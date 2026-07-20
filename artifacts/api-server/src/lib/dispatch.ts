@@ -27,6 +27,7 @@ import type { IncomingMessage } from "http";
 import { db, users, jobs, serviceRequests } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
+import { setTechLocation } from "./techLocations";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,9 @@ class DispatchServer {
           // Not assigned — silently drop (no error sent to avoid leaking job state)
           return;
         }
+
+        // Persist last-known position for the admin live map
+        setTechLocation(ws.userId, lat, lng);
 
         // Relay to the job room (keyed by job ID) so the customer's tracking screen updates
         this.broadcastToRoom(`job:${jobId}`, { type: "tech_location", lat, lng, jobId });

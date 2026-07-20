@@ -5,7 +5,8 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminRequest } from './adminRequest';
 
-export interface HealthStatus {
-  status: string;
-}
+export type AdminListRequests200 = {
+  requests: AdminRequest[];
+};
