@@ -70,7 +70,7 @@ export default function Onboarding() {
 
   return (
     <View style={styles.root}>
-      {/* Full-bleed slide */}
+      {/* Slide carousel — sits ABOVE the card in normal flow so it never overlaps it */}
       <FlatList
         ref={flatRef}
         data={SLIDES}
@@ -78,6 +78,7 @@ export default function Onboarding() {
         horizontal pagingEnabled
         showsHorizontalScrollIndicator={false}
         scrollEventThrottle={16}
+        style={styles.flatList}
         onMomentumScrollEnd={(e) => {
           setIdx(Math.round(e.nativeEvent.contentOffset.x / width));
         }}
@@ -91,7 +92,6 @@ export default function Onboarding() {
             {/* Illustration */}
             <View style={styles.illustrationWrap}>
               <Image source={item.image} style={styles.illustration} resizeMode="cover" />
-              {/* Gradient fade at bottom of illustration */}
               <LinearGradient
                 colors={['transparent', item.gradients[1]]}
                 style={styles.illustrationFade}
@@ -104,7 +104,7 @@ export default function Onboarding() {
         )}
       />
 
-      {/* Bottom content card */}
+      {/* Bottom content card — in normal flow, NOT overlapping the FlatList */}
       <View style={[styles.card, { paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }]}>
 
         {/* Drag indicator */}
@@ -181,27 +181,27 @@ export default function Onboarding() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#1A0845' },
+  root: { flex: 1, flexDirection: 'column', backgroundColor: '#1A0845' },
 
-  slide: { width, height, position: 'relative', overflow: 'hidden' },
+  // FlatList takes all space above the card — no overlap
+  flatList: { flex: 1 },
+  slide: { width, height: height - CARD_H, position: 'relative', overflow: 'hidden' },
   logoWrap: { alignItems: 'center', zIndex: 2, paddingBottom: 8 },
   logo: { width: 140, height: 58 },
-  illustrationWrap: { flex: 1, position: 'relative', marginTop: 8, marginBottom: CARD_H - 40 },
+  illustrationWrap: { flex: 1, position: 'relative', marginTop: 8 },
   illustration: { width: '100%', height: '100%' },
   illustrationFade: {
     position: 'absolute', bottom: 0, left: 0, right: 0, height: 80,
   },
   decorRing: {
-    position: 'absolute', bottom: CARD_H - 60, right: -40,
+    position: 'absolute', bottom: 20, right: -40,
     width: 180, height: 180, borderRadius: 90,
     borderWidth: 1,
   },
 
-  // Card
+  // Card — normal flow, never overlaps FlatList so its touches always register
   card: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CARD_H,
-    zIndex: 10,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 36, borderTopRightRadius: 36,
     paddingHorizontal: 28, paddingTop: 12,
