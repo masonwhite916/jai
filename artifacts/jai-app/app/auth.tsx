@@ -59,7 +59,7 @@ export default function Auth() {
   }
 
   async function handleOtpSubmit() {
-    if (otp.length < 4) { setError(t('otpError')); return; }
+    if (otp.length < 6) { setError(t('otpError')); return; }
     setError('');
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -161,13 +161,18 @@ export default function Auth() {
             </TouchableOpacity>
 
             <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterOTP')}</Text>
-            <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>
-              {t('otpSentTo')} +966 {phone}
-            </Text>
+            <View style={[styles.whatsappHint, { flexDirection: rowDir }]}>
+              <Ionicons name="logo-whatsapp" size={15} color="#25D366" />
+              <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align, marginBottom: 0 }]}>
+                {isRTL
+                  ? `تم إرسال رمز التحقق عبر واتساب إلى +966 ${phone}`
+                  : `Code sent via WhatsApp to +966 ${phone}`}
+              </Text>
+            </View>
 
-            {/* OTP boxes */}
+            {/* OTP boxes — 6 digits (Twilio Verify) */}
             <View style={[styles.otpRow, { flexDirection: rowDir }]}>
-              {[0, 1, 2, 3].map((i) => (
+              {[0, 1, 2, 3, 4, 5].map((i) => (
                 <View key={i} style={[styles.otpBox, otp.length > i && styles.otpBoxFilled]}>
                   <Text style={[styles.otpDigit, { fontFamily: font.bold }]}>{otp[i] ?? ''}</Text>
                 </View>
@@ -179,7 +184,7 @@ export default function Auth() {
               value={otp}
               onChangeText={setOtp}
               keyboardType="number-pad"
-              maxLength={4}
+              maxLength={6}
               autoFocus
               caretHidden
             />
@@ -270,12 +275,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
 
+  whatsappHint: {
+    alignItems: 'center', gap: 8, marginBottom: 26,
+  },
+
   // OTP
   backRow: { alignItems: 'center', gap: 8, marginBottom: 24 },
   backText: { fontSize: 14, color: '#2D1B69' },
   otpRow: { gap: 12, justifyContent: 'center', marginBottom: 8, zIndex: 1 },
   otpBox: {
-    width: 64, height: 68, borderRadius: 16,
+    width: 50, height: 58, borderRadius: 14,
     backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#E0DBEF',
     justifyContent: 'center', alignItems: 'center',
     shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
