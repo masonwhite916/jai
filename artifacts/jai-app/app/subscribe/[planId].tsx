@@ -75,12 +75,15 @@ const PLAN_DATA = {
 type PlanId = keyof typeof PLAN_DATA;
 
 // API base derived from EXPO_PUBLIC_DOMAIN injected at dev start
-const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : '';
+const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? '';
+const API_BASE = DOMAIN ? `https://${DOMAIN}` : '';
 
-// Deep-link redirect Whop will return the user to after payment
-const REDIRECT_URL = 'jai-app://payment-success';
+// HTTPS redirect URL for Whop (required — custom schemes are rejected).
+// Whop will redirect here after payment; the in-app browser shows the
+// website success page, then the user closes it and the app verifies.
+const REDIRECT_URL = DOMAIN
+  ? `https://${DOMAIN}/jai-web/payment-success`
+  : 'https://example.com/payment-success';
 
 export default function SubscribeScreen() {
   const insets = useSafeAreaInsets();
@@ -175,19 +178,19 @@ export default function SubscribeScreen() {
         throw new Error(data.error ?? 'Could not create checkout. Please try again.');
       }
 
-      // 2. Open Whop hosted checkout in an in-app browser.
-      //    openAuthSessionAsync keeps the user inside the app and resolves
-      //    when Whop redirects back to jai-app://payment-success.
-      const result = await WebBrowser.openAuthSessionAsync(data.purchase_url, REDIRECT_URL);
+      // 2. Open Whop hosted checkout in a modal browser.
+      //    openBrowserAsync shows a dismissible in-app browser; it resolves
+      //    when the user closes it (after paying or cancelling).
+      //    We always run verification after close — if they paid, the API
+      //    confirms it; if not, they see the pending screen.
+      await WebBrowser.openBrowserAsync(data.purchase_url, {
+        dismissButtonStyle: 'done',
+        presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+      });
       setLoading(false);
 
-      if (result.type === 'success') {
-        // Whop redirected to our deep link — verify the payment on the server
-        await verifyMembership(email.trim());
-      } else {
-        // User dismissed the browser without completing payment
-        setErrorMsg(isRTL ? 'تم إلغاء عملية الدفع.' : 'Payment was cancelled.');
-      }
+      // Always verify — the user may have completed payment before closing
+      await verifyMembership(email.trim());
     } catch (err) {
       setLoading(false);
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
