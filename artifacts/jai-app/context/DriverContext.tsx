@@ -1,6 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
+import * as Location from 'expo-location';
 import { apiFetch, getAuthToken } from '@/lib/api';
+import { jaiSocket } from '@/lib/socket';
 
 export type JobStatus = 'pending' | 'accepted' | 'en_route' | 'arrived' | 'working' | 'completed' | 'cancelled';
 
@@ -72,7 +75,7 @@ function apiJobToJob(j: Record<string, any>): Job {
     tow: 'urgent', fuel: 'urgent', battery: 'urgent',
     tire: 'standard', lockout: 'standard', mechanic: 'standard', electric: 'standard',
   };
-  const svc = (req.service_type ?? 'battery') as Job['service'];
+  const svc = (req.service_type ?? j.service_type ?? 'battery') as Job['service'];
   return {
     id:            String(j.id),
     service:       svc,
@@ -81,19 +84,19 @@ function apiJobToJob(j: Record<string, any>): Job {
     customerName:  customer.name ?? 'Customer',
     customerPhone: customer.phone ?? '',
     vehicle: {
-      make:  req.vehicle_make  ?? '',
-      model: req.vehicle_model ?? '',
-      year:  req.vehicle_year  ?? '',
-      plate: req.vehicle_plate ?? '',
-      color: req.vehicle_color ?? '',
+      make:  req.vehicle_make  ?? j.vehicle_make  ?? '',
+      model: req.vehicle_model ?? j.vehicle_model ?? '',
+      year:  req.vehicle_year  ?? j.vehicle_year  ?? '',
+      plate: req.vehicle_plate ?? j.vehicle_plate ?? '',
+      color: req.vehicle_color ?? j.vehicle_color ?? '',
     },
-    address:    req.address     ?? '',
+    address:    req.address     ?? j.address     ?? '',
     coords: {
-      latitude:  req.location_lat ?? 24.7136,
-      longitude: req.location_lng ?? 46.6753,
+      latitude:  req.location_lat ?? j.location_lat ?? 24.7136,
+      longitude: req.location_lng ?? j.location_lng ?? 46.6753,
     },
-    distanceKm: j.distance_km ?? Math.round(Math.random() * 10 * 10) / 10,
-    etaMin:     j.eta_min     ?? Math.round(Math.random() * 20 + 5),
+    distanceKm: j.distance_km ?? 0,
+    etaMin:     j.eta_min     ?? 0,
     payout:     j.payout      ?? 120,
     createdAt:  j.created_at  ?? new Date().toISOString(),
   };
@@ -118,12 +121,39 @@ const FALLBACK_JOBS: Job[] = [
   },
 ];
 
+// ── Location permission request (best-effort) ─────────────────────────────────
+async function requestLocationPermission() {
+  try {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    return status === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+async function getCurrentCoords(): Promise<{ latitude: number; longitude: number } | null> {
+  try {
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  } catch {
+    return null;
+  }
+}
+
 export function DriverProvider({ children }: { children: ReactNode }) {
   const [driver, setDriver] = useState<Driver | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs]       = useState<Job[]>([]);
   const [activeJob, setActiveJob] = useState<Job | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Location broadcast interval ref
+  const locationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const activeJobRef = useRef<Job | null>(null);
+  useEffect(() => { activeJobRef.current = activeJob; }, [activeJob]);
+  const driverRef = useRef<Driver | null>(null);
+  useEffect(() => { driverRef.current = driver; }, [driver]);
+
+  // ── Startup: load persisted session ───────────────────────────────────────
   useEffect(() => {
     AsyncStorage.getItem('jai_driver_session').then((stored) => {
       if (stored) {
@@ -135,10 +165,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       }
       setIsLoading(false);
     });
-    // Load jobs from API (or fallback)
     loadJobs();
   }, []);
 
+  // ── Persist session on change ──────────────────────────────────────────────
   useEffect(() => {
     if (!isLoading) {
       AsyncStorage.setItem(
@@ -148,6 +178,82 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   }, [driver, activeJob, isLoading]);
 
+  // ── WebSocket: connect when we have an auth token ─────────────────────────
+  useEffect(() => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    jaiSocket.connect(token);
+
+    // New job broadcast → add to pending queue instantly
+    const offNewJob = jaiSocket.on('new_job', (payload) => {
+      const raw = payload.job as Record<string, any> | undefined;
+      if (!raw) return;
+      const job = apiJobToJob(raw);
+      setJobs((prev) => {
+        // Don't add duplicates
+        if (prev.some((j) => j.id === job.id)) return prev;
+        return [job, ...prev];
+      });
+    });
+
+    // Job status changes relayed from the server (for the active job)
+    const offJobStatus = jaiSocket.on('job_status', (payload) => {
+      const { jobId, status } = payload as { jobId: number; status: string };
+      const id = String(jobId);
+      setJobs((prev) => prev.map((j) => j.id === id ? { ...j, status: status as JobStatus } : j));
+      if (activeJobRef.current?.id === id) {
+        setActiveJob((prev) => prev ? { ...prev, status: status as JobStatus } : null);
+      }
+    });
+
+    return () => {
+      offNewJob();
+      offJobStatus();
+      // Don't disconnect here — may remount; driver must call logout() to fully disconnect
+    };
+  }, []);
+
+  // ── Reconnect socket on foreground resume ─────────────────────────────────
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active') return;
+      const token = getAuthToken();
+      if (token && !jaiSocket.connected) jaiSocket.connect(token);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // ── Location broadcast: every 10 s while there is an active job ───────────
+  useEffect(() => {
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
+    }
+
+    if (!activeJob || activeJob.status === 'completed' || activeJob.status === 'cancelled') return;
+
+    // Request permission then start the interval
+    requestLocationPermission().then((granted) => {
+      if (!granted) return;
+      locationIntervalRef.current = setInterval(async () => {
+        const job = activeJobRef.current;
+        if (!job || job.status === 'completed' || job.status === 'cancelled') return;
+        const coords = await getCurrentCoords();
+        if (!coords) return;
+        jaiSocket.sendLocation(coords.latitude, coords.longitude, job.id);
+      }, 10_000);
+    });
+
+    return () => {
+      if (locationIntervalRef.current) {
+        clearInterval(locationIntervalRef.current);
+        locationIntervalRef.current = null;
+      }
+    };
+  }, [activeJob?.id, activeJob?.status]);
+
+  // ── Job loading ───────────────────────────────────────────────────────────
   async function loadJobs() {
     const token = getAuthToken();
     if (!token) {
@@ -166,6 +272,11 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   const login = async (d: Driver) => { setDriver(d); };
 
   const logout = async () => {
+    jaiSocket.disconnect();
+    if (locationIntervalRef.current) {
+      clearInterval(locationIntervalRef.current);
+      locationIntervalRef.current = null;
+    }
     setDriver(null);
     setActiveJob(null);
     setJobs([]);
@@ -237,9 +348,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     if (activeJob?.id === id) setActiveJob(null);
   };
 
-  const refreshJobs = async () => {
-    await loadJobs();
-  };
+  const refreshJobs = async () => { await loadJobs(); };
 
   return (
     <DriverContext.Provider value={{

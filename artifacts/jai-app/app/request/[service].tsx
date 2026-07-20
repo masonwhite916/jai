@@ -35,7 +35,7 @@ export default function ServiceRequest() {
   const { service } = useLocalSearchParams<{ service: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useApp();
+  const { user, setActiveRequest } = useApp();
   const { t, isRTL, font } = useLanguage();
   const gps = useJaiLocation();
   const rowDir = isRTL ? 'row-reverse' : 'row';
@@ -76,13 +76,28 @@ export default function ServiceRequest() {
           body.vehicle_plate = selectedVehicleData.plate;
           body.vehicle_color = selectedVehicleData.color;
         }
-        await apiFetch('/api/requests', {
+        const result = await apiFetch<{ request: any; job: any }>('/api/requests', {
           method: 'POST',
           body:   JSON.stringify(body),
+        });
+        // Store active request for real-time tracking screen
+        setActiveRequest({
+          requestId:   String(result.request?.id ?? ''),
+          jobId:       String(result.job?.id ?? ''),
+          serviceType: service ?? 'battery',
+          status:      'pending',
+          payout:      result.job?.payout ?? undefined,
         });
       } else {
         // Guest / offline — simulate delay
         await new Promise(r => setTimeout(r, 800));
+        // Placeholder so tracking screen has something to show
+        setActiveRequest({
+          requestId:   'guest',
+          jobId:       'guest',
+          serviceType: service ?? 'battery',
+          status:      'pending',
+        });
       }
     } catch {
       // Best-effort; still navigate to tracking so the UX isn't blocked

@@ -21,6 +21,24 @@ export interface User {
   points: number;
 }
 
+/** Tracks the customer's most recent active service request for real-time tracking. */
+export interface ActiveRequest {
+  requestId: string;
+  jobId: string;
+  serviceType: string;
+  status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+  /** Populated once a technician accepts the job via WebSocket event */
+  tech?: {
+    id: number;
+    name: string;
+    phone: string;
+    rating: number;
+  } | null;
+  etaMin?: number;
+  distanceKm?: number;
+  payout?: number;
+}
+
 interface AppContextType {
   isLoading: boolean;
   hasSeenOnboarding: boolean;
@@ -33,6 +51,9 @@ interface AppContextType {
   loginAsGuest: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
+  // Active service request (real-time tracking)
+  activeRequest: ActiveRequest | null;
+  setActiveRequest: (r: ActiveRequest | null) => void;
   // Notifications
   notifReadIds: string[];
   markNotifRead: (id: string) => void;
@@ -79,6 +100,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     preloaded ? initialSession.role : null,
   );
   const [notifReadIds, setNotifReadIds] = useState<string[]>([]);
+  const [activeRequest, setActiveRequestState] = useState<ActiveRequest | null>(null);
 
   const isGuestRef = useRef(isGuest);
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
@@ -203,6 +225,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setUser(null);
     setIsAuthenticated(false);
     setIsGuest(false);
+    setActiveRequestState(null);
   }
 
   function markNotifRead(id: string) {
@@ -235,10 +258,15 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setUser(updated);
   }
 
+  function setActiveRequest(r: ActiveRequest | null) {
+    setActiveRequestState(r);
+  }
+
   return (
     <AppContext.Provider value={{
       isLoading, hasSeenOnboarding, isAuthenticated, user, role,
       setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser,
+      activeRequest, setActiveRequest,
       notifReadIds, markNotifRead, markAllNotifsRead,
     }}>
       {children}

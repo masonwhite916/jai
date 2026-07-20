@@ -1,4 +1,6 @@
+import { createServer } from "http";
 import app from "./app";
+import { dispatch } from "./lib/dispatch";
 import { logger } from "./lib/logger";
 
 const rawPort = process.env["PORT"];
@@ -15,7 +17,12 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
+// Create an explicit HTTP server so we can attach the WebSocket dispatch server
+// to the same port without opening a second TCP socket.
+const server = createServer(app);
+dispatch.attach(server);
+
+server.listen(port, (err?: Error) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
     process.exit(1);

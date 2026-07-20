@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, jobs, serviceRequests, users } from "@workspace/db";
 import { eq, and, inArray, desc, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { dispatch } from "../lib/dispatch";
 
 const router: IRouter = Router();
 
@@ -164,6 +165,25 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
         .set({ status: "assigned", updated_at: new Date() })
         .where(eq(serviceRequests.id, existing.request_id));
 
+      // Fetch technician info for the real-time broadcast
+      const [tech] = await db
+        .select({ name: users.name, phone: users.phone, rating: users.rating })
+        .from(users)
+        .where(eq(users.id, req.userId!))
+        .limit(1);
+
+      // Broadcast to the job room (keyed by job ID for consistency with location relay)
+      dispatch.broadcastToRoom(`job:${id}`, {
+        type:       "job_accepted",
+        jobId:      id,
+        requestId:  existing.request_id,
+        status:     "accepted",
+        techId:     req.userId,
+        techName:   tech?.name   ?? "Technician",
+        techPhone:  tech?.phone  ?? "",
+        techRating: tech?.rating ?? 4.5,
+      });
+
       res.json(accepted[0]);
       return; // already responded
     }
@@ -204,6 +224,15 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
       .set(updates)
       .where(eq(jobs.id, id))
       .returning();
+
+    // Real-time notification to the customer and any other listeners on this job
+    // Room key is the job ID (consistent with location relay and accept broadcast)
+    dispatch.broadcastToRoom(`job:${id}`, {
+      type:      "job_status",
+      jobId:     id,
+      requestId: existing.request_id,
+      status,
+    });
 
     res.json(updated);
   } catch (err) {

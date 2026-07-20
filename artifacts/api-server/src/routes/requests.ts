@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, serviceRequests, jobs, users } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { dispatch } from "../lib/dispatch";
 
 const router: IRouter = Router();
 
@@ -50,6 +51,39 @@ router.post("/requests", requireAuth, async (req, res) => {
         // Distance/ETA will be filled in by dispatch or technician side
       })
       .returning();
+
+    // Fetch the customer's name + phone for the dispatch broadcast
+    const [customer] = await db
+      .select({ name: users.name, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, req.userId!))
+      .limit(1);
+
+    // Broadcast to all online technicians so the job appears instantly in their queue
+    dispatch.broadcastToRoom("technicians", {
+      type: "new_job",
+      job: {
+        id:           job.id,
+        request_id:   req_.id,
+        payout:       job.payout,
+        status:       "pending",
+        service_type: service_type,
+        address:      address        ?? null,
+        location_lat: location_lat  ?? null,
+        location_lng: location_lng  ?? null,
+        vehicle_make:  vehicle_make  ?? null,
+        vehicle_model: vehicle_model ?? null,
+        vehicle_year:  vehicle_year  ?? null,
+        vehicle_plate: vehicle_plate ?? null,
+        vehicle_color: vehicle_color ?? null,
+        created_at:   job.created_at,
+        request:      req_,
+        customer: {
+          name:  customer?.name  ?? "Customer",
+          phone: customer?.phone ?? "",
+        },
+      },
+    });
 
     res.status(201).json({ request: req_, job });
   } catch (err) {
