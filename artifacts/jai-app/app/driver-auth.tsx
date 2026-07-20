@@ -95,12 +95,12 @@ export default function DriverAuth() {
         <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
           {isAR ? 'رقم الجوال' : 'Phone number'}
         </Text>
-        <View style={[styles.phoneRow, { flexDirection: isAR ? 'row-reverse' : 'row' }]}>
+        <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
           <View style={styles.flag}>
             <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
           </View>
           <TextInput
-            style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+            style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: 'left' }]}
             placeholder="05X XXX XXXX"
             placeholderTextColor="#9CA3AF"
             value={phone}

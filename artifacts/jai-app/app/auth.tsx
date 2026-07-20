@@ -122,12 +122,12 @@ export default function Auth() {
             <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterPhone')}</Text>
             <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>{t('phoneHint')}</Text>
 
-            <View style={[styles.phoneRow, { flexDirection: rowDir }]}>
+            <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
               <View style={styles.countryCode}>
                 <Text style={[styles.countryText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
               </View>
               <TextInput
-                style={[styles.input, { fontFamily: font.medium, textAlign: isRTL ? 'right' : 'left', flex: 1 }]}
+                style={[styles.input, { fontFamily: font.medium, textAlign: 'left', flex: 1 }]}
                 placeholder="5X XXX XXXX"
                 placeholderTextColor="#C0C0D4"
                 value={phone}
