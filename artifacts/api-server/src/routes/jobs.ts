@@ -3,6 +3,7 @@ import { db, jobs, serviceRequests, users } from "@workspace/db";
 import { eq, and, inArray, desc, isNull, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
+import { notifyCustomerJobAccepted, notifyCustomerJobCompleted } from "../lib/pushNotifications";
 
 const router: IRouter = Router();
 
@@ -184,6 +185,23 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
         techRating: tech?.rating ?? 4.5,
       });
 
+      // Fetch customer_id from the service request so we can push to them
+      const [sreq] = await db
+        .select({ customer_id: serviceRequests.customer_id, service_type: serviceRequests.service_type })
+        .from(serviceRequests)
+        .where(eq(serviceRequests.id, existing.request_id))
+        .limit(1);
+
+      if (sreq) {
+        void notifyCustomerJobAccepted({
+          customerId:  sreq.customer_id,
+          techName:    tech?.name ?? "Technician",
+          serviceType: sreq.service_type,
+          jobId:       id,
+          requestId:   existing.request_id,
+        });
+      }
+
       res.json(accepted[0]);
       return; // already responded
     }
@@ -197,10 +215,11 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
 
     if (status === "completed") {
       updates.completed_at = new Date();
-      await db
+      const [completedReq] = await db
         .update(serviceRequests)
         .set({ status: "completed", updated_at: new Date() })
-        .where(eq(serviceRequests.id, existing.request_id));
+        .where(eq(serviceRequests.id, existing.request_id))
+        .returning();
       // Atomically credit the assigned technician's earnings
       await db
         .update(users)
@@ -210,6 +229,15 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
           updated_at:     new Date(),
         })
         .where(eq(users.id, req.userId!));
+
+      if (completedReq) {
+        void notifyCustomerJobCompleted({
+          customerId:  completedReq.customer_id,
+          serviceType: completedReq.service_type,
+          payout:      existing.payout,
+          requestId:   existing.request_id,
+        });
+      }
     }
 
     if (status === "cancelled") {

@@ -3,6 +3,7 @@ import { db, serviceRequests, jobs, users } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
+import { notifyTechniciansNewJob } from "../lib/pushNotifications";
 
 const router: IRouter = Router();
 
@@ -83,6 +84,14 @@ router.post("/requests", requireAuth, async (req, res) => {
           phone: customer?.phone ?? "",
         },
       },
+    });
+
+    // Push notification to technicians who aren't connected via WebSocket
+    void notifyTechniciansNewJob({
+      serviceType: service_type,
+      address:     address ?? null,
+      payout:      job.payout,
+      jobId:       job.id,
     });
 
     res.status(201).json({ request: req_, job });

@@ -31,6 +31,16 @@
         }
       ],
       "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#2D1B69",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "JAI Roadside"
+        }
+      ],
       "expo-web-browser",
       [
         "expo-location",
