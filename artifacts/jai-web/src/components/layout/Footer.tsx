@@ -1,4 +1,4 @@
-import { Phone } from 'lucide-react';
+import { Phone, Instagram, Twitter, Facebook } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function Footer() {
@@ -16,9 +16,38 @@ export default function Footer() {
               alt="JAI"
               className={`h-10 object-contain mb-6 opacity-90 ${isRTL ? 'mr-0 ml-auto md:ml-0' : ''}`}
             />
-            <p className={`text-white/60 max-w-sm mb-8 leading-relaxed ${arabic} ${isRTL ? 'mr-0 ml-auto md:ml-0' : ''}`}>
+            <p className={`text-white/60 max-w-sm mb-6 leading-relaxed ${arabic} ${isRTL ? 'mr-0 ml-auto md:ml-0' : ''}`}>
               {t('footer_desc')}
             </p>
+            <div className={`flex items-center gap-4 text-white/80 mb-8 ${isRTL ? 'justify-end md:justify-start' : ''}`}>
+              <a
+                href="https://instagram.com/jai.saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+              >
+                <Instagram className="w-5 h-5" />
+              </a>
+              <a
+                href="https://x.com/jai_saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X / Twitter"
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+              >
+                <Twitter className="w-5 h-5" />
+              </a>
+              <a
+                href="https://facebook.com/jai.saudi"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Facebook"
+                className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-[#C21875] hover:text-white transition-colors"
+              >
+                <Facebook className="w-5 h-5" />
+              </a>
+            </div>
             <div className={`flex items-center gap-4 text-white/80 ${isRTL ? 'justify-end md:justify-start' : ''}`}>
               <a
                 href="https://wa.me/966555616449"
