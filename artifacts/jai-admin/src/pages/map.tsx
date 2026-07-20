@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListRequests, getAdminListRequestsQueryKey } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
-import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff } from 'lucide-react';
+import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff, X } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -124,11 +124,15 @@ export default function MapView() {
   const [snoozed, setSnoozed] = useState<Map<number, Date>>(new Map());
   // Ticks every 30 s so freshness badges and polling interval update without new WS data
   const [tick, setTick] = useState(0);
+  // Banner: shown after WS stays disconnected for > 30 s; dismissed by user or on reconnect
+  const [showOfflineBanner, setShowOfflineBanner] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track whether an auth_error was received so we don't auto-reconnect
   const authErrorRef = useRef(false);
+  // Timer that triggers the 30 s offline banner
+  const offlineBannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -139,6 +143,7 @@ export default function MapView() {
     const id = setInterval(() => setTick(t => t + 1), 30_000);
     return () => clearInterval(id);
   }, []);
+
 
   // ── WebSocket connection + admin auth ────────────────────────────────────────
   const connectWs = useCallback(() => {
@@ -179,6 +184,12 @@ export default function MapView() {
       switch (msg.type) {
         case 'auth_ok':
           setWsStatus('connected');
+          // Genuine reconnect — cancel any pending offline banner timer and hide the banner
+          if (offlineBannerTimer.current) {
+            clearTimeout(offlineBannerTimer.current);
+            offlineBannerTimer.current = null;
+          }
+          setShowOfflineBanner(false);
           // Join the admin room (server also auto-joins, but explicit is clearer)
           ws.send(JSON.stringify({ type: 'join', room: 'admin' }));
           break;
@@ -212,6 +223,15 @@ export default function MapView() {
 
     ws.onclose = () => {
       setWsStatus('disconnected');
+      // Start the 30 s offline-banner countdown only once per outage.
+      // Repeated close/reconnect cycles (every 5 s) must NOT reset this timer —
+      // that's why we guard with offlineBannerTimer.current === null.
+      if (!authErrorRef.current && offlineBannerTimer.current === null) {
+        offlineBannerTimer.current = setTimeout(() => {
+          offlineBannerTimer.current = null;
+          setShowOfflineBanner(true);
+        }, 30_000);
+      }
       // Don't retry after an auth error (bad token)
       if (authErrorRef.current) return;
       // If tab is visible schedule a 5 s retry; otherwise wait for visibilitychange
@@ -252,6 +272,10 @@ export default function MapView() {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (offlineBannerTimer.current) {
+        clearTimeout(offlineBannerTimer.current);
+        offlineBannerTimer.current = null;
+      }
       const ws = wsRef.current;
       if (ws) {
         ws.onclose = null; // prevent onclose from scheduling a reconnect during cleanup
@@ -342,6 +366,23 @@ export default function MapView() {
 
   return (
     <div className="h-full w-full flex flex-col relative">
+      {/* ── Offline banner (shown after > 30 s disconnected) ─────────────────── */}
+      {showOfflineBanner && (
+        <div className="absolute top-0 left-0 right-0 z-[2000] flex items-center gap-3 px-4 py-3 bg-red-600 text-white shadow-lg pointer-events-auto">
+          <WifiOff className="w-4 h-4 shrink-0" />
+          <p className="flex-1 text-sm font-medium leading-tight">
+            Live connection lost — map data may be stale. Reconnecting&hellip;
+          </p>
+          <button
+            onClick={() => setShowOfflineBanner(false)}
+            className="shrink-0 rounded p-0.5 hover:bg-red-700 transition-colors"
+            aria-label="Dismiss"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Overlay control panel */}
       <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl p-4 w-72 flex flex-col gap-4 pointer-events-auto">
         <div>
