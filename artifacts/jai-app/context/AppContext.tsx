@@ -25,6 +25,8 @@ interface AppContextType {
   hasSeenOnboarding: boolean;
   isAuthenticated: boolean;
   user: User | null;
+  role: 'customer' | 'technician' | null;
+  setRole: (role: 'customer' | 'technician' | null) => Promise<void>;
   markOnboardingDone: () => Promise<void>;
   login: (user: User) => Promise<void>;
   loginAsGuest: (user: User) => Promise<void>;
@@ -34,7 +36,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | null>(null);
 
-const DEFAULT_USER: User = {
+export const DEFAULT_USER: User = {
   id: '1',
   name: 'Mohammed Al-Rashid',
   phone: '+966 50 123 4567',
@@ -48,20 +50,14 @@ const DEFAULT_USER: User = {
 
 interface AppProviderProps {
   children: ReactNode;
-  /**
-   * Pre-read from AsyncStorage by _layout.tsx during the font/lang load phase.
-   * When provided the provider skips its own AsyncStorage fetch and initialises
-   * synchronously, eliminating any flash of the loading screen on cold starts
-   * that follow an iOS low-memory process kill.
-   */
   initialSession?: {
     user: User | null;
     hasSeenOnboarding: boolean;
+    role: 'customer' | 'technician' | null;
   } | null;
 }
 
 export function AppProvider({ children, initialSession }: AppProviderProps) {
-  // If the layout already pre-read the session we can start fully hydrated.
   const preloaded = initialSession != null;
 
   const [isLoading, setIsLoading] = useState(!preloaded);
@@ -74,6 +70,9 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   const [isGuest, setIsGuest] = useState(false);
   const [user, setUser] = useState<User | null>(
     preloaded ? initialSession.user : null,
+  );
+  const [role, setRoleState] = useState<'customer' | 'technician' | null>(
+    preloaded ? initialSession.role : null,
   );
 
   const isGuestRef = useRef(isGuest);
@@ -113,11 +112,13 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
 
   async function loadState() {
     try {
-      const [onboarding, userData] = await Promise.all([
+      const [onboarding, userData, storedRole] = await Promise.all([
         AsyncStorage.getItem('jai_onboarding'),
         AsyncStorage.getItem('jai_user'),
+        AsyncStorage.getItem('jai_role'),
       ]);
       setHasSeenOnboarding(onboarding === 'true');
+      if (storedRole === 'customer' || storedRole === 'technician') setRoleState(storedRole);
       if (userData) {
         setUser(JSON.parse(userData));
         setIsAuthenticated(true);
@@ -128,6 +129,15 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function setRole(r: 'customer' | 'technician' | null) {
+    if (r) {
+      await AsyncStorage.setItem('jai_role', r);
+    } else {
+      await AsyncStorage.removeItem('jai_role');
+    }
+    setRoleState(r);
   }
 
   async function markOnboardingDone() {
@@ -169,8 +179,8 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
 
   return (
     <AppContext.Provider value={{
-      isLoading, hasSeenOnboarding, isAuthenticated, user,
-      markOnboardingDone, login, loginAsGuest, logout, updateUser,
+      isLoading, hasSeenOnboarding, isAuthenticated, user, role,
+      setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser,
     }}>
       {children}
     </AppContext.Provider>
@@ -183,4 +193,3 @@ export function useApp() {
   return ctx;
 }
 
-export { DEFAULT_USER };

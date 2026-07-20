@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppProvider, type User } from '@/context/AppContext';
+import { DriverProvider } from '@/context/DriverContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
 import { LocationProvider } from '@/context/LocationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -32,6 +33,7 @@ const queryClient = new QueryClient();
 interface PreloadedSession {
   user: User | null;
   hasSeenOnboarding: boolean;
+  role: 'customer' | 'technician' | null;
 }
 
 function RootLayoutNav() {
@@ -39,8 +41,15 @@ function RootLayoutNav() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="onboarding" />
+      <Stack.Screen name="role" />
       <Stack.Screen name="auth" />
+      <Stack.Screen name="driver-auth" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(driver)" />
+      <Stack.Screen
+        name="job/[id]"
+        options={{ presentation: 'modal', gestureEnabled: true }}
+      />
       <Stack.Screen
         name="request/[service]"
         options={{ presentation: 'modal', gestureEnabled: true }}
@@ -74,7 +83,8 @@ export default function RootLayout() {
       AsyncStorage.getItem('jai_lang'),
       AsyncStorage.getItem('jai_user'),
       AsyncStorage.getItem('jai_onboarding'),
-    ]).then(([storedLang, storedUser, storedOnboarding]) => {
+      AsyncStorage.getItem('jai_role'),
+    ]).then(([storedLang, storedUser, storedOnboarding, storedRole]) => {
       const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
@@ -83,9 +93,11 @@ export default function RootLayout() {
       if (storedUser) {
         try { parsedUser = JSON.parse(storedUser); } catch { /* ignore */ }
       }
+      const role = storedRole === 'customer' || storedRole === 'technician' ? storedRole : null;
       setPreloadedSession({
         user: parsedUser,
         hasSeenOnboarding: storedOnboarding === 'true',
+        role,
       });
 
       setBootstrapReady(true);
@@ -108,9 +120,11 @@ export default function RootLayout() {
             <KeyboardProvider>
               <LanguageProvider initialLang={initialLang}>
                 <AppProvider initialSession={preloadedSession}>
-                  <LocationProvider>
-                    <RootLayoutNav />
-                  </LocationProvider>
+                  <DriverProvider>
+                    <LocationProvider>
+                      <RootLayoutNav />
+                    </LocationProvider>
+                  </DriverProvider>
                 </AppProvider>
               </LanguageProvider>
             </KeyboardProvider>

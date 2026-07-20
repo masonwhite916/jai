@@ -222,6 +222,56 @@ export const translations = {
     safety4Body: 'Check the technician’s name and rating in the app before opening your window or door.',
     safety5Title: 'Keep essentials in your car',
     safety5Body: 'Water, a phone charger and a reflective triangle are always good to have on board.',
+    // Driver / technician app
+    driverTabRequests: 'Requests',
+    driverTabActive: 'Active',
+    driverTabEarnings: 'Earnings',
+    driverTabProfile: 'Profile',
+    driverOnline: 'Online',
+    driverOffline: 'Offline',
+    driverToday: 'Today',
+    driverThisWeek: 'This week',
+    driverThisMonth: 'This month',
+    driverTotalJobs: 'Total jobs',
+    driverEarnings: 'Earnings',
+    driverNoRequests: 'No requests nearby',
+    driverIncomingRequests: 'Incoming requests',
+    driverAccept: 'Accept',
+    driverDecline: 'Decline',
+    driverNavigate: 'Navigate',
+    driverArrived: 'Arrived',
+    driverStartWork: 'Start work',
+    driverComplete: 'Complete',
+    driverCancelJob: 'Cancel job',
+    driverJobDetails: 'Job details',
+    driverVehicle: 'Vehicle',
+    driverDistance: 'Distance',
+    driverEta: 'ETA',
+    driverPayout: 'Payout',
+    driverAddress: 'Address',
+    driverStatus: 'Status',
+    driverStatusPending: 'Pending',
+    driverStatusAccepted: 'Accepted',
+    driverStatusEnRoute: 'En route',
+    driverStatusArrived: 'Arrived',
+    driverStatusWorking: 'Working',
+    driverStatusCompleted: 'Completed',
+    driverStatusCancelled: 'Cancelled',
+    driverLogout: 'Sign out',
+    driverLanguage: 'Language',
+    driverJobsDone: 'Jobs completed',
+    driverAvailability: 'Availability',
+    driverActiveJob: 'Active job',
+    driverNoActiveJob: 'No active job',
+    driverCall: 'Call',
+    driverKm: 'km',
+    driverMin: 'min',
+    driverSar: 'SAR',
+    driverConfirmCancel: 'Cancel this job?',
+    driverUrgent: 'Urgent',
+    driverStandard: 'Standard',
+    yes: 'Yes',
+    no: 'No',
   },
   ar: {
     // Auth
@@ -439,6 +489,54 @@ export const translations = {
     safety4Body: 'تأكد من اسم الفني وتقييمه في التطبيق قبل فتح النافذة أو الباب.',
     safety5Title: 'أبقِ الضروريات في سيارتك',
     safety5Body: 'يُنصح دائمًا بوجود ماء وشاحن جوال ومثلث عاكس في السيارة.',
+    // Driver / technician app
+    driverTabRequests: 'الطلبات',
+    driverTabActive: 'النشط',
+    driverTabEarnings: 'الأرباح',
+    driverTabProfile: 'الملف الشخصي',
+    driverOnline: 'متصل',
+    driverOffline: 'غير متصل',
+    driverToday: 'اليوم',
+    driverThisWeek: 'هذا الأسبوع',
+    driverThisMonth: 'هذا الشهر',
+    driverTotalJobs: 'إجمالي المهام',
+    driverEarnings: 'الأرباح',
+    driverNoRequests: 'لا توجد طلبات قريبة',
+    driverIncomingRequests: 'الطلبات الواردة',
+    driverAccept: 'قبول',
+    driverDecline: 'رفض',
+    driverNavigate: 'التنقل',
+    driverArrived: 'وصلت',
+    driverStartWork: 'ابدأ العمل',
+    driverComplete: 'إتمام',
+    driverCancelJob: 'إلغاء المهمة',
+    driverJobDetails: 'تفاصيل المهمة',
+    driverVehicle: 'المركبة',
+    driverDistance: 'المسافة',
+    driverEta: 'وقت الوصول',
+    driverPayout: 'المبلغ',
+    driverAddress: 'العنوان',
+    driverStatus: 'الحالة',
+    driverStatusPending: 'معلق',
+    driverStatusAccepted: 'مقبول',
+    driverStatusEnRoute: 'في الطريق',
+    driverStatusArrived: 'وصلت',
+    driverStatusWorking: 'جارٍ العمل',
+    driverStatusCompleted: 'مكتمل',
+    driverStatusCancelled: 'ملغي',
+    driverLogout: 'تسجيل الخروج',
+    driverLanguage: 'اللغة',
+    driverJobsDone: 'مهام منجزة',
+    driverAvailability: 'حالة التوفر',
+    driverActiveJob: 'المهمة النشطة',
+    driverNoActiveJob: 'لا توجد مهمة نشطة',
+    driverCall: 'اتصال',
+    driverKm: 'كم',
+    driverMin: 'دقيقة',
+    driverSar: 'ريال',
+    driverConfirmCancel: 'إلغاء هذه المهمة؟',
+    driverUrgent: 'عاجل',
+    driverStandard: 'عادي',
   },
 } as const;
 
@@ -454,9 +552,11 @@ interface FontMap {
 interface LanguageContextType {
   lang: Lang;
   isRTL: boolean;
-  t: (key: TranslationKeys) => string;
+  /** Translate a key. Accepts any string — returns the key itself if not found. */
+  t: (key: string) => string;
   font: FontMap;
   toggleLanguage: () => Promise<void>;
+  setLang: (lang: Lang) => void;
 }
 
 const LanguageContext = createContext<LanguageContextType | null>(null);
@@ -471,7 +571,7 @@ export function LanguageProvider({
   const [lang, setLang] = useState<Lang>(initialLang);
   const isRTL = lang === 'ar';
 
-  const t = (key: TranslationKeys): string => {
+  const t = (key: string): string => {
     return (translations[lang] as Record<string, string>)[key] ?? key;
   };
 
@@ -492,7 +592,7 @@ export function LanguageProvider({
   };
 
   return (
-    <LanguageContext.Provider value={{ lang, isRTL, t, font, toggleLanguage }}>
+    <LanguageContext.Provider value={{ lang, isRTL, t, font, toggleLanguage, setLang }}>
       {children}
     </LanguageContext.Provider>
   );

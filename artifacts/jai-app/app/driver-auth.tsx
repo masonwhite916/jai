@@ -1,0 +1,227 @@
+import React, { useState } from 'react';
+import {
+  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  Platform, ScrollView, KeyboardAvoidingView, Image,
+} from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { useDriver, DEFAULT_DRIVER } from '@/context/DriverContext';
+import { useApp } from '@/context/AppContext';
+import { useLanguage } from '@/context/LanguageContext';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+
+export default function DriverAuth() {
+  const insets = useSafeAreaInsets();
+  const router = useRouter();
+  const { login: driverLogin } = useDriver();
+  const { setRole } = useApp();
+  const { lang, font, toggleLanguage } = useLanguage();
+  const isAR = lang === 'ar';
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleContinue = async () => {
+    if (!name.trim()) { setError(isAR ? 'أدخل اسمك الكامل' : 'Enter your full name'); return; }
+    if (phone.replace(/\D/g, '').length < 9) { setError(isAR ? 'أدخل رقم هاتف صحيح' : 'Enter a valid phone number'); return; }
+    setError('');
+    setLoading(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await driverLogin({ ...DEFAULT_DRIVER, name: name.trim(), phone: `+966 ${phone}` });
+    router.replace('/(driver)');
+    setLoading(false);
+  };
+
+  const handleGuest = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await driverLogin(DEFAULT_DRIVER);
+    router.replace('/(driver)');
+  };
+
+  const handleBack = async () => {
+    await setRole(null);
+    router.replace('/role');
+  };
+
+  return (
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <LinearGradient
+        colors={['#0B0A0F', '#1A1726', '#2D1B69']}
+        style={[styles.header, { paddingTop: insets.top + 24 + (Platform.OS === 'web' ? 67 : 0) }]}
+      >
+        <TouchableOpacity
+          style={[styles.langBtn, { alignSelf: isAR ? 'flex-start' : 'flex-end' }]}
+          onPress={toggleLanguage}
+        >
+          <Ionicons name="language-outline" size={15} color="rgba(255,255,255,0.9)" />
+          <Text style={[styles.langBtnText, { fontFamily: font.semibold }]}>
+            {lang === 'en' ? 'العربية' : 'English'}
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.badgeRow}>
+          <LinearGradient colors={['#C21875', '#7B2A9E']} style={styles.badge}>
+            <Ionicons name="construct-outline" size={22} color="#FFFFFF" />
+          </LinearGradient>
+        </View>
+        <Text style={[styles.headerTitle, { fontFamily: font.bold }]}>
+          {isAR ? 'جاي — بوابة الفنيين' : 'JAI Technician Portal'}
+        </Text>
+        <Text style={[styles.headerSub, { fontFamily: font.regular }]}>
+          {isAR ? 'سجّل دخولك لاستلام الطلبات' : 'Sign in to receive service requests'}
+        </Text>
+      </LinearGradient>
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 32 + (Platform.OS === 'web' ? 34 : 0) }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
+          {isAR ? 'الاسم الكامل' : 'Full name'}
+        </Text>
+        <TextInput
+          style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+          placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
+          placeholderTextColor="#555"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
+
+        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
+          {isAR ? 'رقم الجوال' : 'Phone number'}
+        </Text>
+        <View style={[styles.phoneRow, { flexDirection: isAR ? 'row-reverse' : 'row' }]}>
+          <View style={styles.flag}>
+            <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
+          </View>
+          <TextInput
+            style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+            placeholder="05X XXX XXXX"
+            placeholderTextColor="#555"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={10}
+          />
+        </View>
+
+        {!!error && (
+          <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
+        )}
+
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={handleContinue}
+          disabled={loading}
+          style={styles.primaryWrap}
+        >
+          <LinearGradient
+            colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={styles.primaryBtn}
+          >
+            <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
+              {loading ? (isAR ? 'جارٍ التسجيل...' : 'Signing in…') : (isAR ? 'متابعة' : 'Continue')}
+            </Text>
+            <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <View style={styles.divRow}>
+          <View style={styles.divLine} />
+          <Text style={[styles.divText, { fontFamily: font.regular }]}>{isAR ? 'أو' : 'or'}</Text>
+          <View style={styles.divLine} />
+        </View>
+
+        <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
+          <Ionicons name="person-outline" size={18} color="#8E8A9D" />
+          <Text style={[styles.guestText, { fontFamily: font.medium }]}>
+            {isAR ? 'متابعة كضيف' : 'Continue as guest'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.7}>
+          <Ionicons name="arrow-back-outline" size={15} color="#8E8A9D" />
+          <Text style={[styles.backText, { fontFamily: font.regular }]}>
+            {isAR ? 'العودة' : 'Back to role selection'}
+          </Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  header: {
+    paddingHorizontal: 24, paddingBottom: 40,
+    alignItems: 'center',
+    borderBottomLeftRadius: 32, borderBottomRightRadius: 32,
+    shadowColor: '#C21875', shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.3, shadowRadius: 20, elevation: 12,
+  },
+  langBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 20, paddingHorizontal: 14, paddingVertical: 7,
+    marginBottom: 20,
+  },
+  langBtnText: { color: '#FFFFFF', fontSize: 13 },
+  badgeRow: { marginBottom: 16 },
+  badge: { width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { color: '#FFFFFF', fontSize: 22, marginBottom: 6 },
+  headerSub: { color: 'rgba(255,255,255,0.55)', fontSize: 13 },
+
+  scroll: { flex: 1, backgroundColor: '#0B0A0F' },
+  form: { paddingHorizontal: 24, paddingTop: 32 },
+
+  label: { color: '#8E8A9D', fontSize: 13, marginBottom: 8 },
+  input: {
+    backgroundColor: '#1A1726', borderRadius: 14,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 16, paddingVertical: 15,
+    fontSize: 16, color: '#EEEDF5',
+  },
+  phoneRow: { gap: 10 },
+  flag: {
+    backgroundColor: '#1A1726', borderRadius: 14,
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+    paddingHorizontal: 14, paddingVertical: 15,
+    justifyContent: 'center',
+  },
+  flagText: { fontSize: 15, color: '#EEEDF5' },
+
+  error: { color: '#E74C3C', fontSize: 13, marginTop: 8 },
+
+  primaryWrap: {
+    borderRadius: 16, overflow: 'hidden', marginTop: 24,
+    shadowColor: '#C21875', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.4, shadowRadius: 14, elevation: 8,
+  },
+  primaryBtn: {
+    paddingVertical: 18, flexDirection: 'row',
+    justifyContent: 'center', alignItems: 'center', gap: 10,
+  },
+  primaryText: { color: '#FFFFFF', fontSize: 16 },
+
+  divRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
+  divLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.08)' },
+  divText: { color: '#8E8A9D', fontSize: 13 },
+
+  guestBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    paddingVertical: 16, borderRadius: 16,
+    backgroundColor: '#1A1726',
+    borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.08)',
+  },
+  guestText: { color: '#8E8A9D', fontSize: 15 },
+
+  backBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20,
+  },
+  backText: { color: '#8E8A9D', fontSize: 13 },
+});
