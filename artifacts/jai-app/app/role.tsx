@@ -84,17 +84,17 @@ export default function RoleScreen() {
 
         {/* Technician card */}
         <TouchableOpacity activeOpacity={0.85} onPress={() => pick('technician')} style={[styles.cardWrap, { marginTop: 16 }]}>
-          <View style={[styles.card, styles.cardDark]}>
+          <View style={[styles.card, styles.cardLight]}>
             <LinearGradient colors={['#C21875', '#7B2A9E']} style={styles.cardIcon}>
               <Ionicons name="construct-outline" size={32} color="#FFFFFF" />
             </LinearGradient>
-            <Text style={[styles.cardTitle, { fontFamily: font.bold, color: '#EEEDF5' }]}>
+            <Text style={[styles.cardTitle, { fontFamily: font.bold, color: '#1A1A1A' }]}>
               {isAR ? 'فني' : 'Technician'}
             </Text>
-            <Text style={[styles.cardSub, { fontFamily: font.regular, color: '#8E8A9D' }]}>
+            <Text style={[styles.cardSub, { fontFamily: font.regular, color: '#6B7280' }]}>
               {isAR ? 'موظف جاي — أستلم الطلبات' : 'JAI staff — I receive requests'}
             </Text>
-            <View style={[styles.arrow, { backgroundColor: 'rgba(194,24,117,0.2)' }]}>
+            <View style={[styles.arrow, { backgroundColor: '#F0ECFB' }]}>
               <Ionicons name={isAR ? 'arrow-back' : 'arrow-forward'} size={18} color="#C21875" />
             </View>
           </View>
