@@ -81,7 +81,7 @@ function FloatingTabBar({ state, navigation }: { state: any; navigation: any }) 
                   style={styles.tabInner}
                 >
                   <Ionicons name={meta.iconActive as any} size={21} color="#FFFFFF" />
-                  <Text style={[styles.activeLabel, { fontFamily: labelFont }]}>
+                  <Text style={[styles.activeLabel, { fontFamily: labelFont }]} numberOfLines={1}>
                     {label}
                   </Text>
                 </LinearGradient>
@@ -154,6 +154,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 2,
   },
   /** Shared inner shape — gradient or plain view sits here */
   tabInner: {
@@ -164,10 +165,12 @@ const styles = StyleSheet.create({
     borderRadius: 36,
     paddingVertical: 12,
     paddingHorizontal: 14,
+    maxWidth: '100%',
   },
   activeLabel: {
     color: '#FFFFFF',
     fontSize: 13,
+    flexShrink: 1,
   },
 
   // ── Badge ────────────────────────────────────────────────────────────────
