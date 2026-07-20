@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { AppState, AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface Vehicle {
@@ -52,8 +53,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isGuest, setIsGuest] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
+  const isGuestRef = useRef(isGuest);
+  useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
+
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
+
   useEffect(() => {
     loadState();
+  }, []);
+
+  // Re-hydrate session from AsyncStorage when the app returns to the foreground
+  // after iOS unloads the JS bundle during a long background period.
+  useEffect(() => {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState !== 'active') return;
+      // Only re-hydrate if in-memory user state is missing and this is not a
+      // guest session (guest sessions are intentionally not persisted).
+      if (userRef.current !== null || isGuestRef.current) return;
+      try {
+        const userData = await AsyncStorage.getItem('jai_user');
+        if (userData) {
+          setUser(JSON.parse(userData));
+          setIsAuthenticated(true);
+          setIsGuest(false);
+        }
+      } catch {
+        // ignore errors
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
   }, []);
 
   async function loadState() {
