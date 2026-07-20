@@ -186,12 +186,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 15,
     fontSize: 16, color: '#1A1A1A',
   },
-  phoneRow: { gap: 10, maxWidth: '100%', overflow: 'hidden' },
+  phoneRow: { gap: 10, maxWidth: '100%', overflow: 'hidden', justifyContent: 'flex-end', alignItems: 'center' },
   flag: {
     backgroundColor: '#FFFFFF', borderRadius: 14,
     borderWidth: 1.5, borderColor: '#EBEBF5',
     paddingHorizontal: 14, paddingVertical: 15,
-    justifyContent: 'center',
+    justifyContent: 'center', alignItems: 'flex-start',
   },
   flagText: { fontSize: 15, color: '#1A1A1A' },
 

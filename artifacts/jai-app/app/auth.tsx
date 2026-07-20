@@ -256,12 +256,12 @@ const styles = StyleSheet.create({
   heading: { fontSize: 22, color: '#120840', marginBottom: 8 },
   hint: { fontSize: 14, color: '#6B7280', lineHeight: 22, marginBottom: 26 },
 
-  phoneRow: { gap: 10, marginBottom: 8 },
+  phoneRow: { gap: 10, marginBottom: 8, justifyContent: 'flex-end', alignItems: 'center' },
   countryCode: {
     backgroundColor: '#FFFFFF', borderRadius: 14,
     borderWidth: 1.5, borderColor: '#E0DBEF',
     paddingHorizontal: 14, paddingVertical: 15,
-    justifyContent: 'center',
+    justifyContent: 'center', alignItems: 'flex-start',
     shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
