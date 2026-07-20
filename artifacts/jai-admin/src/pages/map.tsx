@@ -3,7 +3,7 @@ import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListR
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
 import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
 // Fix Leaflet's default icon paths issue with Vite
@@ -37,15 +37,36 @@ const createJobMarker = (status: string) => {
   });
 };
 
-const techIcon = divIcon({
-  className: 'custom-div-icon',
-  html: `<div class="w-8 h-8 rounded-lg bg-slate-900 border-2 border-white shadow-lg flex items-center justify-center overflow-hidden">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
-         </div>`,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-  popupAnchor: [0, -16]
-});
+// ── Freshness helpers ──────────────────────────────────────────────────────────
+type Freshness = 'fresh' | 'stale' | 'offline';
+
+function getFreshness(seenAt: string | null | undefined): Freshness {
+  if (!seenAt) return 'offline';
+  const mins = differenceInMinutes(new Date(), new Date(seenAt));
+  if (mins < 2) return 'fresh';
+  if (mins < 10) return 'stale';
+  return 'offline';
+}
+
+const freshnessMeta: Record<Freshness, { bg: string; ring: string; label: string; badgeClass: string }> = {
+  fresh:   { bg: '#10b981', ring: '#6ee7b7', label: 'Live',    badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
+  stale:   { bg: '#f59e0b', ring: '#fcd34d', label: 'Stale',   badgeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
+  offline: { bg: '#94a3b8', ring: '#cbd5e1', label: 'Offline', badgeClass: 'bg-slate-100 text-slate-500 border-slate-300' },
+};
+
+const createTechIcon = (freshness: Freshness) => {
+  const { bg, ring } = freshnessMeta[freshness];
+  const opacity = freshness === 'offline' ? '0.55' : '1';
+  return divIcon({
+    className: 'custom-div-icon',
+    html: `<div style="opacity:${opacity};width:32px;height:32px;border-radius:8px;background:${bg};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35),0 0 0 3px ${ring};display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+           </div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -20],
+  });
+};
 
 // ── WS connection status ───────────────────────────────────────────────────────
 type WsStatus = 'connecting' | 'connected' | 'disconnected';
@@ -62,12 +83,20 @@ export default function MapView() {
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   // Map of technicianId → live location pushed over WS
   const [liveLocations, setLiveLocations] = useState<Map<number, LiveLocation>>(new Map());
+  // Ticks every 30 s so freshness badges and polling interval update without new WS data
+  const [tick, setTick] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  // ── Periodic freshness tick ───────────────────────────────────────────────────
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
   }, []);
 
   // ── WebSocket connection + admin auth ────────────────────────────────────────
@@ -141,24 +170,30 @@ export default function MapView() {
     };
   }, [connectWs]);
 
-  // ── Data fetching (fallback / initial load — long interval while WS is live) ─
+  // ── Derive polling interval before queries ───────────────────────────────────
+  // hasFreshLocation reads directly from liveLocations (WS-pushed data) so
+  // it doesn't create a circular dependency with techData.
+  // tick (updated every 30 s) ensures this re-evaluates even with no new WS push.
+  const hasFreshLocation = useMemo(
+    () => Array.from(liveLocations.values()).some(loc => getFreshness(loc.seenAt) === 'fresh'),
+    // tick is intentional: it forces re-evaluation every 30 s so that a location
+    // that ages past the 2-min threshold causes the polling interval to revert to 15 s
+    // even when no new WS messages arrive.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [liveLocations, tick]
+  );
+  // Only back off polling when WS is live AND at least one fresh GPS push arrived.
+  const wsLiveAndFresh = wsStatus === 'connected' && hasFreshLocation;
+  const pollInterval = wsLiveAndFresh ? 5 * 60 * 1000 : 15000;
+
+  // ── Data fetching (fallback / initial load) ───────────────────────────────────
   const { data: techData } = useAdminListTechnicians({
     query: {
       queryKey: getAdminListTechniciansQueryKey(),
-      // When WS is connected, poll rarely just as a safety net.
-      // When disconnected, fall back to 15 s polling.
-      refetchInterval: wsStatus === 'connected' ? 5 * 60 * 1000 : 15000,
+      refetchInterval: pollInterval,
     }
   });
 
-  const { data: reqData } = useAdminListRequests({}, {
-    query: {
-      queryKey: getAdminListRequestsQueryKey(),
-      refetchInterval: wsStatus === 'connected' ? 5 * 60 * 1000 : 15000,
-    }
-  });
-
-  // Merge DB-fetched technicians with live WS location overrides
   const technicians = useMemo(() => {
     const list = techData?.technicians ?? [];
     return list
@@ -171,6 +206,13 @@ export default function MapView() {
       })
       .filter(t => t.last_lat && t.last_lng);
   }, [techData, liveLocations]);
+
+  const { data: reqData } = useAdminListRequests({}, {
+    query: {
+      queryKey: getAdminListRequestsQueryKey(),
+      refetchInterval: pollInterval,
+    }
+  });
 
   // Show active service requests by REQUEST status (not job status)
   // assigned = technician accepted; in_progress = service underway
@@ -216,10 +258,22 @@ export default function MapView() {
         </div>
         
         <div className="space-y-2 text-xs">
+          {/* Technician pin freshness legend */}
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Technicians</p>
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-slate-900 border border-white shrink-0" />
-            <span>Active Technician</span>
+            <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#10b981' }} />
+            <span>Live <span className="text-muted-foreground">(&lt; 2 min)</span></span>
           </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#f59e0b' }} />
+            <span>Stale <span className="text-muted-foreground">(2 – 10 min)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-sm shrink-0 opacity-55" style={{ background: '#94a3b8' }} />
+            <span>Offline <span className="text-muted-foreground">(&gt; 10 min)</span></span>
+          </div>
+          {/* Job pin legend */}
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold pt-1">Jobs</p>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-amber-500 border border-white shrink-0" />
             <span>Pending Request</span>
@@ -283,32 +337,43 @@ export default function MapView() {
             </Marker>
           ))}
 
-          {/* Technicians */}
-          {technicians.map(tech => (
-            <Marker
-              key={`tech-${tech.id}`}
-              position={[tech.last_lat as number, tech.last_lng as number]}
-              icon={techIcon}
-            >
-              <Popup>
-                <div className="space-y-2">
-                  <div className="font-bold text-sm border-b border-border pb-2">{tech.name || 'Unknown Tech'}</div>
-                  <div className="text-xs space-y-1">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Phone className="w-3.5 h-3.5" />
-                      <span className="text-foreground">{tech.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Navigation className="w-3.5 h-3.5" />
-                      <span className="text-foreground text-[10px]">
-                        Last updated {tech.last_seen_at ? formatDistanceToNow(new Date(tech.last_seen_at), { addSuffix: true }) : 'unknown'}
+          {/* Technicians — icon color encodes GPS freshness */}
+          {technicians.map(tech => {
+            const freshness = getFreshness(tech.last_seen_at as string | null | undefined);
+            const meta = freshnessMeta[freshness];
+            return (
+              <Marker
+                key={`tech-${tech.id}`}
+                position={[tech.last_lat as number, tech.last_lng as number]}
+                icon={createTechIcon(freshness)}
+              >
+                <Popup>
+                  <div className="space-y-2 min-w-[180px]">
+                    <div className="flex items-center justify-between border-b border-border pb-2 gap-2">
+                      <span className="font-bold text-sm">{tech.name || 'Unknown Tech'}</span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${meta.badgeClass}`}>
+                        {meta.label}
                       </span>
                     </div>
+                    <div className="text-xs space-y-1">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Phone className="w-3.5 h-3.5" />
+                        <span className="text-foreground">{tech.phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Navigation className="w-3.5 h-3.5" />
+                        <span className="text-foreground text-[10px]">
+                          Last updated {tech.last_seen_at
+                            ? formatDistanceToNow(new Date(tech.last_seen_at as string), { addSuffix: true })
+                            : 'unknown'}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                </Popup>
+              </Marker>
+            );
+          })}
         </MapContainer>
       </div>
     </div>
