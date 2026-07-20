@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListRequests, getAdminListRequestsQueryKey } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
@@ -114,6 +115,7 @@ interface LiveLocation {
 const SNOOZE_MINUTES = 30;
 
 export default function MapView() {
+  const queryClient = useQueryClient();
   const [mounted, setMounted] = useState(false);
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   // Map of technicianId → live location pushed over WS
@@ -227,14 +229,21 @@ export default function MapView() {
     authErrorRef.current = false;
     connectWs();
 
-    // Reconnect immediately when the tab becomes visible again
+    // Reconnect immediately when the tab becomes visible again (e.g. after sleep)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
+        // 1. Resume the WebSocket if it dropped while the tab was hidden
         const ws = wsRef.current;
         const isDisconnected = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
         if (isDisconnected && !authErrorRef.current) {
           connectWs();
         }
+
+        // 2. Force-refetch REST data immediately — the React Query cache may be
+        //    many minutes stale after a laptop wakes from sleep, and the next
+        //    scheduled poll interval could be several minutes away.
+        queryClient.refetchQueries({ queryKey: getAdminListTechniciansQueryKey() });
+        queryClient.refetchQueries({ queryKey: getAdminListRequestsQueryKey() });
       }
     };
 
