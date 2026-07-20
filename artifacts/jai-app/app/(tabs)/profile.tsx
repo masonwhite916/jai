@@ -35,7 +35,7 @@ function MenuItem({ icon, label, sublabel, onPress, accent, rightLabel }: {
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, logout } = useApp();
+  const { user, logout, setRole } = useApp();
   const { t, isRTL, font, toggleLanguage, lang } = useLanguage();
   const gps = useJaiLocation();
 
@@ -43,9 +43,16 @@ export default function ProfileScreen() {
   const align = isRTL ? 'right' : 'left';
 
   async function handleLogout() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
     await logout();
     router.replace('/auth');
+  }
+
+  async function handleSwitchRole() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    await logout();
+    await setRole(null);
+    router.replace('/role');
   }
 
   function goTo(topic: string) {
@@ -156,6 +163,7 @@ export default function ProfileScreen() {
               rightLabel={lang === 'en' ? 'English' : 'العربية'}
               onPress={toggleLanguage}
             />
+            <MenuItem icon="swap-horizontal-outline" label={t('switchRole')} onPress={handleSwitchRole} />
             <MenuItem icon="log-out-outline" label={t('signOut')} onPress={handleLogout} accent />
           </View>
         </View>
