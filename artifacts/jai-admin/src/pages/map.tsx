@@ -1,8 +1,8 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListRequests, getAdminListRequestsQueryKey } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
-import { MapPin, Navigation, Phone, Car, Clock } from 'lucide-react';
+import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
@@ -47,23 +47,131 @@ const techIcon = divIcon({
   popupAnchor: [0, -16]
 });
 
+// ── WS connection status ───────────────────────────────────────────────────────
+type WsStatus = 'connecting' | 'connected' | 'disconnected';
+
+// ── Live location overrides from WS (technicianId → {lat, lng, seenAt}) ──────
+interface LiveLocation {
+  lat: number;
+  lng: number;
+  seenAt: string;
+}
+
 export default function MapView() {
   const [mounted, setMounted] = useState(false);
-  
+  const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
+  // Map of technicianId → live location pushed over WS
+  const [liveLocations, setLiveLocations] = useState<Map<number, LiveLocation>>(new Map());
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Poll every 15 seconds
+  // ── WebSocket connection + admin auth ────────────────────────────────────────
+  const connectWs = useCallback(() => {
+    const token = localStorage.getItem('jai_admin_token');
+    if (!token) return; // not logged in; nothing to do
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    wsRef.current = ws;
+    setWsStatus('connecting');
+
+    ws.onopen = () => {
+      // Authenticate as admin
+      ws.send(JSON.stringify({ type: 'auth', token }));
+    };
+
+    ws.onmessage = (event) => {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(event.data as string) as Record<string, unknown>; }
+      catch { return; }
+
+      switch (msg.type) {
+        case 'auth_ok':
+          setWsStatus('connected');
+          // Join the admin room (server also auto-joins, but explicit is clearer)
+          ws.send(JSON.stringify({ type: 'join', room: 'admin' }));
+          break;
+
+        case 'auth_error':
+          // Token invalid — fall back to polling only; don't reconnect
+          ws.close();
+          setWsStatus('disconnected');
+          break;
+
+        case 'tech_location_admin': {
+          const technicianId = Number(msg.technicianId);
+          const lat = Number(msg.lat);
+          const lng = Number(msg.lng);
+          const seenAt = typeof msg.seenAt === 'string' ? msg.seenAt : new Date().toISOString();
+          if (isNaN(technicianId) || isNaN(lat) || isNaN(lng)) break;
+          setLiveLocations(prev => {
+            const next = new Map(prev);
+            next.set(technicianId, { lat, lng, seenAt });
+            return next;
+          });
+          break;
+        }
+
+        default:
+          break;
+      }
+    };
+
+    ws.onclose = () => {
+      setWsStatus('disconnected');
+      // Reconnect after 5 s
+      reconnectTimer.current = setTimeout(connectWs, 5000);
+    };
+
+    ws.onerror = () => {
+      ws.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    connectWs();
+    return () => {
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      wsRef.current?.close();
+    };
+  }, [connectWs]);
+
+  // ── Data fetching (fallback / initial load — long interval while WS is live) ─
   const { data: techData } = useAdminListTechnicians({
-    query: { queryKey: getAdminListTechniciansQueryKey(), refetchInterval: 15000 }
+    query: {
+      queryKey: getAdminListTechniciansQueryKey(),
+      // When WS is connected, poll rarely just as a safety net.
+      // When disconnected, fall back to 15 s polling.
+      refetchInterval: wsStatus === 'connected' ? 5 * 60 * 1000 : 15000,
+    }
   });
 
   const { data: reqData } = useAdminListRequests({}, {
-    query: { queryKey: getAdminListRequestsQueryKey(), refetchInterval: 15000 }
+    query: {
+      queryKey: getAdminListRequestsQueryKey(),
+      refetchInterval: wsStatus === 'connected' ? 5 * 60 * 1000 : 15000,
+    }
   });
 
-  const technicians = useMemo(() => techData?.technicians.filter(t => t.last_lat && t.last_lng) || [], [techData]);
+  // Merge DB-fetched technicians with live WS location overrides
+  const technicians = useMemo(() => {
+    const list = techData?.technicians ?? [];
+    return list
+      .map(t => {
+        const live = liveLocations.get(t.id);
+        if (live) {
+          return { ...t, last_lat: live.lat, last_lng: live.lng, last_seen_at: live.seenAt };
+        }
+        return t;
+      })
+      .filter(t => t.last_lat && t.last_lng);
+  }, [techData, liveLocations]);
+
   // Show active service requests by REQUEST status (not job status)
   // assigned = technician accepted; in_progress = service underway
   const activeRequests = useMemo(() => reqData?.requests.filter(r =>
@@ -83,7 +191,27 @@ export default function MapView() {
       {/* Overlay control panel */}
       <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl p-4 w-72 flex flex-col gap-4 pointer-events-auto">
         <div>
-          <h2 className="font-bold text-sm tracking-tight mb-1">Live Ops Map</h2>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="font-bold text-sm tracking-tight">Live Ops Map</h2>
+            <div className="flex items-center gap-1.5">
+              {wsStatus === 'connected' ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[10px] text-emerald-500 font-medium">Live</span>
+                </>
+              ) : wsStatus === 'connecting' ? (
+                <>
+                  <Wifi className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                  <span className="text-[10px] text-amber-500 font-medium">Connecting</span>
+                </>
+              ) : (
+                <>
+                  <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-[10px] text-muted-foreground font-medium">Polling</span>
+                </>
+              )}
+            </div>
+          </div>
           <p className="text-xs text-muted-foreground leading-tight">Tracking {technicians.length} technicians and {activeRequests.length} active jobs.</p>
         </div>
         

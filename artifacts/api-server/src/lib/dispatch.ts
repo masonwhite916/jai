@@ -12,13 +12,16 @@
  *
  * Room access control:
  *   "technicians"  – technicians only (auto-joined on auth_ok)
+ *   "admin"        – admin sessions only (auto-joined on auth_ok for admins)
  *   "job:{jobId}"  – customer who owns the request OR assigned technician
  *                    Pending (unassigned) jobs: any technician may join
  *
  * Location relay:
  *   Technician sends: { type: "location_update", lat, lng, jobId }
  *   Server verifies assignment, then relays:
- *     { type: "tech_location", lat, lng, jobId }  → "job:{jobId}" room
+ *     { type: "tech_location", lat, lng, jobId }          → "job:{jobId}" room
+ *     { type: "tech_location_admin", technicianId, lat,
+ *       lng, seenAt }                                      → "admin" room
  */
 
 import { WebSocketServer, WebSocket } from "ws";
@@ -28,12 +31,14 @@ import { db, users, jobs, serviceRequests } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
 import { setTechLocation } from "./techLocations";
+import { validateAdminToken } from "./adminSessions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface AuthedSocket extends WebSocket {
   userId:   number | undefined;
   userRole: string  | undefined;
+  isAdmin:  boolean;
   rooms:    Set<string>;
 }
 
@@ -58,6 +63,7 @@ class DispatchServer {
     this.wss.on("connection", (ws: AuthedSocket, _req: IncomingMessage) => {
       ws.userId   = undefined;
       ws.userRole = undefined;
+      ws.isAdmin  = false;
       ws.rooms    = new Set();
 
       ws.on("message", (raw) => void this.handleMessage(ws, raw));
@@ -91,6 +97,22 @@ class DispatchServer {
           this.send(ws, { type: "auth_error", error: "token required" });
           return;
         }
+
+        // Admin token path — validated against in-memory admin session store
+        if (token.startsWith("admin_")) {
+          if (!validateAdminToken(token)) {
+            this.send(ws, { type: "auth_error", error: "Invalid or expired admin token" });
+            return;
+          }
+          ws.isAdmin  = true;
+          ws.userRole = "admin";
+          ws.userId   = undefined; // admins have no user-table row
+          this.joinRoom(ws, "admin");
+          this.send(ws, { type: "auth_ok", role: "admin" });
+          break;
+        }
+
+        // Regular user (technician / customer) — validate against DB
         const now  = new Date();
         const rows = await db
           .select({ id: users.id, role: users.role })
@@ -116,11 +138,18 @@ class DispatchServer {
       }
 
       case "join": {
-        if (!ws.userId) {
+        // Must be authenticated — either a user with userId or an admin session
+        if (!ws.userId && !ws.isAdmin) {
           this.send(ws, { type: "error", error: "Not authenticated" });
           return;
         }
         const room = typeof msg.room === "string" ? msg.room : "";
+
+        // Admin room — only admin sessions may join (server already auto-joins on auth)
+        if (room === "admin") {
+          if (ws.isAdmin) this.joinRoom(ws, room);
+          break;
+        }
 
         if (room.startsWith("job:")) {
           const jobId = Number(room.slice(4));
@@ -194,8 +223,19 @@ class DispatchServer {
         // Persist last-known position for the admin live map
         setTechLocation(ws.userId, lat, lng);
 
+        const seenAt = new Date().toISOString();
+
         // Relay to the job room (keyed by job ID) so the customer's tracking screen updates
         this.broadcastToRoom(`job:${jobId}`, { type: "tech_location", lat, lng, jobId });
+
+        // Relay to the admin room so the dispatch map updates in real-time
+        this.broadcastToRoom("admin", {
+          type: "tech_location_admin",
+          technicianId: ws.userId,
+          lat,
+          lng,
+          seenAt,
+        });
         break;
       }
 
