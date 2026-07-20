@@ -161,3 +161,101 @@ test("bad admin token receives auth_error and is not joined to admin room", asyn
 
   wsA.close();
 });
+
+test("location_update for unassigned job is silently dropped — admin room gets no tech_location_admin", async () => {
+  resetQueue();
+
+  // Admin connects and authenticates.
+  const adminSession = createAdminSession();
+  const adminWs = await connect(port);
+  const adminAuthReply = await sendAndReceive(adminWs, {
+    type: "auth",
+    token: adminSession.token,
+  });
+  assert.equal(adminAuthReply.type, "auth_ok", "admin should receive auth_ok");
+
+  // Technician connects and authenticates.
+  const TECH_ID = 11;
+  queueResult([{ id: TECH_ID, role: "technician" }]);
+
+  const techWs = await connect(port);
+  const techAuthReply = await sendAndReceive(techWs, {
+    type: "auth",
+    token: "valid_tech_token_2",
+  });
+  assert.equal(techAuthReply.type, "auth_ok", "technician should receive auth_ok");
+
+  // Queue an EMPTY result for the assignment check — technician is NOT assigned.
+  queueResult([]); // empty → not assigned → handler silently returns
+
+  // Arm the admin listener before the tech sends.
+  const adminReceivedMsg = await new Promise((resolve) => {
+    adminWs.once("message", () => resolve(true));
+    techWs.send(
+      JSON.stringify({ type: "location_update", lat: 25.76, lng: -80.19, jobId: 99 })
+    );
+    setTimeout(() => resolve(false), 200);
+  });
+
+  assert.equal(
+    adminReceivedMsg,
+    false,
+    "admin room must NOT receive tech_location_admin when technician is not assigned to the job"
+  );
+
+  adminWs.close();
+  techWs.close();
+});
+
+test("location_update with invalid (NaN) jobId is silently dropped — no crash, no relay to admin", async () => {
+  resetQueue();
+
+  // Admin connects and authenticates.
+  const adminSession = createAdminSession();
+  const adminWs = await connect(port);
+  const adminAuthReply = await sendAndReceive(adminWs, {
+    type: "auth",
+    token: adminSession.token,
+  });
+  assert.equal(adminAuthReply.type, "auth_ok", "admin should receive auth_ok");
+
+  // Technician connects and authenticates.
+  const TECH_ID = 13;
+  queueResult([{ id: TECH_ID, role: "technician" }]);
+
+  const techWs = await connect(port);
+  const techAuthReply = await sendAndReceive(techWs, {
+    type: "auth",
+    token: "valid_tech_token_3",
+  });
+  assert.equal(techAuthReply.type, "auth_ok", "technician should receive auth_ok");
+
+  // Send a location_update with a non-numeric jobId. The NaN guard at line 209
+  // of dispatch.ts should cause an early return before any DB query is issued.
+  // No queueResult needed — the handler must not reach the DB call at all.
+  const adminReceivedMsg = await new Promise((resolve) => {
+    adminWs.once("message", () => resolve(true));
+    techWs.send(
+      JSON.stringify({ type: "location_update", lat: 25.76, lng: -80.19, jobId: "not-a-number" })
+    );
+    setTimeout(() => resolve(false), 200);
+  });
+
+  assert.equal(
+    adminReceivedMsg,
+    false,
+    "admin room must NOT receive any event when jobId is NaN"
+  );
+
+  // Server must still be alive — a subsequent valid-looking message should not
+  // throw. Use the admin socket to confirm the server is still responsive.
+  // (A crash would close the connection; checking readyState is sufficient.)
+  assert.equal(
+    adminWs.readyState,
+    adminWs.OPEN,
+    "server must still be running after a NaN jobId message"
+  );
+
+  adminWs.close();
+  techWs.close();
+});
