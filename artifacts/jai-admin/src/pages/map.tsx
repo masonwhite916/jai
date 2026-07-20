@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListRequests, getAdminListRequestsQueryKey } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
-import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff } from 'lucide-react';
+import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 // Fix Leaflet's default icon paths issue with Vite
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -48,19 +49,45 @@ function getFreshness(seenAt: string | null | undefined): Freshness {
   return 'offline';
 }
 
+// ── Idle detection ─────────────────────────────────────────────────────────────
+// A technician is "idle" when their GPS is still reporting (not offline)
+// but their position hasn't changed significantly in > IDLE_MINUTES.
+const IDLE_MINUTES = 15;
+
+function isIdleTech(
+  freshness: Freshness,
+  lastMovedAt: string | null | undefined,
+): boolean {
+  if (freshness === 'offline') return false; // offline is its own state
+  if (!lastMovedAt) return false;
+  return differenceInMinutes(new Date(), new Date(lastMovedAt)) >= IDLE_MINUTES;
+}
+
 const freshnessMeta: Record<Freshness, { bg: string; ring: string; label: string; badgeClass: string }> = {
   fresh:   { bg: '#10b981', ring: '#6ee7b7', label: 'Live',    badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-300' },
   stale:   { bg: '#f59e0b', ring: '#fcd34d', label: 'Stale',   badgeClass: 'bg-amber-100 text-amber-700 border-amber-300' },
   offline: { bg: '#94a3b8', ring: '#cbd5e1', label: 'Offline', badgeClass: 'bg-slate-100 text-slate-500 border-slate-300' },
 };
 
-const createTechIcon = (freshness: Freshness) => {
+const createTechIcon = (freshness: Freshness, idle: boolean) => {
   const { bg, ring } = freshnessMeta[freshness];
   const opacity = freshness === 'offline' ? '0.55' : '1';
+
+  // Navigation arrow SVG (same as before)
+  const arrowSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>`;
+
+  // Small warning badge overlaid on bottom-right when idle
+  const idleBadge = idle
+    ? `<div style="position:absolute;bottom:-4px;right:-4px;width:14px;height:14px;border-radius:50%;background:#f97316;border:1.5px solid white;display:flex;align-items:center;justify-content:center;">
+         <svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+       </div>`
+    : '';
+
   return divIcon({
     className: 'custom-div-icon',
-    html: `<div style="opacity:${opacity};width:32px;height:32px;border-radius:8px;background:${bg};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35),0 0 0 3px ${ring};display:flex;align-items:center;justify-content:center;overflow:hidden;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+    html: `<div style="position:relative;opacity:${opacity};width:32px;height:32px;border-radius:8px;background:${bg};border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,0.35),0 0 0 3px ${ring};display:flex;align-items:center;justify-content:center;overflow:visible;">
+             ${arrowSvg}
+             ${idleBadge}
            </div>`,
     iconSize: [32, 32],
     iconAnchor: [16, 16],
@@ -71,18 +98,24 @@ const createTechIcon = (freshness: Freshness) => {
 // ── WS connection status ───────────────────────────────────────────────────────
 type WsStatus = 'connecting' | 'connected' | 'disconnected';
 
-// ── Live location overrides from WS (technicianId → {lat, lng, seenAt}) ──────
+// ── Live location overrides from WS (technicianId → {lat, lng, seenAt, lastMovedAt}) ──────
 interface LiveLocation {
   lat: number;
   lng: number;
   seenAt: string;
+  lastMovedAt: string;
 }
+
+// ── Snooze state ───────────────────────────────────────────────────────────────
+const SNOOZE_MINUTES = 30;
 
 export default function MapView() {
   const [mounted, setMounted] = useState(false);
   const [wsStatus, setWsStatus] = useState<WsStatus>('connecting');
   // Map of technicianId → live location pushed over WS
   const [liveLocations, setLiveLocations] = useState<Map<number, LiveLocation>>(new Map());
+  // Map of technicianId → snooze-until timestamp
+  const [snoozed, setSnoozed] = useState<Map<number, Date>>(new Map());
   // Ticks every 30 s so freshness badges and polling interval update without new WS data
   const [tick, setTick] = useState(0);
 
@@ -156,10 +189,11 @@ export default function MapView() {
           const lat = Number(msg.lat);
           const lng = Number(msg.lng);
           const seenAt = typeof msg.seenAt === 'string' ? msg.seenAt : new Date().toISOString();
+          const lastMovedAt = typeof msg.lastMovedAt === 'string' ? msg.lastMovedAt : seenAt;
           if (isNaN(technicianId) || isNaN(lat) || isNaN(lng)) break;
           setLiveLocations(prev => {
             const next = new Map(prev);
-            next.set(technicianId, { lat, lng, seenAt });
+            next.set(technicianId, { lat, lng, seenAt, lastMovedAt });
             return next;
           });
           break;
@@ -214,18 +248,11 @@ export default function MapView() {
   }, [connectWs]);
 
   // ── Derive polling interval before queries ───────────────────────────────────
-  // hasFreshLocation reads directly from liveLocations (WS-pushed data) so
-  // it doesn't create a circular dependency with techData.
-  // tick (updated every 30 s) ensures this re-evaluates even with no new WS push.
   const hasFreshLocation = useMemo(
     () => Array.from(liveLocations.values()).some(loc => getFreshness(loc.seenAt) === 'fresh'),
-    // tick is intentional: it forces re-evaluation every 30 s so that a location
-    // that ages past the 2-min threshold causes the polling interval to revert to 15 s
-    // even when no new WS messages arrive.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [liveLocations, tick]
   );
-  // Only back off polling when WS is live AND at least one fresh GPS push arrived.
   const wsLiveAndFresh = wsStatus === 'connected' && hasFreshLocation;
   const pollInterval = wsLiveAndFresh ? 5 * 60 * 1000 : 15000;
 
@@ -243,9 +270,15 @@ export default function MapView() {
       .map(t => {
         const live = liveLocations.get(t.id);
         if (live) {
-          return { ...t, last_lat: live.lat, last_lng: live.lng, last_seen_at: live.seenAt };
+          return {
+            ...t,
+            last_lat: live.lat,
+            last_lng: live.lng,
+            last_seen_at: live.seenAt,
+            last_moved_at: live.lastMovedAt,
+          };
         }
-        return t;
+        return { ...t, last_moved_at: undefined as string | undefined };
       })
       .filter(t => t.last_lat && t.last_lng);
   }, [techData, liveLocations]);
@@ -258,11 +291,34 @@ export default function MapView() {
   });
 
   // Show active service requests by REQUEST status (not job status)
-  // assigned = technician accepted; in_progress = service underway
   const activeRequests = useMemo(() => reqData?.requests.filter(r =>
     (r.status === 'pending' || r.status === 'assigned' || r.status === 'in_progress') &&
     r.location_lat && r.location_lng
   ) || [], [reqData]);
+
+  // ── Idle technician list (non-snoozed) ────────────────────────────────────────
+  // tick ensures this re-evaluates every 30 s even without new WS data
+  const idleTechs = useMemo(() => {
+    const now = new Date();
+    return technicians.filter(t => {
+      const freshness = getFreshness(t.last_seen_at as string | null | undefined);
+      const idle = isIdleTech(freshness, t.last_moved_at);
+      if (!idle) return false;
+      const snoozeUntil = snoozed.get(t.id);
+      return !snoozeUntil || snoozeUntil < now;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [technicians, snoozed, tick]);
+
+  const snooze = useCallback((techId: number) => {
+    setSnoozed(prev => {
+      const next = new Map(prev);
+      const until = new Date();
+      until.setMinutes(until.getMinutes() + SNOOZE_MINUTES);
+      next.set(techId, until);
+      return next;
+    });
+  }, []);
 
   // Default to SF Bay Area if no data
   const center: [number, number] = technicians.length > 0 
@@ -299,6 +355,33 @@ export default function MapView() {
           </div>
           <p className="text-xs text-muted-foreground leading-tight">Tracking {technicians.length} technicians and {activeRequests.length} active jobs.</p>
         </div>
+
+        {/* ── Idle alert panel ─────────────────────────────────────────────── */}
+        {idleTechs.length > 0 && (
+          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex flex-col gap-2">
+            <div className="flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+              <span className="text-[11px] font-semibold text-orange-700">
+                {idleTechs.length} technician{idleTechs.length > 1 ? 's' : ''} idle ≥ {IDLE_MINUTES} min
+              </span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {idleTechs.map(t => (
+                <li key={t.id} className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] text-orange-800 font-medium truncate">{t.name || `Tech #${t.id}`}</span>
+                  <button
+                    onClick={() => snooze(t.id)}
+                    className="flex items-center gap-1 text-[10px] text-orange-600 hover:text-orange-800 shrink-0"
+                    title={`Snooze alert for ${SNOOZE_MINUTES} min`}
+                  >
+                    <BellOff className="w-3 h-3" />
+                    Snooze
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         
         <div className="space-y-2 text-xs">
           {/* Technician pin freshness legend */}
@@ -314,6 +397,11 @@ export default function MapView() {
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-sm shrink-0 opacity-55" style={{ background: '#94a3b8' }} />
             <span>Offline <span className="text-muted-foreground">(&gt; 10 min)</span></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-sm shrink-0 bg-orange-500" />
+            <AlertTriangle className="w-2.5 h-2.5 text-orange-500 -ml-1 shrink-0" />
+            <span>Idle <span className="text-muted-foreground">(&gt; {IDLE_MINUTES} min no movement)</span></span>
           </div>
           {/* Job pin legend */}
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold pt-1">Jobs</p>
@@ -380,23 +468,37 @@ export default function MapView() {
             </Marker>
           ))}
 
-          {/* Technicians — icon color encodes GPS freshness */}
+          {/* Technicians — icon color encodes GPS freshness; badge shows idle state */}
           {technicians.map(tech => {
             const freshness = getFreshness(tech.last_seen_at as string | null | undefined);
             const meta = freshnessMeta[freshness];
+            const idle = isIdleTech(freshness, tech.last_moved_at);
+            const now = new Date();
+            const snoozedUntil = snoozed.get(tech.id);
+            const isSnoozed = snoozedUntil && snoozedUntil >= now;
+            const showIdleAlert = idle && !isSnoozed;
+
             return (
               <Marker
                 key={`tech-${tech.id}`}
                 position={[tech.last_lat as number, tech.last_lng as number]}
-                icon={createTechIcon(freshness)}
+                icon={createTechIcon(freshness, showIdleAlert)}
               >
                 <Popup>
                   <div className="space-y-2 min-w-[180px]">
                     <div className="flex items-center justify-between border-b border-border pb-2 gap-2">
                       <span className="font-bold text-sm">{tech.name || 'Unknown Tech'}</span>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${meta.badgeClass}`}>
-                        {meta.label}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {showIdleAlert && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded border bg-orange-100 text-orange-700 border-orange-300 flex items-center gap-0.5">
+                            <AlertTriangle className="w-2.5 h-2.5" />
+                            Idle
+                          </span>
+                        )}
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${meta.badgeClass}`}>
+                          {meta.label}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-xs space-y-1">
                       <div className="flex items-center gap-2 text-muted-foreground">
@@ -411,7 +513,35 @@ export default function MapView() {
                             : 'unknown'}
                         </span>
                       </div>
+                      {idle && tech.last_moved_at && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <AlertTriangle className="w-3.5 h-3.5 text-orange-500" />
+                          <span className="text-orange-600 text-[10px]">
+                            No movement {formatDistanceToNow(new Date(tech.last_moved_at), { addSuffix: true })}
+                          </span>
+                        </div>
+                      )}
                     </div>
+                    {idle && (
+                      <div className="pt-1 border-t border-border">
+                        {isSnoozed ? (
+                          <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                            <BellOff className="w-3 h-3" />
+                            Alert snoozed until {snoozedUntil!.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full h-6 text-[10px] gap-1"
+                            onClick={() => snooze(tech.id)}
+                          >
+                            <BellOff className="w-3 h-3" />
+                            Snooze alert ({SNOOZE_MINUTES} min)
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </Popup>
               </Marker>
