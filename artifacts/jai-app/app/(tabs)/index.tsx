@@ -80,58 +80,6 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.root}>
-      {/* ── Gradient header with curved bottom ───────────────────────────── */}
-      <LinearGradient
-        colors={['#1E0D4E', '#3D2080', '#6A2597']}
-        locations={[0, 0.55, 1]}
-        style={[styles.header, {
-          paddingTop: insets.top + 14 + (Platform.OS === 'web' ? 67 : 0),
-        }]}
-      >
-        {/* Logo row */}
-        <View style={[styles.logoRow, { flexDirection: rowDir }]}>
-          <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
-        </View>
-
-        {/* Greeting */}
-        <Text style={[styles.greeting, { fontFamily: font.regular, textAlign: align }]}>
-          {t('goodMorning')}
-        </Text>
-        <Text style={[styles.userName, { fontFamily: font.bold, textAlign: align }]}>
-          {firstName} 👋
-        </Text>
-
-        {/* Location */}
-        <TouchableOpacity
-          style={[styles.locationPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start', maxWidth: '85%' }]}
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); gps.refresh(); }}
-          disabled={gps.status === 'loading'}
-          activeOpacity={0.7}
-        >
-          {gps.status === 'loading'
-            ? <ActivityIndicator size="small" color="#C21875" style={{ transform: [{ scale: 0.65 }] }} />
-            : <Ionicons name="location-sharp" size={13} color="#C21875" />}
-          <Text style={[styles.locationText, { fontFamily: font.regular }]} numberOfLines={1}>
-            {gps.status === 'loading'
-              ? t('locating')
-              : gps.city ?? gps.shortAddress ?? (gps.status === 'ready' ? t('locationCity') : t('tapToLocate'))}
-          </Text>
-          <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.5)" />
-        </TouchableOpacity>
-
-        {/* Member pill */}
-        {user && user.membership !== 'none' && (
-          <TouchableOpacity
-            style={[styles.memberPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
-            onPress={() => router.push('/(tabs)/membership' as any)}
-          >
-            <Ionicons name="star" size={12} color="#FFD700" />
-            <Text style={[styles.memberPillText, { fontFamily: font.semibold }]}>{t('premiumMember')}</Text>
-            <Text style={[styles.memberPoints, { fontFamily: font.bold }]}>{user.points} {t('pts')}</Text>
-          </TouchableOpacity>
-        )}
-      </LinearGradient>
-
       <ScrollView
         style={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -139,6 +87,57 @@ export default function HomeScreen() {
           paddingBottom: insets.bottom + 140 + (Platform.OS === 'web' ? 34 : 0),
         }}
       >
+        {/* ── Gradient header with curved bottom ───────────────────────────── */}
+        <LinearGradient
+          colors={['#1E0D4E', '#3D2080', '#6A2597']}
+          locations={[0, 0.55, 1]}
+          style={[styles.header, {
+            paddingTop: insets.top + 14 + (Platform.OS === 'web' ? 67 : 0),
+          }]}
+        >
+          {/* Logo row */}
+          <View style={[styles.logoRow, { flexDirection: rowDir }]}>
+            <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
+          </View>
+
+          {/* Greeting */}
+          <Text style={[styles.greeting, { fontFamily: font.regular, textAlign: align }]}>
+            {t('goodMorning')}
+          </Text>
+          <Text style={[styles.userName, { fontFamily: font.bold, textAlign: align }]}>
+            {firstName} 👋
+          </Text>
+
+          {/* Location */}
+          <TouchableOpacity
+            style={[styles.locationPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start', maxWidth: '85%' }]}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); gps.refresh(); }}
+            disabled={gps.status === 'loading'}
+            activeOpacity={0.7}
+          >
+            {gps.status === 'loading'
+              ? <ActivityIndicator size="small" color="#C21875" style={{ transform: [{ scale: 0.65 }] }} />
+              : <Ionicons name="location-sharp" size={13} color="#C21875" />}
+            <Text style={[styles.locationText, { fontFamily: font.regular }]} numberOfLines={1}>
+              {gps.status === 'loading'
+                ? t('locating')
+                : gps.city ?? gps.shortAddress ?? (gps.status === 'ready' ? t('locationCity') : t('tapToLocate'))}
+            </Text>
+            <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.5)" />
+          </TouchableOpacity>
+
+          {/* Member pill */}
+          {user && user.membership !== 'none' && (
+            <TouchableOpacity
+              style={[styles.memberPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
+              onPress={() => router.push('/(tabs)/membership' as any)}
+            >
+              <Ionicons name="star" size={12} color="#FFD700" />
+              <Text style={[styles.memberPillText, { fontFamily: font.semibold }]}>{t('premiumMember')}</Text>
+              <Text style={[styles.memberPoints, { fontFamily: font.bold }]}>{user.points} {t('pts')}</Text>
+            </TouchableOpacity>
+          )}
+        </LinearGradient>
         {/* ── SOS Emergency Card ─────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.sosCard}
@@ -344,7 +343,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 20,
     elevation: 14,
-    zIndex: 2,
   },
   logoRow: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   logo: { width: 110, height: 48, margin: 1 },
@@ -365,7 +363,7 @@ const styles = StyleSheet.create({
   memberPillText: { fontSize: 12, color: 'rgba(255,255,255,0.9)' },
   memberPoints: { fontSize: 12, color: '#FFD700' },
 
-  scroll: { flex: 1, marginTop: -2 },
+  scroll: { flex: 1 },
 
   // SOS Card
   sosCard: {
