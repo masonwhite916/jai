@@ -1,8 +1,10 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView,
+  View, Text, StyleSheet, TouchableOpacity, Platform, ScrollView, Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const JAI_LOGO = require('../assets/images/logo.png');
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/context/AppContext';
@@ -53,9 +55,7 @@ export default function RoleScreen() {
 
         {/* Hero */}
         <View style={styles.hero}>
-          <LinearGradient colors={['#C21875', '#7B2A9E']} style={styles.logoGrad}>
-            <Text style={[styles.logoJ, { fontFamily: font.bold }]}>JAI</Text>
-          </LinearGradient>
+          <Image source={JAI_LOGO} style={styles.logoImg} resizeMode="contain" />
           <Text style={[styles.title, { fontFamily: font.bold }]}>
             {isAR ? 'مرحباً بك في جاي' : 'Welcome to JAI'}
           </Text>
@@ -122,14 +122,10 @@ const styles = StyleSheet.create({
   langText: { color: '#FFFFFF', fontSize: 13 },
 
   hero: { alignItems: 'center', marginBottom: 32 },
-  logoGrad: {
-    width: 72, height: 72, borderRadius: 22,
-    alignItems: 'center', justifyContent: 'center',
+  logoImg: {
+    width: 88, height: 88, borderRadius: 22,
     marginBottom: 20,
-    shadowColor: '#C21875', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5, shadowRadius: 16, elevation: 12,
   },
-  logoJ: { color: '#FFFFFF', fontSize: 26, letterSpacing: 1 },
   title: { color: '#FFFFFF', fontSize: 28, marginBottom: 8 },
   subtitle: { color: 'rgba(255,255,255,0.6)', fontSize: 16 },
 
