@@ -22,40 +22,41 @@ export default function DriverProfileScreen() {
 
   if (!driver) return null;
 
+  const doSignOut = async () => {
+    await driverLogout();
+    await setRole(null);
+    router.replace('/role');
+  };
+
   const handleLogout = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (Platform.OS === 'web') {
+      const msg = isRTL ? 'هل تريد تسجيل الخروج؟' : 'Sign out?';
+      if ((globalThis as any).confirm?.(msg)) doSignOut();
+      return;
+    }
     Alert.alert(
       t('driverLogout'),
       isRTL ? 'هل تريد تسجيل الخروج؟' : 'Do you want to sign out?',
       [
         { text: t('no'), style: 'cancel' },
-        {
-          text: t('yes'),
-          style: 'destructive',
-          onPress: async () => {
-            await driverLogout();
-            await setRole(null);
-            router.replace('/role');
-          },
-        },
+        { text: t('yes'), style: 'destructive', onPress: doSignOut },
       ]
     );
   };
 
   const switchRole = () => {
+    if (Platform.OS === 'web') {
+      const msg = isRTL ? 'العودة لصفحة اختيار الدور؟' : 'Switch to the role selection screen?';
+      if ((globalThis as any).confirm?.(msg)) doSignOut();
+      return;
+    }
     Alert.alert(
       isRTL ? 'تبديل الدور' : 'Switch role',
       isRTL ? 'العودة لصفحة اختيار الدور؟' : 'Go back to the role selection screen?',
       [
         { text: t('no'), style: 'cancel' },
-        {
-          text: t('yes'),
-          onPress: async () => {
-            await driverLogout();
-            await setRole(null);
-            router.replace('/role');
-          },
-        },
+        { text: t('yes'), onPress: doSignOut },
       ]
     );
   };

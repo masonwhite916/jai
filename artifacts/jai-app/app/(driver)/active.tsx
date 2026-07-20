@@ -70,7 +70,11 @@ export default function DriverActiveScreen() {
   };
 
   const handleCancel = () => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (Platform.OS === 'web') {
+      if ((globalThis as any).confirm?.(t('driverConfirmCancel'))) cancelJob(activeJob.id);
+      return;
+    }
     Alert.alert(t('driverCancelJob'), t('driverConfirmCancel'), [
       { text: t('no'), style: 'cancel' },
       { text: t('yes'), style: 'destructive', onPress: () => cancelJob(activeJob.id) },
