@@ -259,3 +259,100 @@ test("location_update with invalid (NaN) jobId is silently dropped — no crash,
   adminWs.close();
   techWs.close();
 });
+
+test("concurrent location_updates from two technicians both reach admin room with correct payloads", async () => {
+  resetQueue();
+
+  // Admin connects and authenticates.
+  const adminSession = createAdminSession();
+  const adminWs = await connect(port);
+  const adminAuthReply = await sendAndReceive(adminWs, {
+    type: "auth",
+    token: adminSession.token,
+  });
+  assert.equal(adminAuthReply.type, "auth_ok", "admin should receive auth_ok");
+
+  // Technician A connects and authenticates.
+  const TECH_A_ID = 21;
+  queueResult([{ id: TECH_A_ID, role: "technician" }]);
+
+  const techAWs = await connect(port);
+  const techAAuthReply = await sendAndReceive(techAWs, {
+    type: "auth",
+    token: "valid_tech_token_a",
+  });
+  assert.equal(techAAuthReply.type, "auth_ok", "tech A should receive auth_ok");
+  assert.equal(techAAuthReply.userId, TECH_A_ID, "tech A userId should match");
+
+  // Technician B connects and authenticates.
+  const TECH_B_ID = 22;
+  queueResult([{ id: TECH_B_ID, role: "technician" }]);
+
+  const techBWs = await connect(port);
+  const techBAuthReply = await sendAndReceive(techBWs, {
+    type: "auth",
+    token: "valid_tech_token_b",
+  });
+  assert.equal(techBAuthReply.type, "auth_ok", "tech B should receive auth_ok");
+  assert.equal(techBAuthReply.userId, TECH_B_ID, "tech B userId should match");
+
+  // Queue assignment-check results for both technicians (A then B).
+  const JOB_A_ID = 101;
+  const JOB_B_ID = 102;
+  queueResult([{ id: JOB_A_ID }]); // tech A is assigned to job A
+  queueResult([{ id: JOB_B_ID }]); // tech B is assigned to job B
+
+  const LAT_A = 25.7617;
+  const LNG_A = -80.1918;
+  const LAT_B = 25.8000;
+  const LNG_B = -80.2500;
+
+  // Collect exactly two messages from the admin socket.
+  const adminMessages = await new Promise((resolve, reject) => {
+    const msgs = [];
+    const timer = setTimeout(() => {
+      reject(new Error(`Timed out waiting for 2 admin messages; received ${msgs.length}`));
+    }, 2000);
+    adminWs.on("message", (raw) => {
+      try {
+        msgs.push(JSON.parse(String(raw)));
+      } catch (e) {
+        clearTimeout(timer);
+        reject(e);
+        return;
+      }
+      if (msgs.length === 2) {
+        clearTimeout(timer);
+        adminWs.removeAllListeners("message");
+        resolve(msgs);
+      }
+    });
+
+    // Send both location_updates simultaneously (no await between them).
+    techAWs.send(JSON.stringify({ type: "location_update", lat: LAT_A, lng: LNG_A, jobId: JOB_A_ID }));
+    techBWs.send(JSON.stringify({ type: "location_update", lat: LAT_B, lng: LNG_B, jobId: JOB_B_ID }));
+  });
+
+  assert.equal(adminMessages.length, 2, "admin must receive exactly 2 tech_location_admin events");
+
+  // Both messages must be of the right type.
+  for (const msg of adminMessages) {
+    assert.equal(msg.type, "tech_location_admin", "each event type should be tech_location_admin");
+    assert.ok(typeof msg.seenAt === "string", "seenAt should be an ISO timestamp string");
+  }
+
+  // Partition messages by technicianId and verify coordinates.
+  const byTech = Object.fromEntries(adminMessages.map((m) => [m.technicianId, m]));
+
+  assert.ok(byTech[TECH_A_ID], "admin must receive an event for tech A");
+  assert.equal(byTech[TECH_A_ID].lat, LAT_A, "tech A lat should be relayed correctly");
+  assert.equal(byTech[TECH_A_ID].lng, LNG_A, "tech A lng should be relayed correctly");
+
+  assert.ok(byTech[TECH_B_ID], "admin must receive an event for tech B");
+  assert.equal(byTech[TECH_B_ID].lat, LAT_B, "tech B lat should be relayed correctly");
+  assert.equal(byTech[TECH_B_ID].lng, LNG_B, "tech B lng should be relayed correctly");
+
+  adminWs.close();
+  techAWs.close();
+  techBWs.close();
+});
