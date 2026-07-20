@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Dimensions,
-  TouchableOpacity, Image, Platform,
+  TouchableOpacity, Pressable, Image, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -130,15 +130,14 @@ export default function Onboarding() {
           {/* Dots */}
           <View style={[styles.dotsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
             {SLIDES.map((_, i) => (
-              <TouchableOpacity
+              <Pressable
                 key={i}
-                activeOpacity={0.7}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  flatRef.current?.scrollToIndex({ index: i, animated: true });
+                  flatRef.current?.scrollToOffset({ offset: i * width, animated: true });
                   setIdx(i);
                 }}
-                hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+                style={{ padding: 10 }}
               >
                 <View
                   style={[
@@ -147,7 +146,7 @@ export default function Onboarding() {
                     i === idx && { backgroundColor: slide.accentColor, width: 28 },
                   ]}
                 />
-              </TouchableOpacity>
+              </Pressable>
             ))}
           </View>
 
@@ -202,6 +201,7 @@ const styles = StyleSheet.create({
   card: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     height: CARD_H,
+    zIndex: 10,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 36, borderTopRightRadius: 36,
     paddingHorizontal: 28, paddingTop: 12,
