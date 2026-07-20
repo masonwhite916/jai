@@ -78,12 +78,9 @@ function FloatingTabBar({ state, navigation }: { state: any; navigation: any }) 
                   colors={['#C21875', '#8B35BB']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
-                  style={styles.tabInner}
+                  style={[styles.tabInner, { paddingHorizontal: 18 }]}
                 >
                   <Ionicons name={meta.iconActive as any} size={21} color="#FFFFFF" />
-                  <Text style={[styles.activeLabel, { fontFamily: labelFont }]} numberOfLines={1}>
-                    {label}
-                  </Text>
                 </LinearGradient>
               ) : (
                 /* Inactive: plain View, badge inline */
