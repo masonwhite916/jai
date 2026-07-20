@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { CheckCircle2, ArrowRight, Phone } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
@@ -8,6 +9,16 @@ export default function PaymentSuccess() {
   const { t, isRTL } = useLanguage();
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
   const [, navigate] = useLocation();
+
+  useEffect(() => {
+    const meta = document.createElement('meta');
+    meta.name = 'robots';
+    meta.content = 'noindex, nofollow';
+    document.head.appendChild(meta);
+    return () => {
+      document.head.removeChild(meta);
+    };
+  }, []);
 
   return (
     <div className={`min-h-screen bg-[#09061A] ${arabic}`}>
