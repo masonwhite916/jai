@@ -20,7 +20,7 @@ type Step = 'phone' | 'otp';
 export default function Auth() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { login } = useApp();
+  const { login, loginAsGuest } = useApp();
   const { t, isRTL, font, lang, toggleLanguage } = useLanguage();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -81,7 +81,7 @@ export default function Auth() {
 
   async function handleGuest() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await login({ ...DEFAULT_USER, id: 'guest', name: 'Guest User', membership: 'none' });
+    await loginAsGuest({ ...DEFAULT_USER, id: 'guest', name: 'Guest User', membership: 'none' });
     router.replace('/(tabs)');
   }
 

@@ -26,6 +26,7 @@ interface AppContextType {
   user: User | null;
   markOnboardingDone: () => Promise<void>;
   login: (user: User) => Promise<void>;
+  loginAsGuest: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
 }
@@ -48,6 +49,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isGuest, setIsGuest] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (userData) {
         setUser(JSON.parse(userData));
         setIsAuthenticated(true);
+        setIsGuest(false);
       }
     } catch {
       // ignore errors
@@ -81,25 +84,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem('jai_user', JSON.stringify(userData));
     setUser(userData);
     setIsAuthenticated(true);
+    setIsGuest(false);
+  }
+
+  async function loginAsGuest(userData: User) {
+    // Guest sessions are intentionally not persisted — clear any residual stored session first
+    await AsyncStorage.removeItem('jai_user');
+    setUser(userData);
+    setIsAuthenticated(true);
+    setIsGuest(true);
   }
 
   async function logout() {
     await AsyncStorage.removeItem('jai_user');
     setUser(null);
     setIsAuthenticated(false);
+    setIsGuest(false);
   }
 
   async function updateUser(updates: Partial<User>) {
     if (!user) return;
     const updated = { ...user, ...updates };
-    await AsyncStorage.setItem('jai_user', JSON.stringify(updated));
+    // Never persist guest sessions to storage
+    if (!isGuest) {
+      await AsyncStorage.setItem('jai_user', JSON.stringify(updated));
+    }
     setUser(updated);
   }
 
   return (
     <AppContext.Provider value={{
       isLoading, hasSeenOnboarding, isAuthenticated, user,
-      markOnboardingDone, login, logout, updateUser,
+      markOnboardingDone, login, loginAsGuest, logout, updateUser,
     }}>
       {children}
     </AppContext.Provider>
