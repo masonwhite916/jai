@@ -32,6 +32,10 @@ interface AppContextType {
   loginAsGuest: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
+  // Notifications
+  notifReadIds: string[];
+  markNotifRead: (id: string) => void;
+  markAllNotifsRead: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -74,6 +78,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   const [role, setRoleState] = useState<'customer' | 'technician' | null>(
     preloaded ? initialSession.role : null,
   );
+  const [notifReadIds, setNotifReadIds] = useState<string[]>([]);
 
   const isGuestRef = useRef(isGuest);
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
@@ -167,6 +172,14 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setIsGuest(false);
   }
 
+  function markNotifRead(id: string) {
+    setNotifReadIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  }
+
+  function markAllNotifsRead() {
+    setNotifReadIds(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
+  }
+
   async function updateUser(updates: Partial<User>) {
     if (!user) return;
     const updated = { ...user, ...updates };
@@ -181,6 +194,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     <AppContext.Provider value={{
       isLoading, hasSeenOnboarding, isAuthenticated, user, role,
       setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser,
+      notifReadIds, markNotifRead, markAllNotifsRead,
     }}>
       {children}
     </AppContext.Provider>

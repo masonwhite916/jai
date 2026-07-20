@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
+import { useApp } from '@/context/AppContext';
 
 export default function NotificationsScreen() {
   const insets = useSafeAreaInsets();
   const { t, isRTL, font } = useLanguage();
+  const { notifReadIds, markNotifRead, markAllNotifsRead } = useApp();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
 
@@ -27,18 +29,17 @@ export default function NotificationsScreen() {
     system: { icon: 'information-circle', color: '#F39C12', bg: '#FEF6E8' },
   };
 
-  const [readIds, setReadIds] = useState<string[]>([]);
-  const isRead = (n: { id: string; read: boolean }) => n.read || readIds.includes(n.id);
+  const isRead = (n: { id: string; read: boolean }) => n.read || notifReadIds.includes(n.id);
   const unreadCount = NOTIFICATIONS.filter(n => !isRead(n)).length;
 
   function markRead(id: string) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setReadIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    markNotifRead(id);
   }
 
   function markAllRead() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setReadIds(NOTIFICATIONS.map(n => n.id));
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    markAllNotifsRead();
   }
 
   return (

@@ -7,6 +7,7 @@ import { Tabs } from 'expo-router';
 import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '@/context/LanguageContext';
+import { useApp } from '@/context/AppContext';
 import * as Haptics from 'expo-haptics';
 
 // ─── iOS 26+ Liquid Glass ───────────────────────────────────────────────────
@@ -31,12 +32,14 @@ const TAB_META = {
   profile:       { iconDefault: 'person-outline',        iconActive: 'person',        labelEn: 'Profile',  labelAr: 'حسابي'    },
 } as const;
 
-const BADGE: Record<string, number> = { notifications: 2 };
+const NOTIF_IDS = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'];
 
 // ─── Floating Pill Tab Bar (no absoluteFillObject inside tabs) ───────────────
 function FloatingTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const { lang } = useLanguage();
+  const { notifReadIds } = useApp();
+  const unreadNotifs = NOTIF_IDS.filter(id => !notifReadIds.includes(id)).length;
 
   return (
     <View
@@ -57,7 +60,7 @@ function FloatingTabBar({ state, navigation }: { state: any; navigation: any }) 
           const meta = TAB_META[route.name as keyof typeof TAB_META];
           if (!meta) return null;
           const label = lang === 'ar' ? meta.labelAr : meta.labelEn;
-          const badge = BADGE[route.name];
+          const badge = route.name === 'notifications' ? unreadNotifs : 0;
           const labelFont = lang === 'ar' ? 'Cairo_600SemiBold' : 'Inter_600SemiBold';
 
           return (
