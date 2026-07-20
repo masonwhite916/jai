@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { sendVerification, checkVerification, normalizePhone } from "../lib/twilioClient";
+import { sendVerification, checkVerification, normalizePhone } from "../lib/taqnyatClient";
 import { generateToken, tokenExpiresAt } from "../lib/tokenAuth";
 import { db, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
