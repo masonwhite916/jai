@@ -31,7 +31,19 @@
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "JAI uses your location to send roadside help exactly where you are."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "JAI needs access to your photos so you can attach pictures of the vehicle issue."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

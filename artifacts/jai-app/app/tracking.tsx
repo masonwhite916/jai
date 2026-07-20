@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Dimensions, Share, Linking } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -71,14 +71,24 @@ export default function TrackingScreen() {
       <MapBackground />
 
       <View style={[styles.topBar, { top: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0), flexDirection: rowDir }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/(tabs)' as any)}>
           <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={20} color="#1A1A1A" />
         </TouchableOpacity>
         <View style={[styles.topBadge, { flexDirection: rowDir }]}>
           <View style={styles.activeDot} />
           <Text style={[styles.topBadgeText, { fontFamily: font.semibold }]}>{t('technicianEnRoute')}</Text>
         </View>
-        <TouchableOpacity style={styles.backBtn}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={async () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            try {
+              await Share.share({ message: t('shareEtaMsg') });
+            } catch {
+              // share sheet dismissed or unsupported on this platform
+            }
+          }}
+        >
           <Ionicons name="share-outline" size={20} color="#1A1A1A" />
         </TouchableOpacity>
       </View>
@@ -113,10 +123,16 @@ export default function TrackingScreen() {
             </View>
           </View>
           <View style={[styles.techActions, { flexDirection: rowDir }]}>
-            <TouchableOpacity style={styles.techActionBtn} onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
+            <TouchableOpacity
+              style={styles.techActionBtn}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL('tel:+966555616449'); }}
+            >
               <Ionicons name="call" size={18} color="#2D1B69" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.techActionBtn} onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}>
+            <TouchableOpacity
+              style={styles.techActionBtn}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL('https://wa.me/966555616449'); }}
+            >
               <Ionicons name="chatbubble" size={18} color="#2D1B69" />
             </TouchableOpacity>
           </View>
@@ -135,7 +151,13 @@ export default function TrackingScreen() {
           </View>
         </View>
 
-        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.cancelBtn}
+          onPress={() => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            router.replace('/(tabs)' as any);
+          }}
+        >
           <Text style={[styles.cancelText, { fontFamily: font.semibold }]}>{t('cancelRequest')}</Text>
         </TouchableOpacity>
       </View>

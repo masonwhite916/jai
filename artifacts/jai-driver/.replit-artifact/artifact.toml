@@ -1,0 +1,23 @@
+kind = "mobile"
+previewPath = "/jai-driver/"
+title = "JAI Driver — Technician App"
+version = "1.0.0"
+id = "artifacts/jai-driver"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/jai-driver/" ]
+localPort = 19297
+
+[services.development]
+run = "pnpm --filter @workspace/jai-driver run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/jai-driver", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/jai-driver", "run", "serve" ]
+
+[services.env]
+PORT = "19297"
+BASE_PATH = "/jai-driver/"

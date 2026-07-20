@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 
 export default function NotificationsScreen() {
@@ -26,7 +27,19 @@ export default function NotificationsScreen() {
     system: { icon: 'information-circle', color: '#F39C12', bg: '#FEF6E8' },
   };
 
-  const unreadCount = NOTIFICATIONS.filter(n => !n.read).length;
+  const [readIds, setReadIds] = useState<string[]>([]);
+  const isRead = (n: { id: string; read: boolean }) => n.read || readIds.includes(n.id);
+  const unreadCount = NOTIFICATIONS.filter(n => !isRead(n)).length;
+
+  function markRead(id: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReadIds(prev => (prev.includes(id) ? prev : [...prev, id]));
+  }
+
+  function markAllRead() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setReadIds(NOTIFICATIONS.map(n => n.id));
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FC' }}>
@@ -35,11 +48,16 @@ export default function NotificationsScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
         <View style={[styles.headerRow, { flexDirection: rowDir }]}>
-          <Text style={[styles.headerTitle, { fontFamily: font.bold }]}>{t('notifications')}</Text>
+          <Text style={[styles.headerTitle, { fontFamily: font.bold, flex: 1, textAlign: align }]}>{t('notifications')}</Text>
           {unreadCount > 0 && (
-            <View style={styles.unreadBadge}>
-              <Text style={[styles.unreadText, { fontFamily: font.bold }]}>{unreadCount} {t('newNotifs')}</Text>
-            </View>
+            <>
+              <View style={styles.unreadBadge}>
+                <Text style={[styles.unreadText, { fontFamily: font.bold }]}>{unreadCount} {t('newNotifs')}</Text>
+              </View>
+              <TouchableOpacity onPress={markAllRead} hitSlop={8}>
+                <Text style={[styles.markAllText, { fontFamily: font.semibold }]}>{t('markAllRead')}</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       </LinearGradient>
@@ -51,19 +69,21 @@ export default function NotificationsScreen() {
       >
         {NOTIFICATIONS.map((notif) => {
           const cfg = TYPE_CONFIG[notif.type];
+          const read = isRead(notif);
           return (
             <TouchableOpacity
               key={notif.id}
-              style={[styles.notifCard, !notif.read && styles.notifCardUnread, { flexDirection: rowDir }]}
+              style={[styles.notifCard, !read && styles.notifCardUnread, { flexDirection: rowDir }]}
               activeOpacity={0.85}
+              onPress={() => markRead(notif.id)}
             >
-              {!notif.read && <View style={[styles.unreadDot, isRTL ? { left: 16, right: undefined } : { right: 16 }]} />}
+              {!read && <View style={[styles.unreadDot, isRTL ? { left: 16, right: undefined } : { right: 16 }]} />}
               <View style={[styles.notifIcon, { backgroundColor: cfg.bg }]}>
                 <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
               </View>
               <View style={{ flex: 1, gap: 4 }}>
                 <View style={[styles.notifTopRow, { flexDirection: rowDir }]}>
-                  <Text style={[styles.notifTitle, !notif.read && { fontFamily: font.bold }, notif.read && { fontFamily: font.medium }, { textAlign: align, flex: 1 }]} numberOfLines={1}>
+                  <Text style={[styles.notifTitle, !read && { fontFamily: font.bold }, read && { fontFamily: font.medium }, { textAlign: align, flex: 1 }]} numberOfLines={1}>
                     {t(notif.titleKey)}
                   </Text>
                   <Text style={[styles.notifTime, { fontFamily: font.regular }]}>{t(notif.timeKey)}</Text>
@@ -86,6 +106,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
   unreadBadge: { backgroundColor: '#C21875', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   unreadText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  markAllText: { fontSize: 12, color: 'rgba(255,255,255,0.85)' },
   notifCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16,
     alignItems: 'flex-start', gap: 12, marginBottom: 10, position: 'relative',

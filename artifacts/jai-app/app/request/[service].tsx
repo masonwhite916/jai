@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Platform,
+  TextInput, Platform, Image, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
+import { useJaiLocation } from '@/context/LocationContext';
 import * as Haptics from 'expo-haptics';
 
 type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
@@ -34,6 +36,7 @@ export default function ServiceRequest() {
   const router = useRouter();
   const { user } = useApp();
   const { t, isRTL, font } = useLanguage();
+  const gps = useJaiLocation();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
 
@@ -41,6 +44,8 @@ export default function ServiceRequest() {
   const [step, setStep] = useState(1);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [paymentIdx, setPaymentIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
 
@@ -54,6 +59,28 @@ export default function ServiceRequest() {
       setSubmitting(false);
       router.replace('/tracking');
     }
+  }
+
+  async function pickPhotos() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    if (Platform.OS !== 'web') {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true,
+      selectionLimit: 4,
+      quality: 0.7,
+    });
+    if (!res.canceled) {
+      setPhotos(prev => [...prev, ...res.assets.map(a => a.uri)].slice(0, 4));
+    }
+  }
+
+  function refreshLocation() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    gps.refresh();
   }
 
   const canProceed = step === 1 ? !!selectedVehicle : true;
@@ -140,10 +167,28 @@ export default function ServiceRequest() {
               textAlignVertical="top"
             />
             <Text style={[styles.optionalLabel, { fontFamily: font.regular, textAlign: align }]}>{t('optionalPhotos')}</Text>
-            <TouchableOpacity style={[styles.uploadBtn, { flexDirection: rowDir }]}>
-              <Ionicons name="camera-outline" size={22} color="#2D1B69" />
-              <Text style={[styles.uploadText, { fontFamily: font.semibold }]}>{t('uploadPhotos')}</Text>
-            </TouchableOpacity>
+            {photos.length > 0 && (
+              <View style={[styles.photoRow, { flexDirection: rowDir }]}>
+                {photos.map((uri) => (
+                  <View key={uri} style={styles.photoThumbWrap}>
+                    <Image source={{ uri }} style={styles.photoThumb} />
+                    <TouchableOpacity
+                      style={styles.photoRemove}
+                      onPress={() => setPhotos(p => p.filter(u => u !== uri))}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close" size={12} color="#FFFFFF" />
+                    </TouchableOpacity>
+                  </View>
+                ))}
+              </View>
+            )}
+            {photos.length < 4 && (
+              <TouchableOpacity style={[styles.uploadBtn, { flexDirection: rowDir }]} onPress={pickPhotos} activeOpacity={0.8}>
+                <Ionicons name="camera-outline" size={22} color="#2D1B69" />
+                <Text style={[styles.uploadText, { fontFamily: font.semibold }]}>{t('uploadPhotos')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -153,18 +198,26 @@ export default function ServiceRequest() {
             <View style={styles.mapPlaceholder}>
               <LinearGradient colors={['#EDE8F8', '#F8F9FC']} style={styles.mapInner}>
                 <Ionicons name="map" size={48} color="#5B2C91" />
-                <Text style={[styles.mapPlaceholderText, { fontFamily: font.semibold }]}>{t('locationDetected')}</Text>
-                <Text style={[styles.mapAddress, { fontFamily: font.regular }]}>{t('addressKingFahd')}</Text>
+                <Text style={[styles.mapPlaceholderText, { fontFamily: font.semibold }]}>
+                  {gps.status === 'loading' ? t('locating') : t('locationDetected')}
+                </Text>
+                <Text style={[styles.mapAddress, { fontFamily: font.regular }]}>
+                  {gps.shortAddress ?? t('addressKingFahd')}
+                </Text>
               </LinearGradient>
             </View>
             <View style={[styles.locationCard, { flexDirection: rowDir }]}>
               <Ionicons name="location-sharp" size={18} color="#C21875" />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.locationLabel, { fontFamily: font.regular, textAlign: align }]}>{t('currentLocation')}</Text>
-                <Text style={[styles.locationAddress, { fontFamily: font.medium, textAlign: align }]}>{t('addressKingFahdFull')}</Text>
+                <Text style={[styles.locationAddress, { fontFamily: font.medium, textAlign: align }]}>
+                  {gps.status === 'loading' ? t('locating') : gps.fullAddress ?? t('addressKingFahdFull')}
+                </Text>
               </View>
-              <TouchableOpacity>
-                <Text style={[styles.changeText, { fontFamily: font.semibold }]}>{t('change')}</Text>
+              <TouchableOpacity onPress={refreshLocation} disabled={gps.status === 'loading'} hitSlop={8}>
+                {gps.status === 'loading'
+                  ? <ActivityIndicator size="small" color="#C21875" />
+                  : <Text style={[styles.changeText, { fontFamily: font.semibold }]}>{t('change')}</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -177,7 +230,7 @@ export default function ServiceRequest() {
               {[
                 { key: t('serviceLabel'), val: t(info.labelKey) },
                 { key: t('vehicleLabel'), val: selectedVehicleData ? `${selectedVehicleData.make} ${selectedVehicleData.model}` : 'N/A' },
-                { key: t('locationLabel'), val: t('addressKingFahd') },
+                { key: t('locationLabel'), val: gps.shortAddress ?? t('addressKingFahd') },
                 { key: t('estArrivalLabel'), val: `~8 ${isRTL ? 'دقائق' : 'minutes'}`, green: true },
               ].map(({ key, val, green }) => (
                 <View key={key} style={[styles.summaryRow, { flexDirection: rowDir }]}>
@@ -193,10 +246,15 @@ export default function ServiceRequest() {
 
             <Text style={[styles.paymentTitle, { fontFamily: font.bold, textAlign: align }]}>{t('paymentMethod')}</Text>
             {PAYMENT_OPTIONS.map((opt, i) => (
-              <TouchableOpacity key={opt.label} style={[styles.paymentOption, i === 0 && styles.paymentOptionSelected, { flexDirection: rowDir }]}>
-                <Ionicons name={opt.iconName as any} size={20} color={i === 0 ? '#2D1B69' : '#6B7280'} />
-                <Text style={[styles.paymentLabel, i === 0 && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
-                {i === 0 && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
+              <TouchableOpacity
+                key={opt.label}
+                style={[styles.paymentOption, i === paymentIdx && styles.paymentOptionSelected, { flexDirection: rowDir }]}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPaymentIdx(i); }}
+                activeOpacity={0.85}
+              >
+                <Ionicons name={opt.iconName as any} size={20} color={i === paymentIdx ? '#2D1B69' : '#6B7280'} />
+                <Text style={[styles.paymentLabel, i === paymentIdx && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
+                {i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
               </TouchableOpacity>
             ))}
           </View>
@@ -257,6 +315,15 @@ const styles = StyleSheet.create({
     minHeight: 140, borderWidth: 1.5, borderColor: '#EBEBF5', marginBottom: 20,
   },
   optionalLabel: { fontSize: 13, color: '#9CA3AF', marginBottom: 10 },
+  photoRow: { flexWrap: 'wrap', gap: 12, marginBottom: 14 },
+  photoThumbWrap: { position: 'relative' },
+  photoThumb: { width: 72, height: 72, borderRadius: 12, backgroundColor: '#EBEBF5' },
+  photoRemove: {
+    position: 'absolute', top: -6, right: -6,
+    width: 20, height: 20, borderRadius: 10, backgroundColor: '#1A1A1A',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 2, borderColor: '#F8F9FC',
+  },
   uploadBtn: {
     backgroundColor: '#EDE8F8', borderRadius: 14, paddingVertical: 16,
     justifyContent: 'center', alignItems: 'center', gap: 10,
@@ -266,7 +333,7 @@ const styles = StyleSheet.create({
   mapPlaceholder: { borderRadius: 20, overflow: 'hidden', height: 180, marginBottom: 16 },
   mapInner: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 8 },
   mapPlaceholderText: { fontSize: 16, fontWeight: '600', color: '#5B2C91' },
-  mapAddress: { fontSize: 13, color: '#6B7280' },
+  mapAddress: { fontSize: 13, color: '#6B7280', paddingHorizontal: 24, textAlign: 'center' },
   locationCard: {
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
     alignItems: 'center', gap: 10,

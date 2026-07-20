@@ -177,6 +177,51 @@ export const translations = {
     reqBattery: 'Battery Jump Start', reqTire: 'Tire Replacement', reqFuel: 'Fuel Delivery', reqLockout: 'Lockout Assistance',
     reqAddrFahd: 'King Fahd Road, Riyadh', reqAddrOlaya: 'Olaya Street, Riyadh', reqAddrPMBS: 'Prince Mohammed Bin Salman Road', reqAddrNakheel: 'Al Nakheel District, Riyadh',
     reqTechAhmed: 'Ahmed Al-Ghamdi', reqTechKhalid: 'Khalid Hassan', reqTechOmar: 'Omar Al-Shehri',
+    // GPS / live location
+    locating: 'Locating…',
+    tapToLocate: 'Tap to detect location',
+    // Tracking
+    shareEtaMsg: 'My JAI technician is on the way — arriving in about 8 minutes. Help is coming!',
+    // Notifications
+    markAllRead: 'Mark all as read',
+    // Saved locations
+    savedLocationsEmpty: 'No saved places yet',
+    savedLocationsHint: 'Home and work shortcuts are coming soon — for now we always use your live GPS location.',
+    // Invoices
+    invoicesEmpty: 'No invoices yet',
+    invoicesHint: 'Receipts will appear here after each completed service.',
+    // Rewards
+    pointsBalance: 'Points Balance',
+    pointsWorth: 'Every 100 points = 10 SAR off your next service',
+    howToEarn: 'How to earn points',
+    earn1: 'Complete a service request — 50 pts',
+    earn2: 'Rate your technician — 10 pts',
+    earn3: 'Refer a friend — 200 pts',
+    // Referral
+    yourReferralCode: 'Your referral code',
+    referralHint: 'Share your code — you both get 50 SAR credit after your friend’s first service.',
+    shareCode: 'Share Code',
+    referralShareMsg: 'Join me on JAI Roadside Assistance! Use my referral code',
+    // FAQ
+    faqQ1: 'How fast will a technician arrive?',
+    faqA1: 'Average arrival time is 8–15 minutes inside city limits, depending on traffic and technician availability.',
+    faqQ2: 'Which cities does JAI cover?',
+    faqA2: 'We currently serve Riyadh, Jeddah and Dammam, with more cities launching soon.',
+    faqQ3: 'How do I pay for a service?',
+    faqA3: 'You can pay with Apple Pay, mada, credit card, or cash once the service is completed.',
+    faqQ4: 'What does a membership include?',
+    faqA4: 'Memberships include free service calls, priority dispatch and exclusive discounts. Check the Membership tab for full details.',
+    // Safety tips
+    safety1Title: 'Pull over safely',
+    safety1Body: 'Move your car to the shoulder or a safe area away from traffic before requesting help.',
+    safety2Title: 'Turn on hazard lights',
+    safety2Body: 'Keep your hazard lights on so other drivers and your technician can spot you easily.',
+    safety3Title: 'Stay inside on highways',
+    safety3Body: 'On fast roads, stay buckled inside your car until the technician arrives.',
+    safety4Title: 'Verify your technician',
+    safety4Body: 'Check the technician’s name and rating in the app before opening your window or door.',
+    safety5Title: 'Keep essentials in your car',
+    safety5Body: 'Water, a phone charger and a reflective triangle are always good to have on board.',
   },
   ar: {
     // Auth
@@ -349,6 +394,51 @@ export const translations = {
     reqBattery: 'شحن البطارية', reqTire: 'تغيير الإطار', reqFuel: 'توصيل الوقود', reqLockout: 'فتح السيارة',
     reqAddrFahd: 'طريق الملك فهد، الرياض', reqAddrOlaya: 'شارع العليا، الرياض', reqAddrPMBS: 'طريق الأمير محمد بن سلمان', reqAddrNakheel: 'حي النخيل، الرياض',
     reqTechAhmed: 'أحمد الغامدي', reqTechKhalid: 'خالد حسن', reqTechOmar: 'عمر الشهري',
+    // GPS / live location
+    locating: 'جارٍ تحديد موقعك…',
+    tapToLocate: 'اضغط لتحديد موقعك',
+    // Tracking
+    shareEtaMsg: 'فني جاي في الطريق إليّ — الوصول خلال ٨ دقائق تقريبًا. المساعدة قادمة!',
+    // Notifications
+    markAllRead: 'تعليم الكل كمقروء',
+    // Saved locations
+    savedLocationsEmpty: 'لا توجد أماكن محفوظة بعد',
+    savedLocationsHint: 'اختصارات المنزل والعمل قادمة قريبًا — حاليًا نستخدم موقعك المباشر عبر GPS.',
+    // Invoices
+    invoicesEmpty: 'لا توجد فواتير بعد',
+    invoicesHint: 'ستظهر الإيصالات هنا بعد اكتمال كل خدمة.',
+    // Rewards
+    pointsBalance: 'رصيد النقاط',
+    pointsWorth: 'كل ١٠٠ نقطة = خصم ١٠ ريال على خدمتك القادمة',
+    howToEarn: 'كيف تكسب النقاط',
+    earn1: 'أكمل طلب خدمة — ٥٠ نقطة',
+    earn2: 'قيّم الفني — ١٠ نقاط',
+    earn3: 'أحِل صديقًا — ٢٠٠ نقطة',
+    // Referral
+    yourReferralCode: 'رمز الإحالة الخاص بك',
+    referralHint: 'شارك رمزك — تحصلان معًا على رصيد ٥٠ ريال بعد أول خدمة لصديقك.',
+    shareCode: 'مشاركة الرمز',
+    referralShareMsg: 'انضم إليّ في جاي للمساعدة على الطريق! استخدم رمز الإحالة الخاص بي',
+    // FAQ
+    faqQ1: 'كم يستغرق وصول الفني؟',
+    faqA1: 'متوسط وقت الوصول ٨–١٥ دقيقة داخل المدن، حسب حركة المرور وتوفر الفنيين.',
+    faqQ2: 'ما المدن التي تغطيها جاي؟',
+    faqA2: 'نخدم حاليًا الرياض وجدة والدمام، ومدن أخرى قريبًا.',
+    faqQ3: 'كيف أدفع مقابل الخدمة؟',
+    faqA3: 'يمكنك الدفع عبر أبل باي أو مدى أو البطاقة الائتمانية أو نقدًا بعد اكتمال الخدمة.',
+    faqQ4: 'ماذا تشمل العضوية؟',
+    faqA4: 'تشمل العضويات طلبات خدمة مجانية وأولوية في الإرسال وخصومات حصرية. راجع تبويب العضوية للتفاصيل الكاملة.',
+    // Safety tips
+    safety1Title: 'توقف في مكان آمن',
+    safety1Body: 'حرّك سيارتك إلى كتف الطريق أو مكان آمن بعيدًا عن حركة المرور قبل طلب المساعدة.',
+    safety2Title: 'شغّل أضواء التحذير',
+    safety2Body: 'أبقِ أضواء التحذير مضاءة ليتمكن السائقون والفني من رؤيتك بسهولة.',
+    safety3Title: 'ابقَ داخل السيارة على الطرق السريعة',
+    safety3Body: 'على الطرق السريعة، ابقَ داخل سيارتك مع ربط حزام الأمان حتى وصول الفني.',
+    safety4Title: 'تحقق من هوية الفني',
+    safety4Body: 'تأكد من اسم الفني وتقييمه في التطبيق قبل فتح النافذة أو الباب.',
+    safety5Title: 'أبقِ الضروريات في سيارتك',
+    safety5Body: 'يُنصح دائمًا بوجود ماء وشاحن جوال ومثلث عاكس في السيارة.',
   },
 } as const;
 

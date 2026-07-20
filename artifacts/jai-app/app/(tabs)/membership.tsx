@@ -241,7 +241,8 @@ export default function MembershipScreen() {
               <TouchableOpacity
                 style={[styles.subscribeBtn, isActive && styles.subscribeBtnActive]}
                 activeOpacity={0.85}
-                onPress={() => isActive ? null : handleSubscribe(plan)}
+                disabled={isActive}
+                onPress={() => handleSubscribe(plan)}
               >
                 {isActive ? (
                   <View style={[styles.subscribeBtnInner, { flexDirection: rowDir }]}>

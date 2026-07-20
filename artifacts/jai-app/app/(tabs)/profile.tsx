@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { useJaiLocation } from '@/context/LocationContext';
 import * as Haptics from 'expo-haptics';
 
 function MenuItem({ icon, label, sublabel, onPress, accent, rightLabel }: {
@@ -36,6 +37,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useApp();
   const { t, isRTL, font, toggleLanguage, lang } = useLanguage();
+  const gps = useJaiLocation();
 
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
@@ -44,6 +46,16 @@ export default function ProfileScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     await logout();
     router.replace('/auth');
+  }
+
+  function goTo(topic: string) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/menu/${topic}` as any);
+  }
+
+  function openAiAssistant() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Linking.openURL('https://wa.me/966555616449');
   }
 
   return (
@@ -84,7 +96,7 @@ export default function ProfileScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 100 + (Platform.OS === 'web' ? 34 : 0) }}
       >
-        {user?.membership !== 'none' && (
+        {user && user.membership !== 'none' && (
           <TouchableOpacity style={styles.memberCard} onPress={() => router.push('/(tabs)/membership' as any)}>
             <LinearGradient colors={['#2D1B69', '#C21875']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.memberCardGradient, { flexDirection: rowDir }]}>
               <Ionicons name="star" size={20} color="#FFD700" />
@@ -100,7 +112,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('myVehicles')}</Text>
           {user?.vehicles?.map((v) => (
-            <TouchableOpacity key={v.id} style={[styles.vehicleCard, { flexDirection: rowDir }]} activeOpacity={0.8}>
+            <View key={v.id} style={[styles.vehicleCard, { flexDirection: rowDir }]}>
               <View style={styles.vehicleIcon}>
                 <Ionicons name="car" size={22} color="#2D1B69" />
               </View>
@@ -108,8 +120,7 @@ export default function ProfileScreen() {
                 <Text style={[styles.vehicleName, { fontFamily: font.semibold, textAlign: align }]}>{v.year} {v.make} {v.model}</Text>
                 <Text style={[styles.vehiclePlate, { fontFamily: font.regular, textAlign: align }]}>{v.plate} · {v.color}</Text>
               </View>
-              <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#C0C0D0" />
-            </TouchableOpacity>
+            </View>
           ))}
           <TouchableOpacity style={[styles.addBtn, { flexDirection: rowDir }]} onPress={() => router.push('/add-vehicle')} activeOpacity={0.8}>
             <Ionicons name="add-circle-outline" size={20} color="#2D1B69" />
@@ -120,26 +131,25 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('account')}</Text>
           <View style={styles.menuGroup}>
-            <MenuItem icon="location-outline" label={t('savedLocations')} sublabel={t('locationsSaved')} />
-            <MenuItem icon="receipt-outline" label={t('invoices')} />
-            <MenuItem icon="gift-outline" label={t('rewards')} sublabel={`${user?.points ?? 0} ${t('pointsLabel')}`} />
-            <MenuItem icon="people-outline" label={t('referral')} sublabel={t('referralSub')} />
+            <MenuItem icon="location-outline" label={t('savedLocations')} sublabel={gps.city ?? undefined} onPress={() => goTo('saved-locations')} />
+            <MenuItem icon="receipt-outline" label={t('invoices')} onPress={() => goTo('invoices')} />
+            <MenuItem icon="gift-outline" label={t('rewards')} sublabel={`${user?.points ?? 0} ${t('pointsLabel')}`} onPress={() => goTo('rewards')} />
+            <MenuItem icon="people-outline" label={t('referral')} sublabel={t('referralSub')} onPress={() => goTo('referral')} />
           </View>
         </View>
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('support')}</Text>
           <View style={styles.menuGroup}>
-            <MenuItem icon="help-circle-outline" label={t('faq')} />
-            <MenuItem icon="shield-outline" label={t('safetyTips')} />
-            <MenuItem icon="chatbubble-outline" label={t('aiAssistant')} />
+            <MenuItem icon="help-circle-outline" label={t('faq')} onPress={() => goTo('faq')} />
+            <MenuItem icon="shield-outline" label={t('safetyTips')} onPress={() => goTo('safety')} />
+            <MenuItem icon="chatbubble-outline" label={t('aiAssistant')} onPress={openAiAssistant} />
           </View>
         </View>
 
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('general')}</Text>
           <View style={styles.menuGroup}>
-            <MenuItem icon="notifications-outline" label={t('darkMode')} />
             <MenuItem
               icon="language-outline"
               label={t('languageLabel')}

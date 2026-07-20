@@ -14,7 +14,7 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index"><Icon sf={{ default: 'house', selected: 'house.fill' }} /><Label>Home</Label></NativeTabs.Trigger>
-      <NativeTabs.Trigger name="requests"><Icon sf={{ default: 'list.bullet', selected: 'list.bullet.fill' }} /><Label>Requests</Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="requests"><Icon sf={{ default: 'list.bullet', selected: 'list.bullet' }} /><Label>Requests</Label></NativeTabs.Trigger>
       <NativeTabs.Trigger name="membership"><Icon sf={{ default: 'star', selected: 'star.fill' }} /><Label>VIP</Label></NativeTabs.Trigger>
       <NativeTabs.Trigger name="notifications"><Icon sf={{ default: 'bell', selected: 'bell.fill' }} /><Label>Alerts</Label></NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile"><Icon sf={{ default: 'person', selected: 'person.fill' }} /><Label>Profile</Label></NativeTabs.Trigger>

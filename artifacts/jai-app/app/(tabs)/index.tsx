@@ -1,7 +1,7 @@
 import React from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Dimensions, Platform, Image, Linking,
+  Dimensions, Platform, Image, Linking, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
+import { useJaiLocation } from '@/context/LocationContext';
 import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence,
 } from 'react-native-reanimated';
@@ -66,6 +67,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useApp();
   const { t, isRTL, font } = useLanguage();
+  const gps = useJaiLocation();
 
   const firstName = user?.name?.split(' ')[0] ?? 'Guest';
   const rowDir = isRTL ? 'row-reverse' : 'row';
@@ -100,14 +102,25 @@ export default function HomeScreen() {
         </Text>
 
         {/* Location */}
-        <TouchableOpacity style={[styles.locationPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}>
-          <Ionicons name="location-sharp" size={13} color="#C21875" />
-          <Text style={[styles.locationText, { fontFamily: font.regular }]}>{t('locationCity')}</Text>
-          <Ionicons name="chevron-down" size={12} color="rgba(255,255,255,0.5)" />
+        <TouchableOpacity
+          style={[styles.locationPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start', maxWidth: '85%' }]}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); gps.refresh(); }}
+          disabled={gps.status === 'loading'}
+          activeOpacity={0.7}
+        >
+          {gps.status === 'loading'
+            ? <ActivityIndicator size="small" color="#C21875" style={{ transform: [{ scale: 0.65 }] }} />
+            : <Ionicons name="location-sharp" size={13} color="#C21875" />}
+          <Text style={[styles.locationText, { fontFamily: font.regular }]} numberOfLines={1}>
+            {gps.status === 'loading'
+              ? t('locating')
+              : gps.city ?? gps.shortAddress ?? (gps.status === 'ready' ? t('locationCity') : t('tapToLocate'))}
+          </Text>
+          <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.5)" />
         </TouchableOpacity>
 
         {/* Member pill */}
-        {user?.membership !== 'none' && (
+        {user && user.membership !== 'none' && (
           <TouchableOpacity
             style={[styles.memberPill, { flexDirection: rowDir, alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
             onPress={() => router.push('/(tabs)/membership' as any)}
@@ -261,7 +274,11 @@ export default function HomeScreen() {
           </Text>
 
           {/* Offer 1 */}
-          <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.offerCard}
+            activeOpacity={0.9}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
+          >
             <LinearGradient
               colors={['#2D1B69', '#7B2A9E']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -283,7 +300,11 @@ export default function HomeScreen() {
           </TouchableOpacity>
 
           {/* Offer 2 */}
-          <TouchableOpacity style={styles.offerCard} activeOpacity={0.9}>
+          <TouchableOpacity
+            style={styles.offerCard}
+            activeOpacity={0.9}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
+          >
             <LinearGradient
               colors={['#C21875', '#8B35BB']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}

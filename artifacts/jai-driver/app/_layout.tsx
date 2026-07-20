@@ -5,9 +5,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AppProvider, type User } from '@/context/AppContext';
+import { DriverProvider } from '@/context/DriverContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
-import { LocationProvider } from '@/context/LocationContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Inter_400Regular,
@@ -24,35 +23,28 @@ import {
 } from '@expo-google-fonts/cairo';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import { StatusBar } from 'expo-status-bar';
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-interface PreloadedSession {
-  user: User | null;
-  hasSeenOnboarding: boolean;
-}
-
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerShown: false }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
       <Stack.Screen name="index" />
-      <Stack.Screen name="onboarding" />
       <Stack.Screen name="auth" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
-        name="request/[service]"
+        name="job/[id]"
         options={{ presentation: 'modal', gestureEnabled: true }}
       />
-      <Stack.Screen name="tracking" />
     </Stack>
   );
 }
 
 export default function RootLayout() {
   const [initialLang, setInitialLang] = useState<Lang>('en');
-  const [preloadedSession, setPreloadedSession] = useState<PreloadedSession | null>(null);
   const [bootstrapReady, setBootstrapReady] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
@@ -66,28 +58,11 @@ export default function RootLayout() {
     Cairo_700Bold,
   });
 
-  // Pre-read lang AND session from AsyncStorage in one pass so AppProvider can
-  // initialise synchronously, preventing any flash of the loading/onboarding
-  // screen on cold starts caused by iOS low-memory process kills.
   useEffect(() => {
-    Promise.all([
-      AsyncStorage.getItem('jai_lang'),
-      AsyncStorage.getItem('jai_user'),
-      AsyncStorage.getItem('jai_onboarding'),
-    ]).then(([storedLang, storedUser, storedOnboarding]) => {
+    AsyncStorage.getItem('jai_driver_lang').then((storedLang) => {
       const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
-
-      let parsedUser: User | null = null;
-      if (storedUser) {
-        try { parsedUser = JSON.parse(storedUser); } catch { /* ignore */ }
-      }
-      setPreloadedSession({
-        user: parsedUser,
-        hasSeenOnboarding: storedOnboarding === 'true',
-      });
-
       setBootstrapReady(true);
     });
   }, []);
@@ -107,16 +82,15 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <LanguageProvider initialLang={initialLang}>
-                <AppProvider initialSession={preloadedSession}>
-                  <LocationProvider>
-                    <RootLayoutNav />
-                  </LocationProvider>
-                </AppProvider>
+                <DriverProvider>
+                  <RootLayoutNav />
+                </DriverProvider>
               </LanguageProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
       </ErrorBoundary>
+      <StatusBar style="light" />
     </SafeAreaProvider>
   );
 }
