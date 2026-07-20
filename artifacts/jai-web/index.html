@@ -16,6 +16,278 @@
     <meta name="twitter:title" content="JAI Roadside Assistance — Website" />
     <meta name="twitter:description" content="JAI Roadside Assistance — Website — built on Replit. Update this description to reflect the app." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://jai.com.sa/#organization",
+          "name": "JAI Roadside Assistance",
+          "alternateName": "JAI",
+          "url": "https://jai.com.sa/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://jai.com.sa/jai-logo.png",
+            "width": 200,
+            "height": 60
+          },
+          "telephone": "+966555616449",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "telephone": "+966555616449",
+            "contactType": "customer support",
+            "availableLanguage": ["Arabic", "English"],
+            "hoursAvailable": {
+              "@type": "OpeningHoursSpecification",
+              "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+              "opens": "00:00",
+              "closes": "23:59"
+            }
+          },
+          "sameAs": [
+            "https://instagram.com/jai.saudi",
+            "https://x.com/jai_saudi",
+            "https://facebook.com/jai.saudi"
+          ],
+          "areaServed": {
+            "@type": "City",
+            "name": "Riyadh",
+            "containedInPlace": {
+              "@type": "Country",
+              "name": "Saudi Arabia"
+            }
+          },
+          "description": "Premium 24/7 roadside assistance in Riyadh, Saudi Arabia. Rapid dispatch for battery charge, emergency towing, fuel supply, tire change, lockout service, light mechanical repair, and computer diagnostics."
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://jai.com.sa/#website",
+          "url": "https://jai.com.sa/",
+          "name": "JAI Roadside Assistance",
+          "description": "Premium 24/7 roadside assistance memberships for Riyadh drivers.",
+          "inLanguage": ["en", "ar"],
+          "publisher": { "@id": "https://jai.com.sa/#organization" }
+        },
+        {
+          "@type": "AutomotiveBusiness",
+          "@id": "https://jai.com.sa/#localbusiness",
+          "name": "JAI Roadside Assistance",
+          "image": "https://jai.com.sa/jai-logo.png",
+          "url": "https://jai.com.sa/",
+          "telephone": "+966555616449",
+          "priceRange": "199–600 SAR/yr",
+          "currenciesAccepted": "SAR",
+          "paymentAccepted": "Credit Card, Debit Card",
+          "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Riyadh",
+            "addressCountry": "SA"
+          },
+          "geo": {
+            "@type": "GeoCoordinates",
+            "latitude": 24.7136,
+            "longitude": 46.6753
+          },
+          "openingHoursSpecification": [
+            {
+              "@type": "OpeningHoursSpecification",
+              "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+              "opens": "00:00",
+              "closes": "23:59"
+            }
+          ],
+          "sameAs": [
+            "https://instagram.com/jai.saudi",
+            "https://x.com/jai_saudi",
+            "https://facebook.com/jai.saudi"
+          ],
+          "parentOrganization": { "@id": "https://jai.com.sa/#organization" }
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-battery",
+          "name": "Battery Charge",
+          "description": "Instant jump-starts to get you back on the road.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-towing",
+          "name": "Emergency Towing",
+          "description": "Safe, premium towing to your preferred location.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-fuel",
+          "name": "Fuel Supply",
+          "description": "Emergency fuel delivery when you run dry.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-tire",
+          "name": "Tire Change",
+          "description": "Quick flat tire replacement with your spare.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-lockout",
+          "name": "Lockout Service",
+          "description": "Non-destructive entry if you lock your keys inside.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-mechanical",
+          "name": "Light Mechanical Repair",
+          "description": "On-the-spot minor repairs by certified mechanics.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Service",
+          "@id": "https://jai.com.sa/#service-diagnostics",
+          "name": "Computer Diagnostics",
+          "description": "Advanced fault reading to identify underlying issues.",
+          "provider": { "@id": "https://jai.com.sa/#organization" },
+          "areaServed": { "@type": "City", "name": "Riyadh" },
+          "serviceType": "Roadside Assistance"
+        },
+        {
+          "@type": "Product",
+          "@id": "https://jai.com.sa/#plan-basic",
+          "name": "JAI Basic Membership",
+          "description": "Annual roadside assistance plan covering battery charge, fuel supply, tire change, light mechanical repair, and emergency towing.",
+          "brand": { "@id": "https://jai.com.sa/#organization" },
+          "offers": {
+            "@type": "Offer",
+            "url": "https://jai.com.sa/subscribe?plan=basic",
+            "price": "199",
+            "priceCurrency": "SAR",
+            "priceValidUntil": "2027-12-31",
+            "availability": "https://schema.org/InStock",
+            "description": "Battery charge ×6, fuel supply ×6, tire change ×6, light mechanical repair ×2, emergency towing ×2. Includes VAT."
+          }
+        },
+        {
+          "@type": "Product",
+          "@id": "https://jai.com.sa/#plan-accidents",
+          "name": "JAI Accidents Membership",
+          "description": "Annual roadside assistance plan with all Basic features plus accident vehicle transfer, workshop transfer, and priority dispatch.",
+          "brand": { "@id": "https://jai.com.sa/#organization" },
+          "offers": {
+            "@type": "Offer",
+            "url": "https://jai.com.sa/subscribe?plan=accidents",
+            "price": "299",
+            "priceCurrency": "SAR",
+            "priceValidUntil": "2027-12-31",
+            "availability": "https://schema.org/InStock",
+            "description": "All Basic Plan features, accident vehicle transfer to assessment center, transfer to workshop of choice, priority dispatch unit. Includes VAT."
+          }
+        },
+        {
+          "@type": "Product",
+          "@id": "https://jai.com.sa/#plan-rental",
+          "name": "JAI Rental Membership",
+          "description": "Premium annual roadside assistance plan with all Accidents features plus computer diagnostics, premium vehicle fleet access, and extended range support.",
+          "brand": { "@id": "https://jai.com.sa/#organization" },
+          "offers": {
+            "@type": "Offer",
+            "url": "https://jai.com.sa/subscribe?plan=rental",
+            "price": "600",
+            "priceCurrency": "SAR",
+            "priceValidUntil": "2027-12-31",
+            "availability": "https://schema.org/InStock",
+            "description": "All Accidents Plan features, computer fault diagnostics ×3, premium vehicle fleet access, extended range support. Includes VAT."
+          }
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://jai.com.sa/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What areas does JAI Roadside Assistance cover?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "JAI currently serves Riyadh and its surrounding areas, with more cities coming soon across Saudi Arabia."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is JAI Roadside Assistance available 24/7?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. JAI operates 24 hours a day, 7 days a week, including holidays. Our nearest unit is dispatched instantly when you need help."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How much does a JAI membership cost?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "JAI offers three annual membership plans, all including VAT: Basic at 199 SAR/year, Accidents at 299 SAR/year, and Rental at 600 SAR/year."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What services does JAI provide?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "JAI provides battery charge (jump-start), emergency towing, fuel supply, tire change, lockout service, light mechanical repair, and computer diagnostics."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is included in the JAI Basic plan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The Basic plan (199 SAR/year) includes: battery charge ×6, fuel supply ×6, tire change ×6, light mechanical repair ×2, and emergency towing ×2."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is included in the JAI Accidents plan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The Accidents plan (299 SAR/year) includes all Basic Plan features, plus accident vehicle transfer to an assessment center, transfer to a workshop of your choice, and a priority dispatch unit."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is included in the JAI Rental plan?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "The Rental plan (600 SAR/year) includes all Accidents Plan features, plus computer fault diagnostics ×3, premium vehicle fleet access, and extended range support."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How do I contact JAI Roadside Assistance?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "You can reach JAI by phone or WhatsApp at +966 55 561 6449, available 24/7."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
