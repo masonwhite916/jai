@@ -88,6 +88,8 @@ export default function MapView() {
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether an auth_error was received so we don't auto-reconnect
+  const authErrorRef = useRef(false);
 
   useEffect(() => {
     setMounted(true);
@@ -101,8 +103,24 @@ export default function MapView() {
 
   // ── WebSocket connection + admin auth ────────────────────────────────────────
   const connectWs = useCallback(() => {
+    // Clear any pending reconnect timer
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+
+    // Don't reconnect if the tab is hidden — wait for visibilitychange
+    if (document.visibilityState === 'hidden') return;
+
     const token = localStorage.getItem('jai_admin_token');
     if (!token) return; // not logged in; nothing to do
+
+    // Close any existing socket before opening a new one
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      existing.onclose = null; // prevent it from scheduling another reconnect
+      existing.close();
+    }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
@@ -128,6 +146,7 @@ export default function MapView() {
 
         case 'auth_error':
           // Token invalid — fall back to polling only; don't reconnect
+          authErrorRef.current = true;
           ws.close();
           setWsStatus('disconnected');
           break;
@@ -153,8 +172,12 @@ export default function MapView() {
 
     ws.onclose = () => {
       setWsStatus('disconnected');
-      // Reconnect after 5 s
-      reconnectTimer.current = setTimeout(connectWs, 5000);
+      // Don't retry after an auth error (bad token)
+      if (authErrorRef.current) return;
+      // If tab is visible schedule a 5 s retry; otherwise wait for visibilitychange
+      if (document.visibilityState !== 'hidden') {
+        reconnectTimer.current = setTimeout(connectWs, 5000);
+      }
     };
 
     ws.onerror = () => {
@@ -163,10 +186,30 @@ export default function MapView() {
   }, []);
 
   useEffect(() => {
+    authErrorRef.current = false;
     connectWs();
+
+    // Reconnect immediately when the tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const ws = wsRef.current;
+        const isDisconnected = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+        if (isDisconnected && !authErrorRef.current) {
+          connectWs();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      wsRef.current?.close();
+      const ws = wsRef.current;
+      if (ws) {
+        ws.onclose = null; // prevent onclose from scheduling a reconnect during cleanup
+        ws.close();
+      }
     };
   }, [connectWs]);
 
