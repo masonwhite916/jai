@@ -30,7 +30,7 @@ import type { IncomingMessage } from "http";
 import { db, users, jobs, serviceRequests } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { logger } from "./logger";
-import { setTechLocation, techLocations } from "./techLocations";
+import { setTechLocation, techLocations, safeIsoString } from "./techLocations";
 import { validateAdminToken } from "./adminSessions";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -224,8 +224,9 @@ class DispatchServer {
         setTechLocation(ws.userId, lat, lng);
 
         const stored = techLocations.get(ws.userId);
-        const seenAt = stored?.seenAt.toISOString() ?? new Date().toISOString();
-        const lastMovedAt = stored?.lastMovedAt.toISOString() ?? seenAt;
+        // safeIsoString guards against Invalid Date before the ?? fallback could fire
+        const seenAt = safeIsoString(stored?.seenAt);
+        const lastMovedAt = safeIsoString(stored?.lastMovedAt);
 
         // Relay to the job room (keyed by job ID) so the customer's tracking screen updates
         this.broadcastToRoom(`job:${jobId}`, { type: "tech_location", lat, lng, jobId });

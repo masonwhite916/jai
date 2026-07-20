@@ -43,7 +43,9 @@ type Freshness = 'fresh' | 'stale' | 'offline';
 
 function getFreshness(seenAt: string | null | undefined): Freshness {
   if (!seenAt) return 'offline';
-  const mins = differenceInMinutes(new Date(), new Date(seenAt));
+  const parsed = new Date(seenAt);
+  if (isNaN(parsed.getTime())) return 'offline'; // guard invalid date strings
+  const mins = differenceInMinutes(new Date(), parsed);
   if (mins < 2) return 'fresh';
   if (mins < 10) return 'stale';
   return 'offline';
@@ -60,7 +62,9 @@ function isIdleTech(
 ): boolean {
   if (freshness === 'offline') return false; // offline is its own state
   if (!lastMovedAt) return false;
-  return differenceInMinutes(new Date(), new Date(lastMovedAt)) >= IDLE_MINUTES;
+  const parsed = new Date(lastMovedAt);
+  if (isNaN(parsed.getTime())) return false; // guard invalid date strings
+  return differenceInMinutes(new Date(), parsed) >= IDLE_MINUTES;
 }
 
 const freshnessMeta: Record<Freshness, { bg: string; ring: string; label: string; badgeClass: string }> = {

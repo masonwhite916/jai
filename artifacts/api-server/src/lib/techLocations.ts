@@ -38,10 +38,25 @@ function haversineMeters(
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/** Returns true when d is a real, non-NaN Date. */
+function isValidDate(d: Date): boolean {
+  return !isNaN(d.getTime());
+}
+
+/**
+ * Return a guaranteed-valid Date.  In practice `new Date()` is always valid,
+ * but this guard makes the property explicit so callers can rely on it even
+ * after future refactors that accept external timestamps.
+ */
+function safeNow(): Date {
+  const d = new Date();
+  return isValidDate(d) ? d : new Date(0);
+}
+
 /** Update (or insert) the last known position for a technician. */
 export function setTechLocation(userId: number, lat: number, lng: number): void {
   const prev = techLocations.get(userId);
-  const now = new Date();
+  const now = safeNow();
 
   let lastMovedAt: Date;
   if (!prev) {
@@ -53,4 +68,14 @@ export function setTechLocation(userId: number, lat: number, lng: number): void 
   }
 
   techLocations.set(userId, { lat, lng, seenAt: now, lastMovedAt });
+}
+
+/**
+ * Safely serialise a Date to an ISO string.
+ * Falls back to the current time if the Date is missing or invalid, so the
+ * WebSocket broadcast never forwards a null or "Invalid Date" string.
+ */
+export function safeIsoString(d: Date | null | undefined): string {
+  if (d && isValidDate(d)) return d.toISOString();
+  return new Date().toISOString();
 }
