@@ -30,13 +30,20 @@ export async function sendSms(to: string, body: string): Promise<void> {
 
   const accountSid = await getAccountSid();
 
+  // Messaging Service SIDs (MG...) handle international routing automatically
+  // and are the correct way to send to countries like Saudi Arabia.
+  // Regular phone numbers and alphanumeric IDs go in the From field.
+  const params = from.startsWith("MG")
+    ? { MessagingServiceSid: from, To: to, Body: body }
+    : { From: from, To: to, Body: body };
+
   const resp = await connectors.proxy(
     "twilio",
     `/2010-04-01/Accounts/${accountSid}/Messages.json`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ From: from, To: to, Body: body }).toString(),
+      body: new URLSearchParams(params).toString(),
     },
   );
 
