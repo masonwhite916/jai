@@ -14,7 +14,7 @@ export default function Navbar() {
       className="fixed top-0 left-0 right-0 z-50 px-6 py-4 flex items-center justify-between bg-[#0F0826]/80 backdrop-blur-xl border-b border-white/5"
     >
       <div className="flex items-center gap-2">
-        <img src={`${baseUrl}jai-logo.png`} alt="JAI" className="h-8 object-contain" />
+        <img src={`${baseUrl}jai-logo.png`} alt="JAI" className="h-12 object-contain" />
       </div>
 
       <div className="flex items-center gap-3">
