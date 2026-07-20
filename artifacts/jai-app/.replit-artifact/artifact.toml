@@ -1,5 +1,5 @@
 kind = "mobile"
-previewPath = "/"
+previewPath = "/jai-app/"
 title = "JAI Roadside Assistance"
 version = "1.0.0"
 id = "artifacts/jai-app"
@@ -8,7 +8,7 @@ router = "expo-domain"
 [[services]]
 name = "expo"
 ensurePreviewReachable = "/status"
-paths = [ "/" ]
+paths = [ "/jai-app/" ]
 localPort = 18217
 
 [services.development]
@@ -20,4 +20,4 @@ run = [ "pnpm", "--filter", "@workspace/jai-app", "run", "serve" ]
 
 [services.env]
 PORT = "18217"
-BASE_PATH = "/"
+BASE_PATH = "/jai-app/"
