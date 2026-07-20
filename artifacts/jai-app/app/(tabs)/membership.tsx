@@ -133,6 +133,9 @@ export default function MembershipScreen() {
         locations={[0, 0.55, 1]}
         style={[styles.header, { paddingTop: insets.top + 20 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
+        <View style={styles.headerIcon}>
+          <Ionicons name="star" size={28} color="#FFD700" />
+        </View>
         <Text style={[styles.headerTitle, { fontFamily: font.bold }]}>
           {isRTL ? 'باقات جاي' : 'JAI Packages'}
         </Text>

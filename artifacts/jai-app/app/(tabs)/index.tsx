@@ -89,15 +89,6 @@ export default function HomeScreen() {
         {/* Logo row */}
         <View style={[styles.logoRow, { flexDirection: rowDir }]}>
           <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
-          <View style={[styles.headerRight, { flexDirection: rowDir }]}>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="search-outline" size={20} color="rgba(255,255,255,0.85)" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn}>
-              <Ionicons name="notifications-outline" size={20} color="rgba(255,255,255,0.85)" />
-              <View style={styles.notifDot} />
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* Greeting */}
@@ -336,18 +327,6 @@ const styles = StyleSheet.create({
   },
   logoRow: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   logo: { width: 110, height: 48, margin: 1 },
-  headerRight: { gap: 8, alignItems: 'center' },
-  iconBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  notifDot: {
-    position: 'absolute', top: 9, right: 9,
-    width: 7, height: 7, borderRadius: 3.5,
-    backgroundColor: '#C21875',
-    borderWidth: 1.5, borderColor: '#3D2080',
-  },
   greeting: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 2 },
   userName: { fontSize: 22, color: '#FFFFFF', marginBottom: 10 },
   locationPill: {
