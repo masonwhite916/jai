@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   View, Text, FlatList, StyleSheet, Dimensions,
-  TouchableOpacity, Pressable, Image, Platform,
+  TouchableOpacity, Image, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -127,29 +127,6 @@ export default function Onboarding() {
 
         {/* Dots + action row */}
         <View style={[styles.actionRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-          {/* Dots */}
-          <View style={[styles.dotsRow, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            {SLIDES.map((_, i) => (
-              <Pressable
-                key={i}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  flatRef.current?.scrollToOffset({ offset: i * width, animated: true });
-                  setIdx(i);
-                }}
-                style={{ padding: 10 }}
-              >
-                <View
-                  style={[
-                    styles.dot,
-                    i === idx && styles.dotActive,
-                    i === idx && { backgroundColor: slide.accentColor, width: 28 },
-                  ]}
-                />
-              </Pressable>
-            ))}
-          </View>
-
           {/* Next / Get Started button */}
           <TouchableOpacity
             onPress={handleNext}
@@ -221,11 +198,7 @@ const styles = StyleSheet.create({
   },
   subtitle: { fontSize: 15, color: '#6B7280', lineHeight: 24, marginBottom: 28 },
 
-  actionRow: { justifyContent: 'space-between', alignItems: 'center' },
-  dotsRow: { gap: 8, alignItems: 'center' },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#E0E0EA' },
-  dotActive: { borderRadius: 4 },
-
+  actionRow: { justifyContent: 'flex-end', alignItems: 'center' },
   nextBtn: {
     borderRadius: 32, overflow: 'hidden',
     shadowColor: '#C21875', shadowOffset: { width: 0, height: 6 },
