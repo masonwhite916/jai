@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AppProvider } from '@/context/AppContext';
+import { AppProvider, type User } from '@/context/AppContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
@@ -28,6 +28,11 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
+interface PreloadedSession {
+  user: User | null;
+  hasSeenOnboarding: boolean;
+}
+
 function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -46,7 +51,8 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   const [initialLang, setInitialLang] = useState<Lang>('en');
-  const [langReady, setLangReady] = useState(false);
+  const [preloadedSession, setPreloadedSession] = useState<PreloadedSession | null>(null);
+  const [bootstrapReady, setBootstrapReady] = useState(false);
 
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -59,23 +65,39 @@ export default function RootLayout() {
     Cairo_700Bold,
   });
 
-  // Load stored language and set RTL before first render
+  // Pre-read lang AND session from AsyncStorage in one pass so AppProvider can
+  // initialise synchronously, preventing any flash of the loading/onboarding
+  // screen on cold starts caused by iOS low-memory process kills.
   useEffect(() => {
-    AsyncStorage.getItem('jai_lang').then((stored) => {
-      const lang: Lang = stored === 'ar' ? 'ar' : 'en';
+    Promise.all([
+      AsyncStorage.getItem('jai_lang'),
+      AsyncStorage.getItem('jai_user'),
+      AsyncStorage.getItem('jai_onboarding'),
+    ]).then(([storedLang, storedUser, storedOnboarding]) => {
+      const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
-      setLangReady(true);
+
+      let parsedUser: User | null = null;
+      if (storedUser) {
+        try { parsedUser = JSON.parse(storedUser); } catch { /* ignore */ }
+      }
+      setPreloadedSession({
+        user: parsedUser,
+        hasSeenOnboarding: storedOnboarding === 'true',
+      });
+
+      setBootstrapReady(true);
     });
   }, []);
 
   useEffect(() => {
-    if ((fontsLoaded || fontError) && langReady) {
+    if ((fontsLoaded || fontError) && bootstrapReady) {
       SplashScreen.hideAsync();
     }
-  }, [fontsLoaded, fontError, langReady]);
+  }, [fontsLoaded, fontError, bootstrapReady]);
 
-  if ((!fontsLoaded && !fontError) || !langReady) return null;
+  if ((!fontsLoaded && !fontError) || !bootstrapReady) return null;
 
   return (
     <SafeAreaProvider>
@@ -84,7 +106,7 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <LanguageProvider initialLang={initialLang}>
-                <AppProvider>
+                <AppProvider initialSession={preloadedSession}>
                   <RootLayoutNav />
                 </AppProvider>
               </LanguageProvider>

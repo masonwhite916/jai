@@ -46,12 +46,35 @@ const DEFAULT_USER: User = {
   ],
 };
 
-export function AppProvider({ children }: { children: ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+interface AppProviderProps {
+  children: ReactNode;
+  /**
+   * Pre-read from AsyncStorage by _layout.tsx during the font/lang load phase.
+   * When provided the provider skips its own AsyncStorage fetch and initialises
+   * synchronously, eliminating any flash of the loading screen on cold starts
+   * that follow an iOS low-memory process kill.
+   */
+  initialSession?: {
+    user: User | null;
+    hasSeenOnboarding: boolean;
+  } | null;
+}
+
+export function AppProvider({ children, initialSession }: AppProviderProps) {
+  // If the layout already pre-read the session we can start fully hydrated.
+  const preloaded = initialSession != null;
+
+  const [isLoading, setIsLoading] = useState(!preloaded);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState(
+    preloaded ? initialSession.hasSeenOnboarding : false,
+  );
+  const [isAuthenticated, setIsAuthenticated] = useState(
+    preloaded ? initialSession.user !== null : false,
+  );
   const [isGuest, setIsGuest] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(
+    preloaded ? initialSession.user : null,
+  );
 
   const isGuestRef = useRef(isGuest);
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
@@ -60,7 +83,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { userRef.current = user; }, [user]);
 
   useEffect(() => {
-    loadState();
+    // Skip the AsyncStorage fetch when the layout already supplied initial state.
+    if (!preloaded) loadState();
   }, []);
 
   // Re-hydrate session from AsyncStorage when the app returns to the foreground
