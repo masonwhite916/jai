@@ -21,21 +21,18 @@ export const jobStatusEnum = pgEnum("job_status", [
 // ── Tables ────────────────────────────────────────────────────────────────────
 
 export const users = pgTable("users", {
-  id:               serial("id").primaryKey(),
-  phone:            text("phone").notNull().unique(),
-  name:             text("name"),
-  role:             userRoleEnum("role").notNull().default("customer"),
-  membership:       membershipEnum("membership").notNull().default("none"),
-  points:           integer("points").notNull().default(0),
-  rating:           real("rating"),
-  jobs_completed:   integer("jobs_completed").notNull().default(0),
-  earnings_total:   integer("earnings_total").notNull().default(0),
-  push_token:       text("push_token"),
-  // DB-backed session token (no JWT needed)
-  auth_token:       text("auth_token"),
-  token_expires_at: timestamp("token_expires_at"),
-  created_at:       timestamp("created_at").notNull().defaultNow(),
-  updated_at:       timestamp("updated_at").notNull().defaultNow(),
+  id:             serial("id").primaryKey(),
+  phone:          text("phone").notNull().unique(),
+  name:           text("name"),
+  role:           userRoleEnum("role").notNull().default("customer"),
+  membership:     membershipEnum("membership").notNull().default("none"),
+  points:         integer("points").notNull().default(0),
+  rating:         real("rating"),
+  jobs_completed: integer("jobs_completed").notNull().default(0),
+  earnings_total: integer("earnings_total").notNull().default(0),
+  push_token:     text("push_token"),
+  created_at:     timestamp("created_at").notNull().defaultNow(),
+  updated_at:     timestamp("updated_at").notNull().defaultNow(),
 });
 
 export const serviceRequests = pgTable("service_requests", {
@@ -70,6 +67,21 @@ export const jobs = pgTable("jobs", {
   completed_at:   timestamp("completed_at"),
   created_at:     timestamp("created_at").notNull().defaultNow(),
   updated_at:     timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ── User sessions ─────────────────────────────────────────────────────────────
+
+export const userSessions = pgTable("user_sessions", {
+  id:          serial("id").primaryKey(),
+  user_id:     integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  token_hash:  text("token_hash").notNull().unique(),
+  device_name: text("device_name"),
+  platform:    text("platform"),
+  ip_address:  text("ip_address"),
+  created_at:  timestamp("created_at").notNull().defaultNow(),
+  last_used_at: timestamp("last_used_at").notNull().defaultNow(),
+  expires_at:  timestamp("expires_at").notNull(),
+  revoked_at:  timestamp("revoked_at"),
 });
 
 // ── Admin sessions (DB-backed, survives restarts) ─────────────────────────────

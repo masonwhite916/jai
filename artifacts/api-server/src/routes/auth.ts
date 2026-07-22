@@ -1,17 +1,17 @@
 import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { sendVerification, checkVerification, normalizePhone } from "../lib/taqnyatClient";
-import { generateToken, tokenExpiresAt } from "../lib/tokenAuth";
-import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { generateToken, hashToken, tokenExpiresAt } from "../lib/tokenAuth";
+import { db, users, userSessions } from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
 
-// Max 5 OTP requests per phone-derived IP per 10 minutes
+// Max 5 OTP requests per IP per 10 minutes
 const otpLimiter = rateLimit({
-  windowMs:         10 * 60 * 1000,
-  max:              5,
-  standardHeaders:  true,
-  legacyHeaders:    false,
-  message:          { error: "Too many OTP requests. Please wait before trying again." },
+  windowMs:        10 * 60 * 1000,
+  max:             5,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  message:         { error: "Too many OTP requests. Please wait before trying again." },
 });
 
 const router: IRouter = Router();
@@ -21,7 +21,7 @@ const router: IRouter = Router();
 // Existing users' roles are NEVER changed via OTP flow.
 const TECH_INVITE_CODE: string | undefined = process.env.TECHNICIAN_INVITE_CODE;
 
-// POST /api/auth/send-otp
+// ── POST /api/auth/send-otp ───────────────────────────────────────────────────
 // Body: { phone: string }
 router.post("/auth/send-otp", otpLimiter, async (req, res) => {
   try {
@@ -38,8 +38,8 @@ router.post("/auth/send-otp", otpLimiter, async (req, res) => {
   }
 });
 
-// POST /api/auth/verify-otp
-// Body: { phone, otp, name?, invite_code? }
+// ── POST /api/auth/verify-otp ─────────────────────────────────────────────────
+// Body: { phone, otp, name?, invite_code?, device_name?, platform? }
 //
 // Role policy:
 //   - Existing user → role is NEVER changed; invite_code ignored.
@@ -50,12 +50,14 @@ router.post("/auth/send-otp", otpLimiter, async (req, res) => {
 router.post("/auth/verify-otp", async (req, res) => {
   try {
     const {
-      phone, otp, name, invite_code,
+      phone, otp, name, invite_code, device_name, platform,
     } = req.body as {
-      phone?: string;
-      otp?: string;
-      name?: string;
+      phone?:       string;
+      otp?:         string;
+      name?:        string;
       invite_code?: string;
+      device_name?: string;
+      platform?:    string;
     };
 
     if (!phone || !otp) {
@@ -74,13 +76,9 @@ router.post("/auth/verify-otp", async (req, res) => {
       return;
     }
 
-    // Canonicalize phone to E.164 — same transform used by send-otp and Twilio Verify.
-    // All DB lookups and inserts use the canonical form to prevent identity aliasing.
     const canonicalPhone = normalizePhone(phone);
 
-    const token     = generateToken();
-    const expiresAt = tokenExpiresAt();
-
+    // Upsert user
     const existing = await db
       .select()
       .from(users)
@@ -89,24 +87,14 @@ router.post("/auth/verify-otp", async (req, res) => {
 
     let user;
     if (existing.length) {
-      // Existing user — preserve role; only safe personal fields may be updated.
-      const updates: Partial<typeof users.$inferInsert> = {
-        auth_token:       token,
-        token_expires_at: expiresAt,
-        updated_at:       new Date(),
-      };
+      const updates: Partial<typeof users.$inferInsert> = { updated_at: new Date() };
       if (name) updates.name = name;
-      // role is intentionally NOT updated here.
-
       [user] = await db
         .update(users)
         .set(updates)
         .where(eq(users.phone, canonicalPhone))
         .returning();
     } else {
-      // New user — role granted only when a valid server-configured invite code is
-      // supplied. Fail-closed: if TECHNICIAN_INVITE_CODE is not configured, all
-      // new accounts become 'customer'.
       const isValidCode =
         TECH_INVITE_CODE !== undefined &&
         TECH_INVITE_CODE.length > 0 &&
@@ -117,19 +105,28 @@ router.post("/auth/verify-otp", async (req, res) => {
 
       [user] = await db
         .insert(users)
-        .values({
-          phone:            canonicalPhone,
-          name:             name ?? null,
-          role,
-          auth_token:       token,
-          token_expires_at: expiresAt,
-        })
+        .values({ phone: canonicalPhone, name: name ?? null, role })
         .returning();
     }
 
+    // Create a new session — store only the hash, return the raw token once
+    const rawToken  = generateToken();
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = tokenExpiresAt();
+    const ipAddress = req.ip ?? req.socket.remoteAddress ?? null;
+
+    await db.insert(userSessions).values({
+      user_id:     user.id,
+      token_hash:  tokenHash,
+      device_name: device_name ?? null,
+      platform:    platform    ?? null,
+      ip_address:  ipAddress,
+      expires_at:  expiresAt,
+    });
+
     res.json({
       ok: true,
-      token,
+      token: rawToken,
       user: {
         id:            String(user.id),
         phone:         user.phone,
@@ -142,6 +139,135 @@ router.post("/auth/verify-otp", async (req, res) => {
         vehicles:      [],
       },
     });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── POST /api/auth/logout ─────────────────────────────────────────────────────
+// Revokes only the calling session (sets revoked_at). Other devices unaffected.
+router.post("/auth/logout", async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const tokenHash = hashToken(auth.slice(7));
+  try {
+    await db
+      .update(userSessions)
+      .set({ revoked_at: new Date() })
+      .where(and(eq(userSessions.token_hash, tokenHash), isNull(userSessions.revoked_at)));
+    res.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── GET /api/auth/sessions ────────────────────────────────────────────────────
+// Returns all active (non-revoked, non-expired) sessions for the caller.
+router.get("/auth/sessions", async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const tokenHash = hashToken(auth.slice(7));
+  try {
+    const now = new Date();
+    // Resolve the session to get user_id
+    const [session] = await db
+      .select({ user_id: userSessions.user_id })
+      .from(userSessions)
+      .where(
+        and(
+          eq(userSessions.token_hash, tokenHash),
+          gt(userSessions.expires_at, now),
+          isNull(userSessions.revoked_at),
+        ),
+      )
+      .limit(1);
+
+    if (!session) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
+
+    const sessions = await db
+      .select({
+        id:           userSessions.id,
+        device_name:  userSessions.device_name,
+        platform:     userSessions.platform,
+        ip_address:   userSessions.ip_address,
+        created_at:   userSessions.created_at,
+        last_used_at: userSessions.last_used_at,
+        expires_at:   userSessions.expires_at,
+      })
+      .from(userSessions)
+      .where(
+        and(
+          eq(userSessions.user_id, session.user_id),
+          gt(userSessions.expires_at, now),
+          isNull(userSessions.revoked_at),
+        ),
+      );
+
+    res.json({ sessions });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── DELETE /api/auth/sessions/:id ─────────────────────────────────────────────
+// Remotely revoke any of the caller's own sessions by ID.
+router.delete("/auth/sessions/:id", async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth?.startsWith("Bearer ")) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  const tokenHash = hashToken(auth.slice(7));
+  const targetId  = Number(req.params.id);
+  if (isNaN(targetId)) {
+    res.status(400).json({ error: "Invalid session id" });
+    return;
+  }
+  try {
+    const now = new Date();
+    // Resolve caller's user_id
+    const [caller] = await db
+      .select({ user_id: userSessions.user_id })
+      .from(userSessions)
+      .where(
+        and(
+          eq(userSessions.token_hash, tokenHash),
+          gt(userSessions.expires_at, now),
+          isNull(userSessions.revoked_at),
+        ),
+      )
+      .limit(1);
+
+    if (!caller) {
+      res.status(401).json({ error: "Invalid or expired token" });
+      return;
+    }
+
+    // Only allow revoking sessions that belong to the same user
+    await db
+      .update(userSessions)
+      .set({ revoked_at: new Date() })
+      .where(
+        and(
+          eq(userSessions.id, targetId),
+          eq(userSessions.user_id, caller.user_id),
+          isNull(userSessions.revoked_at),
+        ),
+      );
+
+    res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });

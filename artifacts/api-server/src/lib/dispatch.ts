@@ -27,8 +27,9 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server as HttpServer } from "http";
 import type { IncomingMessage } from "http";
-import { db, users, jobs, serviceRequests } from "@workspace/db";
-import { eq, and, gt } from "drizzle-orm";
+import { db, users, jobs, serviceRequests, userSessions } from "@workspace/db";
+import { eq, and, gt, isNull } from "drizzle-orm";
+import { hashToken } from "./tokenAuth";
 import { logger } from "./logger";
 import { setTechLocation, techLocations, safeIsoString } from "./techLocations";
 import { validateAdminToken } from "./adminSessions";
@@ -115,12 +116,19 @@ class DispatchServer {
           break;
         }
 
-        // Regular user (technician / customer) — validate against DB
+        // Regular user (technician / customer) — validate against user_sessions
         const now  = new Date();
         const rows = await db
           .select({ id: users.id, role: users.role })
-          .from(users)
-          .where(and(eq(users.auth_token, token), gt(users.token_expires_at, now)))
+          .from(userSessions)
+          .innerJoin(users, eq(users.id, userSessions.user_id))
+          .where(
+            and(
+              eq(userSessions.token_hash, hashToken(token)),
+              gt(userSessions.expires_at, now),
+              isNull(userSessions.revoked_at),
+            ),
+          )
           .limit(1);
 
         if (!rows.length) {

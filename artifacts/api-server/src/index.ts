@@ -4,6 +4,8 @@ import { dispatch } from "./lib/dispatch";
 import { logger } from "./lib/logger";
 import { warmTechLocationsFromDb } from "./lib/techLocations";
 import { migrateLegacySettingsFile } from "./lib/siteSettings";
+import { db, userSessions } from "@workspace/db";
+import { lt, or, isNotNull, and } from "drizzle-orm";
 
 const rawPort = process.env["PORT"];
 
@@ -42,3 +44,18 @@ server.listen(port, (err?: Error) => {
     logger.warn({ err: e }, "migrateLegacySettingsFile failed"),
   );
 });
+
+// ── Hourly cleanup: remove expired/revoked sessions older than 30 days ────────
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+setInterval(async () => {
+  try {
+    const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
+    await db.delete(userSessions).where(
+      or(
+        lt(userSessions.expires_at, new Date()),
+        and(isNotNull(userSessions.revoked_at), lt(userSessions.created_at, cutoff)),
+      ),
+    );
+  } catch { /* non-fatal — next tick will retry */ }
+}, 60 * 60 * 1000).unref();
