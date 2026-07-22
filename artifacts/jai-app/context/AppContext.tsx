@@ -215,7 +215,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   async function logout() {
     // Invalidate token server-side if we have one
     if (getAuthToken()) {
-      try { await apiFetch('/api/users/logout', { method: 'POST' }); } catch { /* ignore */ }
+      try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
     }
     setAuthToken(null);
     await Promise.all([

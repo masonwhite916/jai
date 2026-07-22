@@ -343,7 +343,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiFetch('/api/users/logout', { method: 'POST' });
+      await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch {
       /* best effort — clear locally regardless */
     }

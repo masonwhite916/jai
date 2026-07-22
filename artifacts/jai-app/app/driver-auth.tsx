@@ -64,7 +64,18 @@ export default function DriverAuth() {
       const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, otp, name: name.trim(), invite_code: inviteCode.trim() }),
+        body: JSON.stringify({
+            phone,
+            otp,
+            name: name.trim(),
+            invite_code: inviteCode.trim(),
+            platform: Platform.OS,
+            device_name: Platform.OS === 'ios'
+              ? `iOS ${Platform.Version}`
+              : Platform.OS === 'android'
+                ? `Android ${Platform.Version}`
+                : 'Web',
+          }),
       });
       const data = await resp.json() as { ok?: boolean; error?: string; token?: string; user?: any };
       if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');

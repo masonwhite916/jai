@@ -94,6 +94,12 @@ export default function AuthScreen() {
             otp: otp.trim(),
             name: name.trim(),
             invite_code: inviteCode.trim(),
+            platform: Platform.OS,
+            device_name: Platform.OS === 'ios'
+              ? `iOS ${Platform.Version}`
+              : Platform.OS === 'android'
+                ? `Android ${Platform.Version}`
+                : 'Web',
           }),
           skipAuth: true,
         },
