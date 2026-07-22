@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { db, users } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { db, users, userSessions } from "@workspace/db";
+import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 
 const router: IRouter = Router();
@@ -77,12 +77,19 @@ router.put("/users/me", requireAuth, async (req, res) => {
 });
 
 // POST /api/users/logout
+// Revokes the calling session only (other devices stay logged in).
+// Kept here for backward compatibility — mobile apps may call either this
+// route or POST /api/auth/logout; both do the same thing.
 router.post("/users/logout", requireAuth, async (req, res) => {
   try {
-    await db
-      .update(users)
-      .set({ auth_token: null, token_expires_at: null, updated_at: new Date() })
-      .where(eq(users.id, req.userId!));
+    if (req.sessionId) {
+      await db
+        .update(userSessions)
+        .set({ revoked_at: new Date() })
+        .where(
+          and(eq(userSessions.id, req.sessionId), isNull(userSessions.revoked_at)),
+        );
+    }
     res.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
