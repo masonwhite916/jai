@@ -69,6 +69,20 @@ export const jobs = pgTable("jobs", {
   updated_at:     timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── Technician vehicles ───────────────────────────────────────────────────────
+
+export const vehicles = pgTable("vehicles", {
+  id:         serial("id").primaryKey(),
+  user_id:    integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  make:       text("make").notNull(),
+  model:      text("model").notNull(),
+  year:       text("year").notNull(),
+  plate:      text("plate").notNull(),
+  color:      text("color").notNull(),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+  updated_at: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // ── User sessions ─────────────────────────────────────────────────────────────
 
 export const userSessions = pgTable("user_sessions", {

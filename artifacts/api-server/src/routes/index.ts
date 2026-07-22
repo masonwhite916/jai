@@ -7,6 +7,7 @@ import requestsRouter      from "./requests";
 import jobsRouter          from "./jobs";
 import adminRouter         from "./admin";
 import notificationsRouter from "./notifications";
+import vehiclesRouter      from "./vehicles";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(requestsRouter);
 router.use(jobsRouter);
 router.use(adminRouter);
 router.use(notificationsRouter);
+router.use(vehiclesRouter);
 
 export default router;

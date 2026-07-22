@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import rateLimit from "express-rate-limit";
 import { sendVerification, checkVerification, normalizePhone } from "../lib/taqnyatClient";
 import { generateToken, hashToken, tokenExpiresAt } from "../lib/tokenAuth";
-import { db, users, userSessions } from "@workspace/db";
+import { db, users, userSessions, vehicles } from "@workspace/db";
 import { eq, and, gt, isNull } from "drizzle-orm";
 
 // Max 5 OTP requests per IP per 10 minutes
@@ -115,14 +115,19 @@ router.post("/auth/verify-otp", async (req, res) => {
     const expiresAt = tokenExpiresAt();
     const ipAddress = req.ip ?? req.socket.remoteAddress ?? null;
 
-    await db.insert(userSessions).values({
-      user_id:     user.id,
-      token_hash:  tokenHash,
-      device_name: device_name ?? null,
-      platform:    platform    ?? null,
-      ip_address:  ipAddress,
-      expires_at:  expiresAt,
-    });
+    const [, userVehicles] = await Promise.all([
+      db.insert(userSessions).values({
+        user_id:     user.id,
+        token_hash:  tokenHash,
+        device_name: device_name ?? null,
+        platform:    platform    ?? null,
+        ip_address:  ipAddress,
+        expires_at:  expiresAt,
+      }),
+      user.role === "technician"
+        ? db.select().from(vehicles).where(eq(vehicles.user_id, user.id))
+        : Promise.resolve([]),
+    ]);
 
     res.json({
       ok: true,
@@ -136,7 +141,7 @@ router.post("/auth/verify-otp", async (req, res) => {
         points:        user.points,
         rating:        user.rating,
         jobsCompleted: user.jobs_completed,
-        vehicles:      [],
+        vehicles:      userVehicles,
       },
     });
   } catch (err) {

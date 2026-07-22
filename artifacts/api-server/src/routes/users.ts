@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, users, userSessions } from "@workspace/db";
+import { db, users, userSessions, vehicles } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 
@@ -8,11 +8,12 @@ const router: IRouter = Router();
 // GET /api/users/me
 router.get("/users/me", requireAuth, async (req, res) => {
   try {
-    const rows = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, req.userId!))
-      .limit(1);
+    const [rows, userVehicles] = await Promise.all([
+      db.select().from(users).where(eq(users.id, req.userId!)).limit(1),
+      req.userRole === "technician"
+        ? db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!))
+        : Promise.resolve([]),
+    ]);
 
     if (!rows.length) {
       res.status(404).json({ error: "User not found" });
@@ -29,7 +30,7 @@ router.get("/users/me", requireAuth, async (req, res) => {
       rating:        u.rating,
       jobsCompleted: u.jobs_completed,
       earningsTotal: u.earnings_total,
-      vehicles:      [],
+      vehicles:      userVehicles,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -52,11 +53,12 @@ router.put("/users/me", requireAuth, async (req, res) => {
     if (name       !== undefined) updates.name       = name;
     if (push_token !== undefined) updates.push_token = push_token;
 
-    const [u] = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, req.userId!))
-      .returning();
+    const [[u], userVehicles] = await Promise.all([
+      db.update(users).set(updates).where(eq(users.id, req.userId!)).returning(),
+      req.userRole === "technician"
+        ? db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!))
+        : Promise.resolve([]),
+    ]);
 
     res.json({
       id:            String(u.id),
@@ -68,7 +70,7 @@ router.put("/users/me", requireAuth, async (req, res) => {
       rating:        u.rating,
       jobsCompleted: u.jobs_completed,
       earningsTotal: u.earnings_total,
-      vehicles:      [],
+      vehicles:      userVehicles,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
