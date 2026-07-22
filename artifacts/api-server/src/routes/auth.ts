@@ -1,8 +1,18 @@
 import { Router, type IRouter } from "express";
+import rateLimit from "express-rate-limit";
 import { sendVerification, checkVerification, normalizePhone } from "../lib/taqnyatClient";
 import { generateToken, tokenExpiresAt } from "../lib/tokenAuth";
 import { db, users } from "@workspace/db";
 import { eq } from "drizzle-orm";
+
+// Max 5 OTP requests per phone-derived IP per 10 minutes
+const otpLimiter = rateLimit({
+  windowMs:         10 * 60 * 1000,
+  max:              5,
+  standardHeaders:  true,
+  legacyHeaders:    false,
+  message:          { error: "Too many OTP requests. Please wait before trying again." },
+});
 
 const router: IRouter = Router();
 
@@ -13,7 +23,7 @@ const TECH_INVITE_CODE: string | undefined = process.env.TECHNICIAN_INVITE_CODE;
 
 // POST /api/auth/send-otp
 // Body: { phone: string }
-router.post("/auth/send-otp", async (req, res) => {
+router.post("/auth/send-otp", otpLimiter, async (req, res) => {
   try {
     const { phone } = req.body as { phone?: string };
     if (!phone || phone.replace(/\D/g, "").length < 9) {

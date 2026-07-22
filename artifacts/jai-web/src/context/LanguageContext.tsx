@@ -1,3 +1,5 @@
+'use client';
+
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { useSiteSettings } from './SiteSettingsContext';
 
@@ -290,11 +292,18 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>(() => {
-    return (localStorage.getItem('jai-lang') as Lang) ?? 'en';
-  });
+  // Always start with 'en' so server and client render the same initial HTML.
+  // Read localStorage only after mount to avoid a hydration mismatch.
+  const [lang, setLang] = useState<Lang>('en');
 
   const isRTL = lang === 'ar';
+
+  // On first mount, restore the saved language from localStorage.
+  useEffect(() => {
+    const stored = localStorage.getItem('jai-lang') as Lang | null;
+    if (stored && stored !== lang) setLang(stored);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     document.documentElement.dir = isRTL ? 'rtl' : 'ltr';

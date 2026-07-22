@@ -47,6 +47,9 @@ export interface DispatchMessage {
   [key: string]: unknown;
 }
 
+/** Job statuses during which a technician may stream GPS to the job room. */
+const ACTIVE_JOB_STATUSES = new Set(["accepted", "en_route", "arrived", "working"]);
+
 // ── Dispatch server ───────────────────────────────────────────────────────────
 
 class DispatchServer {
@@ -98,9 +101,9 @@ class DispatchServer {
           return;
         }
 
-        // Admin token path — validated against in-memory admin session store
+        // Admin token path — validated against DB-backed admin session store
         if (token.startsWith("admin_")) {
-          if (!validateAdminToken(token)) {
+          if (!(await validateAdminToken(token))) {
             this.send(ws, { type: "auth_error", error: "Invalid or expired admin token" });
             return;
           }
@@ -210,13 +213,14 @@ class DispatchServer {
 
         // Authorization: verify this technician is the assigned owner of the job
         const assigned = await db
-          .select({ id: jobs.id })
+          .select({ id: jobs.id, status: jobs.status })
           .from(jobs)
           .where(and(eq(jobs.id, jobId), eq(jobs.technician_id, ws.userId)))
           .limit(1);
 
-        if (!assigned.length) {
-          // Not assigned — silently drop (no error sent to avoid leaking job state)
+        if (!assigned.length || !ACTIVE_JOB_STATUSES.has(String(assigned[0].status))) {
+          // Not assigned, or job no longer active (stale watcher) — silently
+          // drop (no error sent to avoid leaking job state)
           return;
         }
 

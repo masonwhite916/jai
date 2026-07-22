@@ -10,8 +10,14 @@ const baseConfig = require('./app.json');
 module.exports = {
   ...baseConfig.expo,
   extra: {
-    // The Replit shared-proxy host for this Expo app — used by the client
-    // to reach the API server artifact at /api.
-    apiHost: process.env.REPLIT_EXPO_DEV_DOMAIN ?? 'localhost',
+    // Production builds (EAS): set EXPO_PUBLIC_API_HOST to your deployed domain.
+    // Dev builds: falls back to the Replit shared-proxy dev domain.
+    apiHost:
+      process.env.EXPO_PUBLIC_API_HOST ??
+      process.env.REPLIT_EXPO_DEV_DOMAIN ??
+      'localhost',
+    eas: {
+      projectId: 'c2f8bd92-6111-4050-a3d4-6a6b86c18291',
+    },
   },
 };

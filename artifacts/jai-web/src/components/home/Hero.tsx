@@ -1,3 +1,5 @@
+'use client';
+
 import { motion, useScroll, useTransform } from 'framer-motion';
 import { Phone, ShieldAlert } from 'lucide-react';
 import { useRef } from 'react';
@@ -5,7 +7,6 @@ import { useLanguage } from '@/context/LanguageContext';
 import { useSiteSettings } from '@/context/SiteSettingsContext';
 
 export default function Hero() {
-  const baseUrl = import.meta.env.BASE_URL;
   const { t, isRTL } = useLanguage();
   const { settings } = useSiteSettings();
   const ref = useRef(null);
@@ -18,10 +19,9 @@ export default function Hero() {
 
   // Use the API-served custom hero image when one has been uploaded;
   // fall back to the bundled static hero.jpg otherwise.
-  const apiRoot = baseUrl.replace(/\/jai-web\/?$/, '');
   const heroSrc = settings?.heroImageUpdatedAt
-    ? `${apiRoot}/api/hero-image?v=${encodeURIComponent(settings.heroImageUpdatedAt)}`
-    : `${baseUrl}hero.jpg`;
+    ? `/api/hero-image?v=${encodeURIComponent(settings.heroImageUpdatedAt)}`
+    : '/jai-web/hero.jpg';
 
   return (
     <section ref={ref} className="relative min-h-[100dvh] flex items-center justify-center overflow-hidden pt-20">

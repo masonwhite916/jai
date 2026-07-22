@@ -10,10 +10,9 @@ import { useApp, DEFAULT_USER } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { getApiBaseUrl } from '@/lib/api';
 
-const API_BASE = process.env.EXPO_PUBLIC_DOMAIN
-  ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
-  : '';
+const API_BASE = getApiBaseUrl();
 
 type Step = 'phone' | 'otp';
 

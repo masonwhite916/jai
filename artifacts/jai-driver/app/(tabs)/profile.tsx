@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Switch, ScrollView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
 import { useDriver } from '@/context/DriverContext';
+import { confirmAsync } from '@/lib/ui';
 import { useColors } from '@/hooks/useColors';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
@@ -22,12 +23,17 @@ export default function ProfileScreen() {
 
   if (!driver) return null;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(t('logout'), isRTL ? 'هل تريد تسجيل الخروج؟' : 'Do you want to log out?', [
-      { text: t('no'), style: 'cancel' },
-      { text: t('yes'), style: 'destructive', onPress: () => logout().then(() => router.replace('/auth')) },
-    ]);
+    const ok = await confirmAsync(
+      t('logout'),
+      isRTL ? 'هل تريد تسجيل الخروج؟' : 'Do you want to log out?',
+      t('yes'),
+      t('no'),
+    );
+    if (!ok) return;
+    await logout();
+    router.replace('/auth');
   };
 
   const toggleLanguage = () => {
@@ -64,7 +70,7 @@ export default function ProfileScreen() {
             {[1, 2, 3, 4, 5].map((i) => (
               <Ionicons key={i} name={i <= Math.round(driver.rating) ? 'star' : 'star-outline'} size={16} color="#F39C12" />
             ))}
-            <Text style={[styles.ratingText, { fontFamily: font.medium, color: colors.text }]}>{driver.rating}</Text>
+            <Text style={[styles.ratingText, { fontFamily: font.medium, color: colors.text }]}>{driver.rating.toFixed(1)}</Text>
           </View>
         </View>
 

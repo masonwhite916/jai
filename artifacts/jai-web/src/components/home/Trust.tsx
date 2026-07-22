@@ -1,9 +1,10 @@
+'use client';
+
 import { motion } from 'framer-motion';
 import { Clock, MapPin, Shield } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function Trust() {
-  const baseUrl = import.meta.env.BASE_URL;
   const { t, isRTL } = useLanguage();
 
   const features = [
@@ -27,7 +28,7 @@ export default function Trust() {
             className="relative rounded-[2.5rem] overflow-hidden aspect-[4/5] border border-white/10 shadow-2xl group"
           >
             <img
-              src={`${baseUrl}mechanic.jpg`}
+              src="/jai-web/mechanic.jpg"
               alt="JAI Mechanic"
               className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105"
             />

@@ -1,5 +1,6 @@
 - [Whop payment integration](whop-integration.md) — plan IDs, checkout flow, key lesson: use renewal_price not initial_price for recurring plans
 - [Expo web stale bundle](expo-web-stale-bundle.md) — watcher can serve an old bundle; restart the Expo workflow to verify edits
 - [JAI design sync](jai-design-sync.md) — share brand colors, fonts, and i18n keys across JAI artifacts
-- [Expo multi-artifact dev preview](expo-multi-artifact-preview.md) — only the Expo app at previewPath "/" fully loads in dev; swap slots via verifyAndReplaceArtifactToml to review the other
+- [Expo multi-artifact dev preview](expo-multi-artifact-preview.md) — the expo dev domain serves the single artifact with router="expo-domain"; set the other's router to "path" to flip it
 - [Taqnyat OTP integration](taqnyat-otp.md) — Taqnyat Verify replaces Twilio; same public API surface; single POST endpoint; result codes not HTTP status
+- [Next.js monorepo migration](nextjs-monorepo-migration.md) — six required fixes when adding Next.js to this monorepo; see topic file before touching config

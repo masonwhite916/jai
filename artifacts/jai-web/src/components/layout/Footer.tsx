@@ -1,8 +1,9 @@
+'use client';
+
 import { Phone, Instagram, Twitter, Facebook } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function Footer() {
-  const baseUrl = import.meta.env.BASE_URL;
   const { t, isRTL } = useLanguage();
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
 
@@ -12,7 +13,7 @@ export default function Footer() {
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
           <div className={`lg:col-span-2 ${isRTL ? 'text-right' : ''}`}>
             <img
-              src={`${baseUrl}jai-logo.png`}
+              src="/jai-web/jai-logo.png"
               alt="JAI"
               className={`h-10 object-contain mb-6 opacity-90 ${isRTL ? 'mr-0 ml-auto md:ml-0' : ''}`}
             />

@@ -25,6 +25,7 @@ import {
 } from '@expo-google-fonts/cairo';
 import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import { usePushNotifications } from '@/lib/usePushNotifications';
 
@@ -158,6 +159,15 @@ export default function RootLayout() {
   // initialise synchronously, preventing any flash of the loading/onboarding
   // screen on cold starts caused by iOS low-memory process kills.
   useEffect(() => {
+    // Check for OTA updates silently on launch (production only)
+    if (!__DEV__ && Updates.isEnabled) {
+      Updates.checkForUpdateAsync()
+        .then(({ isAvailable }) => {
+          if (isAvailable) return Updates.fetchUpdateAsync().then(() => Updates.reloadAsync());
+        })
+        .catch(() => { /* ignore update errors — app still works */ });
+    }
+
     Promise.all([
       AsyncStorage.getItem('jai_lang'),
       AsyncStorage.getItem('jai_user'),

@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, text, integer, real, timestamp, pgEnum,
+  pgTable, serial, text, integer, real, timestamp, pgEnum, boolean, jsonb,
 } from "drizzle-orm/pg-core";
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -70,6 +70,44 @@ export const jobs = pgTable("jobs", {
   completed_at:   timestamp("completed_at"),
   created_at:     timestamp("created_at").notNull().defaultNow(),
   updated_at:     timestamp("updated_at").notNull().defaultNow(),
+});
+
+// ── Admin sessions (DB-backed, survives restarts) ─────────────────────────────
+
+export const adminSessions = pgTable("admin_sessions", {
+  token:      text("token").primaryKey(),
+  expires_at: timestamp("expires_at").notNull(),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Technician last-known locations ───────────────────────────────────────────
+
+export const technicianLocations = pgTable("technician_locations", {
+  user_id:       integer("user_id").primaryKey().references(() => users.id),
+  lat:           real("lat").notNull(),
+  lng:           real("lng").notNull(),
+  seen_at:       timestamp("seen_at").notNull().defaultNow(),
+  last_moved_at: timestamp("last_moved_at").notNull().defaultNow(),
+});
+
+// ── Notification history ───────────────────────────────────────────────────────
+
+export const notifications = pgTable("notifications", {
+  id:         serial("id").primaryKey(),
+  user_id:    integer("user_id").notNull().references(() => users.id),
+  title:      text("title").notNull(),
+  body:       text("body").notNull(),
+  data:       jsonb("data"),
+  read:       boolean("read").notNull().default(false),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
+// ── Site settings (key-value, DB-backed) ──────────────────────────────────────
+
+export const siteSettings = pgTable("site_settings", {
+  key:        text("key").primaryKey(),
+  value:      text("value").notNull(),
+  updated_at: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // ── TypeScript types ──────────────────────────────────────────────────────────

@@ -16,7 +16,7 @@ run = "pnpm --filter @workspace/jai-web run dev"
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/jai-web", "run", "build" ]
 serve = "static"
-publicDir = "artifacts/jai-web/dist/public"
+publicDir = "artifacts/jai-web/out"
 
 [[services.production.rewrites]]
 from = "/*"

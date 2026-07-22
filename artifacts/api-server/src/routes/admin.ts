@@ -48,7 +48,7 @@ router.post("/admin/login", async (req, res) => {
     return;
   }
 
-  const session = createAdminSession();
+  const session = await createAdminSession();
   res.json({ token: session.token, expiresAt: session.expiresAt.toISOString() });
 });
 
@@ -518,23 +518,23 @@ router.get("/admin/stats", requireAdmin, async (req, res) => {
 
 // ── GET /api/admin/site-settings ─────────────────────────────────────────────
 
-router.get("/admin/site-settings", requireAdmin, (_req, res) => {
-  res.json(getSiteSettings());
+router.get("/admin/site-settings", requireAdmin, async (_req, res) => {
+  res.json(await getSiteSettings());
 });
 
 // ── PUT /api/admin/site-settings/banners ─────────────────────────────────────
 
-router.put("/admin/site-settings/banners", requireAdmin, (req, res) => {
+router.put("/admin/site-settings/banners", requireAdmin, async (req, res) => {
   const banners = req.body as BannerSettings;
-  const updated = updateBanners(banners);
+  const updated = await updateBanners(banners);
   res.json(updated);
 });
 
 // ── PUT /api/admin/site-settings/theme ───────────────────────────────────────
 
-router.put("/admin/site-settings/theme", requireAdmin, (req, res) => {
+router.put("/admin/site-settings/theme", requireAdmin, async (req, res) => {
   const theme = req.body as ThemeSettings;
-  const updated = updateTheme(theme);
+  const updated = await updateTheme(theme);
   res.json(updated);
 });
 
@@ -544,7 +544,7 @@ router.post(
   "/admin/site-settings/hero-image",
   requireAdmin,
   upload.single("image"),
-  (req, res) => {
+  async (req, res) => {
     if (!req.file) {
       res.status(400).json({ error: "No image file provided" });
       return;
@@ -558,7 +558,7 @@ router.post(
     fs.writeFileSync(HERO_IMAGE_PATH, req.file.buffer);
 
     const updatedAt = new Date().toISOString();
-    const settings = setHeroImageUpdatedAt(updatedAt);
+    const settings  = await setHeroImageUpdatedAt(updatedAt);
     res.json({ heroImageUpdatedAt: settings.heroImageUpdatedAt });
   },
 );
@@ -578,8 +578,8 @@ router.get("/hero-image", (_req, res) => {
 // ── GET /api/site-settings (public) ──────────────────────────────────────────
 // Registered on the router but mounted at /api — consumed by jai-web
 
-router.get("/site-settings", (_req, res) => {
-  res.json(getSiteSettings());
+router.get("/site-settings", async (_req, res) => {
+  res.json(await getSiteSettings());
 });
 
 export default router;

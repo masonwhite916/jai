@@ -1,0 +1,20 @@
+{
+  "app/not-found.tsx -> @/screens/not-found": {
+    "id": "app/not-found.tsx -> @/screens/not-found",
+    "files": [
+      "static/chunks/_app-pages-browser_src_screens_not-found_tsx.js"
+    ]
+  },
+  "app/page.tsx -> @/screens/Home": {
+    "id": "app/page.tsx -> @/screens/Home",
+    "files": [
+      "static/chunks/_app-pages-browser_src_screens_Home_tsx.js"
+    ]
+  },
+  "screens/Home.tsx -> @/components/layout/Footer": {
+    "id": "screens/Home.tsx -> @/components/layout/Footer",
+    "files": [
+      "static/chunks/_app-pages-browser_src_components_layout_Footer_tsx.js"
+    ]
+  }
+}

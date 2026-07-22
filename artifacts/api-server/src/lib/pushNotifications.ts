@@ -8,7 +8,7 @@
  * so a push error never breaks the main request/response flow.
  */
 
-import { db, users, jobs, serviceRequests } from "@workspace/db";
+import { db, users, jobs, serviceRequests, notifications } from "@workspace/db";
 import { eq, isNotNull, ne } from "drizzle-orm";
 import { logger } from "./logger";
 
@@ -90,14 +90,29 @@ export async function notifyTechniciansNewJob(opts: {
     const service = opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1);
     const location = opts.address ? ` · ${opts.address}` : "";
 
-    await sendPush({
-      to:        tokens,
-      title:     `🚗 New job: ${service}${location}`,
-      body:      `SAR ${opts.payout} payout — tap to view`,
-      sound:     "default",
-      channelId: "jobs",
-      data:      { screen: "job", jobId: opts.jobId, type: "new_job" },
-    });
+    const title = `🚗 New job: ${service}${location}`;
+    const body  = `SAR ${opts.payout} payout — tap to view`;
+    const data  = { screen: "job", jobId: opts.jobId, type: "new_job" };
+
+    await sendPush({ to: tokens, title, body, sound: "default", channelId: "jobs", data });
+
+    // Persist notification history for each technician
+    if (tokens.length) {
+      const techIds = techs
+        .filter((t) => t.push_token != null && t.push_token.length > 10)
+        .map((t) => t.push_token as string);
+      // Re-fetch user IDs for the token recipients
+      const techUserRows = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, "technician"));
+      const inserts = techUserRows.map((t) => ({
+        user_id: t.id, title, body, data,
+      }));
+      if (inserts.length) {
+        await db.insert(notifications).values(inserts).catch(() => {});
+      }
+    }
   } catch (err) {
     logger.warn({ err }, "notifyTechniciansNewJob failed");
   }
@@ -124,19 +139,17 @@ export async function notifyCustomerJobAccepted(opts: {
 
     const service = opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1);
 
-    await sendPush({
-      to:        customer.push_token,
-      title:     `✅ Technician on the way!`,
-      body:      `${opts.techName} accepted your ${service} request and is heading to you.`,
-      sound:     "default",
-      channelId: "jobs",
-      data:      {
-        screen:    "tracking",
-        jobId:     opts.jobId,
-        requestId: opts.requestId,
-        type:      "job_accepted",
-      },
-    });
+    const title = `✅ Technician on the way!`;
+    const body  = `${opts.techName} accepted your ${service} request and is heading to you.`;
+    const data  = { screen: "tracking", jobId: opts.jobId, requestId: opts.requestId, type: "job_accepted" };
+
+    await sendPush({ to: customer.push_token, title, body, sound: "default", channelId: "jobs", data });
+
+    // Persist notification history
+    const [cust] = await db.select({ id: users.id }).from(users).where(eq(users.id, opts.customerId)).limit(1);
+    if (cust) {
+      await db.insert(notifications).values({ user_id: cust.id, title, body, data }).catch(() => {});
+    }
   } catch (err) {
     logger.warn({ err }, "notifyCustomerJobAccepted failed");
   }
@@ -162,18 +175,17 @@ export async function notifyCustomerJobCompleted(opts: {
 
     const service = opts.serviceType.charAt(0).toUpperCase() + opts.serviceType.slice(1);
 
-    await sendPush({
-      to:        customer.push_token,
-      title:     `🎉 Service completed!`,
-      body:      `Your ${service} service is done. SAR ${opts.payout} charged. Thank you for using JAI!`,
-      sound:     "default",
-      channelId: "jobs",
-      data:      {
-        screen:    "requests",
-        requestId: opts.requestId,
-        type:      "job_completed",
-      },
-    });
+    const title = `🎉 Service completed!`;
+    const body  = `Your ${service} service is done. SAR ${opts.payout} charged. Thank you for using JAI!`;
+    const data  = { screen: "requests", requestId: opts.requestId, type: "job_completed" };
+
+    await sendPush({ to: customer.push_token, title, body, sound: "default", channelId: "jobs", data });
+
+    // Persist notification history
+    const [cust] = await db.select({ id: users.id }).from(users).where(eq(users.id, opts.customerId)).limit(1);
+    if (cust) {
+      await db.insert(notifications).values({ user_id: cust.id, title, body, data }).catch(() => {});
+    }
   } catch (err) {
     logger.warn({ err }, "notifyCustomerJobCompleted failed");
   }

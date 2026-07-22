@@ -64,8 +64,8 @@ export default function EarningsScreen() {
           </View>
           <Text style={[styles.insightBody, { fontFamily: font.regular, color: colors.mutedForeground, textAlign: align }]}>
             {isRTL
-              ? 'أنت من أفضل السائقين أداءً هذا الأسبوع. واصل العمل!'
-              : 'You are in the top 15% of drivers this week. Keep it up!'}
+              ? 'تُحدَّث أرباحك تلقائياً فور إنهاء كل مهمة.'
+              : 'Your earnings update automatically as you complete jobs.'}
           </Text>
         </View>
       </ScrollView>

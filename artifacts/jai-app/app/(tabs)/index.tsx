@@ -101,10 +101,10 @@ export default function HomeScreen() {
           </View>
 
           {/* Greeting */}
-          <Text style={[styles.greeting, { fontFamily: font.regular, textAlign: align }]}>
+          <Text style={[styles.greeting, { fontFamily: font.regular, textAlign: 'right', alignSelf: 'flex-end' }]}>
             {t('goodMorning')}
           </Text>
-          <Text style={[styles.userName, { fontFamily: font.bold, textAlign: align }]}>
+          <Text style={[styles.userName, { fontFamily: font.bold, textAlign: 'right', alignSelf: 'flex-end' }]}>
             {firstName} 👋
           </Text>
 
@@ -337,7 +337,6 @@ const styles = StyleSheet.create({
     paddingBottom: 36,
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
-    // Tinted shadow for depth
     shadowColor: '#2D1B69',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.3,

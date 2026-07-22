@@ -1,45 +1,61 @@
 /**
- * In-memory admin session store.
+ * DB-backed admin session store.
  *
- * Tokens are lost on server restart (intentional — admins re-login).
- * Each session is valid for 24 hours.
+ * Sessions survive server restarts. Each token is valid for 24 hours.
+ * Expired sessions are cleaned up lazily on each validation call and
+ * by a periodic background job.
  */
 
 import { randomUUID } from "crypto";
+import { db, adminSessions } from "@workspace/db";
+import { eq, lt } from "drizzle-orm";
 
-interface AdminSession {
-  token: string;
+export interface AdminSession {
+  token:     string;
   expiresAt: Date;
 }
 
-const sessions = new Map<string, AdminSession>();
-
-// Periodically evict expired sessions to avoid unbounded growth.
-setInterval(
-  () => {
-    const now = new Date();
-    for (const [token, session] of sessions.entries()) {
-      if (session.expiresAt <= now) sessions.delete(token);
-    }
-  },
-  60 * 60 * 1000, // run every hour
-).unref();
-
-/** Create a new admin session and return its token + expiry. */
-export function createAdminSession(): AdminSession {
-  const token = `admin_${randomUUID()}`;
+/** Create a new admin session and persist it to the DB. */
+export async function createAdminSession(): Promise<AdminSession> {
+  const token     = `admin_${randomUUID()}`;
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 h
-  sessions.set(token, { token, expiresAt });
+
+  await db.insert(adminSessions).values({ token, expires_at: expiresAt });
   return { token, expiresAt };
 }
 
-/** Return true if the token is valid and not expired. */
-export function validateAdminToken(token: string): boolean {
-  const session = sessions.get(token);
-  if (!session) return false;
-  if (session.expiresAt <= new Date()) {
-    sessions.delete(token);
+/** Return true if the token exists in the DB and has not expired. */
+export async function validateAdminToken(token: string): Promise<boolean> {
+  const now = new Date();
+  const rows = await db
+    .select({ token: adminSessions.token })
+    .from(adminSessions)
+    .where(eq(adminSessions.token, token))
+    .limit(1);
+
+  if (!rows.length) return false;
+
+  // Check expiry — delete inline if expired
+  const [row] = await db
+    .select({ expires_at: adminSessions.expires_at })
+    .from(adminSessions)
+    .where(eq(adminSessions.token, token))
+    .limit(1);
+
+  if (!row || row.expires_at <= now) {
+    await db.delete(adminSessions).where(eq(adminSessions.token, token));
     return false;
   }
+
   return true;
 }
+
+// Periodically evict expired sessions to avoid unbounded table growth.
+setInterval(
+  async () => {
+    try {
+      await db.delete(adminSessions).where(lt(adminSessions.expires_at, new Date()));
+    } catch { /* ignore — next tick will retry */ }
+  },
+  60 * 60 * 1000, // every hour
+).unref();

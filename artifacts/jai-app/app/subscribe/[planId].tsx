@@ -130,7 +130,7 @@ export default function SubscribeScreen() {
       for (let attempt = 0; attempt < 4; attempt++) {
         if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
         const data = await apiFetch<{ active?: boolean; plan?: string | null }>(
-          `/whop/membership-status?email=${encodeURIComponent(userEmail)}&plan=${encodeURIComponent(planId ?? 'basic')}`,
+          `/api/whop/membership-status?email=${encodeURIComponent(userEmail)}&plan=${encodeURIComponent(planId ?? 'basic')}`,
         );
         if (data.active) {
           await updateUser({
@@ -171,7 +171,7 @@ export default function SubscribeScreen() {
     try {
       // 1. Create a Whop checkout session via the API server
       const data = await apiFetch<{ purchase_url: string; checkout_id: string }>(
-        '/whop/checkout',
+        '/api/whop/checkout',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

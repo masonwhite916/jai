@@ -1,12 +1,14 @@
+'use client';
+
 import { motion } from 'framer-motion';
 import { Check } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
-import { useLocation } from 'wouter';
+import { useRouter } from 'next/navigation';
 
 export default function Pricing() {
   const { t, isRTL } = useLanguage();
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
-  const [, navigate] = useLocation();
+  const router = useRouter();
 
   const plans = [
     {
@@ -96,7 +98,7 @@ export default function Pricing() {
               </div>
 
               <button
-                onClick={() => navigate(`/subscribe?plan=${p.id}`)}
+                onClick={() => router.push(`/subscribe?plan=${p.id}`)}
                 className={`block w-full py-4 text-center rounded-full font-bold transition-all ${p.popular ? 'bg-[#C21875] hover:bg-[#C21875]/90 text-white shadow-lg' : 'bg-white/5 hover:bg-white/10 text-white border border-white/10'} ${arabic}`}
               >
                 {t('price_cta')}

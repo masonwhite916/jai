@@ -1,15 +1,16 @@
+'use client';
+
 import { motion } from 'framer-motion';
 import { Zap, Fuel, CircleDashed, Truck, Lock, Wrench, Cpu } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 
 export default function Services() {
-  const baseUrl = import.meta.env.BASE_URL;
   const { t, isRTL } = useLanguage();
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
 
   const services = [
-    { icon: Zap,          titleKey: 'svc_battery_title', descKey: 'svc_battery_desc', featured: `${baseUrl}service-battery.jpg` },
-    { icon: Truck,        titleKey: 'svc_tow_title',     descKey: 'svc_tow_desc',     featured: `${baseUrl}service-tow.jpg` },
+    { icon: Zap,          titleKey: 'svc_battery_title', descKey: 'svc_battery_desc', featured: '/jai-web/service-battery.jpg' },
+    { icon: Truck,        titleKey: 'svc_tow_title',     descKey: 'svc_tow_desc',     featured: '/jai-web/service-tow.jpg' },
     { icon: Fuel,         titleKey: 'svc_fuel_title',    descKey: 'svc_fuel_desc' },
     { icon: CircleDashed, titleKey: 'svc_tire_title',    descKey: 'svc_tire_desc' },
     { icon: Lock,         titleKey: 'svc_lock_title',    descKey: 'svc_lock_desc' },

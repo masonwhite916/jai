@@ -9,6 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
 import { useDriver, type Job, type JobStatus } from '@/context/DriverContext';
 import { useColors } from '@/hooks/useColors';
+import { notify } from '@/lib/ui';
 import { Ionicons, Feather } from '@expo/vector-icons';
 
 const serviceIcons: Record<Job['service'], keyof typeof Ionicons.glyphMap> = {
@@ -17,6 +18,8 @@ const serviceIcons: Record<Job['service'], keyof typeof Ionicons.glyphMap> = {
   tire: 'disc-outline',
   fuel: 'flame-outline',
   lockout: 'key-outline',
+  mechanic: 'construct-outline',
+  electric: 'flash-outline',
 };
 
 const statusLabels: Record<JobStatus, string> = {
@@ -29,6 +32,12 @@ const statusLabels: Record<JobStatus, string> = {
   cancelled: 'statusCancelled',
 };
 
+function timeLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 function JobCard({ job, onAccept }: { job: Job; onAccept?: (id: string) => void }) {
   const { t, isRTL, font } = useLanguage();
   const colors = useColors();
@@ -40,33 +49,34 @@ function JobCard({ job, onAccept }: { job: Job; onAccept?: (id: string) => void 
     <View style={[styles.card, { backgroundColor: colors.card }]}>
       <View style={[styles.cardHeader, { flexDirection: rowDir }]}>
         <View style={[styles.serviceBadge, { flexDirection: rowDir }]}>
-          <Ionicons name={serviceIcons[job.service]} size={18} color={colors.primary} />
+          <Ionicons name={serviceIcons[job.service] ?? 'construct-outline'} size={18} color={colors.primary} />
           <Text style={[styles.serviceText, { fontFamily: font.medium, color: colors.text }]}>
             {t(job.service === 'tow' ? 'towTruck' : job.service)}
           </Text>
         </View>
-        <View style={[styles.urgencyBadge, { backgroundColor: job.urgency === 'urgent' ? 'rgba(231,76,60,0.15)' : 'rgba(46,204,113,0.15)' }]}>
-          <Text style={[styles.urgencyText, { fontFamily: font.semibold, color: job.urgency === 'urgent' ? colors.destructive : colors.success }]}>
-            {t(job.urgency)}
+        <View style={[styles.timeBadge, { flexDirection: rowDir }]}>
+          <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
+          <Text style={[styles.timeText, { fontFamily: font.medium, color: colors.mutedForeground }]}>
+            {timeLabel(job.createdAt)}
           </Text>
         </View>
       </View>
 
       <Text style={[styles.address, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>
-        {job.address}
+        {job.address || '—'}
       </Text>
 
       <View style={[styles.metaRow, { flexDirection: rowDir }]}>
         <View style={[styles.meta, { flexDirection: rowDir }]}>
           <Ionicons name="location" size={14} color={colors.mutedForeground} />
           <Text style={[styles.metaText, { fontFamily: font.medium, color: colors.mutedForeground }]}>
-            {job.distanceKm} {t('km')}
+            {job.distanceKm != null ? `${job.distanceKm} ${t('km')}` : '—'}
           </Text>
         </View>
         <View style={[styles.meta, { flexDirection: rowDir }]}>
           <Ionicons name="time" size={14} color={colors.mutedForeground} />
           <Text style={[styles.metaText, { fontFamily: font.medium, color: colors.mutedForeground }]}>
-            {job.etaMin} {t('min')}
+            {job.etaMin != null ? `${job.etaMin} ${t('min')}` : '—'}
           </Text>
         </View>
         <View style={[styles.meta, { flexDirection: rowDir }]}>
@@ -85,12 +95,6 @@ function JobCard({ job, onAccept }: { job: Job; onAccept?: (id: string) => void 
             style={[styles.acceptBtn, { backgroundColor: colors.success }]}
           >
             <Text style={[styles.actionText, { fontFamily: font.semibold }]}>{t('accept')}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={[styles.declineBtn, { borderColor: colors.border }]}
-          >
-            <Text style={[styles.declineText, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('decline')}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -121,7 +125,7 @@ export default function RequestsScreen() {
   const router = useRouter();
   const { t, isRTL, font } = useLanguage();
   const colors = useColors();
-  const { driver, jobs, acceptJob, refreshJobs, activeJob } = useDriver();
+  const { driver, jobs, acceptJob, refreshJobs, activeJob, loadError } = useDriver();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
   const [refreshing, setRefreshing] = React.useState(false);
@@ -133,9 +137,17 @@ export default function RequestsScreen() {
   }, [refreshJobs]);
 
   const handleAccept = async (id: string) => {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await acceptJob(id);
-    router.push(`/job/${id}` as any);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const res = await acceptJob(id);
+    if (res.ok) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      router.push(`/job/${id}` as any);
+    } else if (res.status === 409 || res.status === 422) {
+      // 409 = race lost; 422 = job already moved past pending
+      notify(t('jobTaken'));
+    } else {
+      notify(t('errGeneric'), res.error);
+    }
   };
 
   const pendingJobs = jobs.filter((j) => j.status === 'pending');
@@ -161,6 +173,15 @@ export default function RequestsScreen() {
         </View>
       </View>
 
+      {loadError && (
+        <View style={[styles.errorBanner, { flexDirection: rowDir, backgroundColor: 'rgba(231,76,60,0.12)' }]}>
+          <Ionicons name="cloud-offline-outline" size={16} color={colors.destructive} />
+          <Text style={[styles.errorText, { fontFamily: font.medium, color: colors.destructive, textAlign: align }]}>
+            {t('loadJobsError')}
+          </Text>
+        </View>
+      )}
+
       {activeJob && (
         <TouchableOpacity
           activeOpacity={0.8}
@@ -172,7 +193,8 @@ export default function RequestsScreen() {
           <View style={{ flex: 1, marginHorizontal: 12 }}>
             <Text style={[styles.bannerTitle, { fontFamily: font.semibold, color: '#FFFFFF' }]}>{t('activeJob')}</Text>
             <Text style={[styles.bannerSub, { fontFamily: font.regular, color: 'rgba(255,255,255,0.8)' }]} numberOfLines={1}>
-              {activeJob.customerName} · {activeJob.distanceKm} {t('km')}
+              {activeJob.customerName}
+              {activeJob.distanceKm != null ? ` · ${activeJob.distanceKm} ${t('km')}` : ''}
             </Text>
           </View>
           <Feather name={isRTL ? 'chevron-left' : 'chevron-right'} size={20} color="#FFFFFF" />
@@ -205,6 +227,8 @@ const styles = StyleSheet.create({
   onlineBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, alignItems: 'center', gap: 6 },
   onlineDot: { width: 8, height: 8, borderRadius: 4 },
   onlineText: { fontSize: 13 },
+  errorBanner: { marginHorizontal: 16, marginBottom: 12, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, alignItems: 'center', gap: 8 },
+  errorText: { flex: 1, fontSize: 13 },
   activeBanner: { marginHorizontal: 16, marginBottom: 12, padding: 16, borderRadius: 16, overflow: 'hidden', alignItems: 'center' },
   bannerTitle: { fontSize: 15 },
   bannerSub: { fontSize: 13, marginTop: 2 },
@@ -212,17 +236,15 @@ const styles = StyleSheet.create({
   cardHeader: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   serviceBadge: { alignItems: 'center', gap: 8 },
   serviceText: { fontSize: 14 },
-  urgencyBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
-  urgencyText: { fontSize: 12 },
+  timeBadge: { alignItems: 'center', gap: 4 },
+  timeText: { fontSize: 12 },
   address: { fontSize: 14, lineHeight: 20, marginBottom: 12 },
   metaRow: { gap: 16, marginBottom: 14 },
   meta: { alignItems: 'center', gap: 4 },
   metaText: { fontSize: 12 },
   actions: { gap: 10 },
   acceptBtn: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  declineBtn: { flex: 1, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   actionText: { color: '#FFFFFF', fontSize: 14 },
-  declineText: { fontSize: 14 },
   statusRow: { alignItems: 'center', gap: 6 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: 13 },

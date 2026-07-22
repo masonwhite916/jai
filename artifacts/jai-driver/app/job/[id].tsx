@@ -7,7 +7,9 @@ import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
 import { useDriver, type JobStatus } from '@/context/DriverContext';
 import { useColors } from '@/hooks/useColors';
+import { notify, confirmAsync } from '@/lib/ui';
 import { Ionicons } from '@expo/vector-icons';
+import MapCard from '@/components/MapCard';
 
 const statusLabels: Record<JobStatus, string> = {
   pending: 'statusPending',
@@ -48,16 +50,33 @@ export default function JobDetailScreen() {
 
   const currentAction = statusActionMap[job.status];
 
-  const handlePrimary = () => {
+  const handlePrimary = async () => {
     if (!currentAction) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (job.status === 'pending') {
-      acceptJob(job.id).then(() => router.push('/(tabs)/active' as any));
+      const res = await acceptJob(job.id);
+      if (res.ok) {
+        router.push('/(tabs)/active' as any);
+      } else if (res.status === 409 || res.status === 422) {
+        notify(t('jobTaken'));
+      } else {
+        notify(t('errGeneric'), res.error);
+      }
     } else {
-      updateJobStatus(job.id, currentAction.next).then(() => {
-        if (currentAction.next === 'completed') router.push('/(tabs)/earnings' as any);
-      });
+      const res = await updateJobStatus(job.id, currentAction.next);
+      if (!res.ok) {
+        notify(t('errGeneric'), res.error);
+      } else if (currentAction.next === 'completed') {
+        router.push('/(tabs)/earnings' as any);
+      }
     }
+  };
+
+  const handleCancel = async () => {
+    const ok = await confirmAsync(t('cancelJob'), t('confirmCancel'), t('yes'), t('no'));
+    if (!ok) return;
+    const res = await cancelJob(job.id);
+    if (!res.ok) notify(t('errGeneric'), res.error);
   };
 
   const handleCall = () => {
@@ -106,11 +125,19 @@ export default function JobDetailScreen() {
           </Text>
         </View>
 
+        {job.coords && (
+          <MapCard
+            latitude={job.coords.latitude}
+            longitude={job.coords.longitude}
+            address={job.address}
+          />
+        )}
+
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>{t('jobDetails')}</Text>
-          <DetailRow label={t('address')} value={job.address} colors={colors} font={font} rowDir={rowDir} align={align} />
-          <DetailRow label={t('distance')} value={`${job.distanceKm} ${t('km')}`} colors={colors} font={font} rowDir={rowDir} align={align} />
-          <DetailRow label={t('eta')} value={`${job.etaMin} ${t('min')}`} colors={colors} font={font} rowDir={rowDir} align={align} />
+          <DetailRow label={t('address')} value={job.address || '—'} colors={colors} font={font} rowDir={rowDir} align={align} />
+          <DetailRow label={t('distance')} value={job.distanceKm != null ? `${job.distanceKm} ${t('km')}` : '—'} colors={colors} font={font} rowDir={rowDir} align={align} />
+          <DetailRow label={t('eta')} value={job.etaMin != null ? `${job.etaMin} ${t('min')}` : '—'} colors={colors} font={font} rowDir={rowDir} align={align} />
           <DetailRow label={t('payout')} value={`${job.payout} ${t('sar')}`} colors={colors} font={font} rowDir={rowDir} align={align} valueColor={colors.success} />
           <DetailRow label={t('status')} value={t(statusLabels[job.status])} colors={colors} font={font} rowDir={rowDir} align={align} />
         </View>
@@ -128,9 +155,11 @@ export default function JobDetailScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity activeOpacity={0.7} onPress={() => cancelJob(job.id)} style={[styles.cancelBtn, { borderColor: 'rgba(231,76,60,0.4)' }]}>
-          <Text style={[styles.cancelText, { fontFamily: font.semibold, color: colors.destructive }]}>{t('cancelJob')}</Text>
-        </TouchableOpacity>
+        {job.status !== 'completed' && job.status !== 'cancelled' && (
+          <TouchableOpacity activeOpacity={0.7} onPress={handleCancel} style={[styles.cancelBtn, { borderColor: 'rgba(231,76,60,0.4)' }]}>
+            <Text style={[styles.cancelText, { fontFamily: font.semibold, color: colors.destructive }]}>{t('cancelJob')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );

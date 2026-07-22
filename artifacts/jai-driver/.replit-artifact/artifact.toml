@@ -3,7 +3,7 @@ previewPath = "/"
 title = "JAI Driver — Technician App"
 version = "1.0.0"
 id = "artifacts/jai-driver"
-router = "expo-domain"
+router = "path"
 
 [[services]]
 name = "expo"
@@ -21,3 +21,4 @@ run = [ "pnpm", "--filter", "@workspace/jai-driver", "run", "serve" ]
 [services.env]
 PORT = "19297"
 BASE_PATH = "/"
+APP_VARIANT = "technician"

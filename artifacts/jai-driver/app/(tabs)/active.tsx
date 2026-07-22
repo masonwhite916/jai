@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Alert, Platform,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,7 +9,9 @@ import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
 import { useDriver, type JobStatus } from '@/context/DriverContext';
 import { useColors } from '@/hooks/useColors';
+import { notify, confirmAsync } from '@/lib/ui';
 import { Ionicons, Feather } from '@expo/vector-icons';
+import MapCard from '@/components/MapCard';
 
 const STATUS_FLOW: JobStatus[] = ['accepted', 'en_route', 'arrived', 'working', 'completed'];
 
@@ -63,22 +65,19 @@ export default function ActiveScreen() {
   const currentAction = statusActionMap[activeJob.status];
   const currentIndex = STATUS_FLOW.indexOf(activeJob.status);
 
-  const handleStatus = () => {
+  const handleStatus = async () => {
     if (!currentAction) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    updateJobStatus(activeJob.id, currentAction.next);
+    const res = await updateJobStatus(activeJob.id, currentAction.next);
+    if (!res.ok) notify(t('errGeneric'), res.error);
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert(t('cancelJob'), t('confirmCancel'), [
-      { text: t('no'), style: 'cancel' },
-      {
-        text: t('yes'),
-        style: 'destructive',
-        onPress: () => cancelJob(activeJob.id),
-      },
-    ]);
+    const ok = await confirmAsync(t('cancelJob'), t('confirmCancel'), t('yes'), t('no'));
+    if (!ok) return;
+    const res = await cancelJob(activeJob.id);
+    if (!res.ok) notify(t('errGeneric'), res.error);
   };
 
   const handleCall = () => {
@@ -155,6 +154,14 @@ export default function ActiveScreen() {
           </Text>
         </View>
 
+        {activeJob.coords && (
+          <MapCard
+            latitude={activeJob.coords.latitude}
+            longitude={activeJob.coords.longitude}
+            address={activeJob.address}
+          />
+        )}
+
         <View style={[styles.infoCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.infoTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>{t('jobDetails')}</Text>
           <View style={[styles.detailRow, { flexDirection: rowDir }]}>
@@ -163,11 +170,11 @@ export default function ActiveScreen() {
           </View>
           <View style={[styles.detailRow, { flexDirection: rowDir }]}>
             <Text style={[styles.detailLabel, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('distance')}</Text>
-            <Text style={[styles.detailValue, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>{activeJob.distanceKm} {t('km')}</Text>
+            <Text style={[styles.detailValue, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>{activeJob.distanceKm != null ? `${activeJob.distanceKm} ${t('km')}` : '—'}</Text>
           </View>
           <View style={[styles.detailRow, { flexDirection: rowDir }]}>
             <Text style={[styles.detailLabel, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('eta')}</Text>
-            <Text style={[styles.detailValue, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>{activeJob.etaMin} {t('min')}</Text>
+            <Text style={[styles.detailValue, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>{activeJob.etaMin != null ? `${activeJob.etaMin} ${t('min')}` : '—'}</Text>
           </View>
           <View style={[styles.detailRow, { flexDirection: rowDir }]}>
             <Text style={[styles.detailLabel, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('payout')}</Text>

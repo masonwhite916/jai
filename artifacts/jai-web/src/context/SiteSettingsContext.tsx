@@ -3,6 +3,8 @@
  * - Banner overrides are exposed via context and consumed by LanguageContext.
  * - Theme overrides are written directly into CSS custom properties on :root.
  */
+'use client';
+
 import { createContext, useContext, useEffect, ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
@@ -18,6 +20,7 @@ export interface BannerLang {
 export interface SiteSettings {
   banners: { en?: BannerLang; ar?: BannerLang };
   theme:   { primary?: string; secondary?: string; accent?: string };
+  heroImageUpdatedAt?: string;
 }
 
 interface SiteSettingsCtx {
@@ -66,9 +69,7 @@ function applyTheme(theme: SiteSettings['theme']) {
 }
 
 export function SiteSettingsProvider({ children }: { children: ReactNode }) {
-  const base = import.meta.env.BASE_URL as string;
-  const apiRoot = base.replace(/\/jai-web\/?$/, '');
-  const url = `${apiRoot}/api/site-settings`;
+  const url = '/api/site-settings';
 
   const { data } = useQuery<SiteSettings>({
     queryKey: ['site-settings'],

@@ -1,12 +1,22 @@
 ---
 name: Expo multi-artifact dev preview
-description: With two Expo artifacts in one repl, only the one whose previewPath is "/" is fully viewable in dev.
+description: How the single Expo dev domain picks which mobile artifact to serve, and how to switch it
 ---
 
-Metro's dev server always emits root-absolute URLs (`/node_modules/...entry.bundle`, `/assets?...`) and ignores `experiments.baseUrl` in development. Through the path-routed shared proxy, any Expo artifact NOT at previewPath `/` serves its HTML but the browser then pulls the root artifact's JS bundle — the page renders the wrong app or a "screen doesn't exist" route error.
+# Expo dev domain routing with two mobile artifacts
 
-**Why:** Path-prefix routing can't help when the client hardcodes root-absolute URLs; only the artifact owning `/` resolves consistently. The `*.expo.*` dev domain is separate, statically bound to one Metro (used for Expo Go QR), and does not follow previewPath changes.
+The repl has ONE `$REPLIT_EXPO_DEV_DOMAIN`. When two Expo artifacts both declare `router = "expo-domain"` in their artifact.toml, the domain serves only one of them — and NOT necessarily the one with `previewPath "/"`. `paths`, restart order, and no-op toml re-applies do NOT change the winner.
 
-**How to apply:**
-- To review a second Expo app in dev, swap preview slots via `verifyAndReplaceArtifactToml` (write full temp TOML, update `previewPath`, `paths`, `BASE_PATH`), then restart both expo workflows. Production is unaffected — `scripts/build.js` + `server/serve.js` honor BASE_PATH so both apps deploy correctly at their own paths.
-- When verifying an Expo web app, HTTP 200 on the HTML is NOT proof it works: fetch the entry bundle through the same route the browser uses and compare its size against the direct port — a size mismatch means the proxy served another app's bundle. Finish with a rendered screenshot (retry once after warm-up; first paint of a dev bundle can be slow and screenshot blank white).
+**The rule:** the expo domain binds to an artifact claiming `router = "expo-domain"`. To review a different mobile artifact, make it the ONLY claimant:
+
+1. Set the other mobile artifact's toml to `router = "path"` (web artifacts use this value) via `verifyAndReplaceArtifactToml`.
+2. Keep/put `router = "expo-domain"` on the app you want to preview.
+3. No workflow restart needed — the flip takes effect within seconds.
+
+**How to verify which app the domain serves** (bundle contents can mislead): drop a probe file in `<artifact>/public/probe.txt`, then `curl https://$REPLIT_EXPO_DEV_DOMAIN/probe.txt` — Metro serves `public/` at root. Or check `<title>` of the domain's index HTML (comes from app.json name).
+
+**Why:** hit this while reviewing jai-driver (July 2026) — domain kept serving jai-app despite jai-driver owning previewPath "/", restarts, and toml re-applies. Only switching jai-app to `router = "path"` flipped the domain.
+
+**How to apply:** whenever the user needs to preview the OTHER mobile app, swap which artifact holds `router = "expo-domain"` (and tell the user the non-domain app's dev preview is degraded until swapped back). The app on `router = "path"` still runs; its Metro just isn't reachable at the expo domain.
+
+Side note: local port 8081 is held by workspace tooling (redirects to /__mockup) — it is unrelated to expo routing.
