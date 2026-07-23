@@ -65,9 +65,23 @@ export default function ActiveScreen() {
   const currentAction = statusActionMap[activeJob.status];
   const currentIndex = STATUS_FLOW.indexOf(activeJob.status);
 
+  const openNavigation = () => {
+    if (!activeJob.coords) return;
+    const dest = `${activeJob.coords.latitude},${activeJob.coords.longitude}`;
+    const url = Platform.select({
+      ios: `maps://app?daddr=${dest}`,
+      android: `google.navigation:q=${dest}`,
+      default: `https://www.google.com/maps/dir/?api=1&destination=${dest}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${dest}`).catch(() => {});
+    });
+  };
+
   const handleStatus = async () => {
     if (!currentAction) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    if (activeJob.status === 'accepted') openNavigation();
     const res = await updateJobStatus(activeJob.id, currentAction.next);
     if (!res.ok) notify(t('errGeneric'), res.error);
   };

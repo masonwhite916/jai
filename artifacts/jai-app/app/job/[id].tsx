@@ -60,12 +60,25 @@ export default function JobDetailScreen() {
 
   const currentAction = statusActionMap[job.status];
 
+  const openNavigation = () => {
+    const dest = `${job.coords.latitude},${job.coords.longitude}`;
+    const url = Platform.select({
+      ios: `maps:?daddr=${dest}`,
+      android: `google.navigation:q=${dest}`,
+      default: `https://www.google.com/maps/dir/?api=1&destination=${dest}`,
+    });
+    Linking.openURL(url).catch(() => {
+      Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${dest}`).catch(() => {});
+    });
+  };
+
   const handlePrimary = () => {
     if (!currentAction) return;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     if (job.status === 'pending') {
       acceptJob(job.id).then(() => router.push('/(driver)/active' as any));
     } else {
+      if (job.status === 'accepted') openNavigation();
       updateJobStatus(job.id, currentAction.next).then(() => {
         if (currentAction.next === 'completed') router.push('/(driver)/earnings' as any);
       });
