@@ -1,6 +1,6 @@
 {
   "/_not-found/page": "/_not-found",
+  "/page": "/",
   "/payment-success/page": "/payment-success",
-  "/subscribe/page": "/subscribe",
-  "/page": "/"
+  "/subscribe/page": "/subscribe"
 }
