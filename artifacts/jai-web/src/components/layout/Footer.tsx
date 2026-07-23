@@ -65,11 +65,16 @@ export default function Footer() {
           <div className={isRTL ? 'text-right' : ''}>
             <h4 className={`text-white font-semibold mb-6 ${arabic}`}>{t('footer_services')}</h4>
             <ul className={`space-y-4 text-white/50 text-sm ${arabic}`}>
-              <li>{t('footer_s1')}</li>
-              <li>{t('footer_s2')}</li>
-              <li>{t('footer_s3')}</li>
-              <li>{t('footer_s4')}</li>
-              <li>{t('footer_s5')}</li>
+              {(['footer_s1', 'footer_s2', 'footer_s3', 'footer_s4', 'footer_s5'] as const).map((key) => (
+                <li key={key}>
+                  <a
+                    href="#services"
+                    className="hover:text-[#C21875] transition-colors cursor-pointer"
+                  >
+                    {t(key)}
+                  </a>
+                </li>
+              ))}
             </ul>
           </div>
 

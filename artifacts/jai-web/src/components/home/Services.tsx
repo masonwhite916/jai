@@ -19,7 +19,7 @@ export default function Services() {
   ] as const;
 
   return (
-    <section className="py-32 bg-[#05020D] relative z-10">
+    <section id="services" className="py-32 bg-[#05020D] relative z-10 scroll-mt-24">
       <div className="container mx-auto px-6">
         <div className="text-center max-w-3xl mx-auto mb-20">
           <motion.h2
