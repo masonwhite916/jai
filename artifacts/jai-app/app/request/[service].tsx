@@ -18,12 +18,12 @@ type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePr
 
 const SERVICE_INFO: Record<string, ServiceDef> = {
   battery: { labelKey: 'serviceBattery', icon: 'battery-charging', lib: 'Ionicons', basePrice: 120 },
-  fuel: { labelKey: 'serviceFuel', icon: 'gas-station', lib: 'MCIcons', basePrice: 80 },
-  tire: { labelKey: 'serviceTire', icon: 'tire', lib: 'MCIcons', basePrice: 350 },
-  tow: { labelKey: 'serviceTow', icon: 'tow-truck', lib: 'MCIcons', basePrice: 500 },
+  fuel: { labelKey: 'serviceFuel', icon: 'gas-station', lib: 'MCIcons', basePrice: 100 },
+  tire: { labelKey: 'serviceTire', icon: 'tire', lib: 'MCIcons', basePrice: 120 },
+  tow: { labelKey: 'serviceTow', icon: 'tow-truck', lib: 'MCIcons', basePrice: 250 },
   lockout: { labelKey: 'serviceLockout', icon: 'key', lib: 'Ionicons', basePrice: 200 },
-  mechanic: { labelKey: 'serviceMechanic', icon: 'wrench', lib: 'MCIcons', basePrice: 300 },
-  electric: { labelKey: 'serviceElectric', icon: 'flash', lib: 'Ionicons', basePrice: 280 },
+  mechanic: { labelKey: 'serviceMechanic', icon: 'wrench', lib: 'MCIcons', basePrice: 200 },
+  electric: { labelKey: 'serviceElectric', icon: 'flash', lib: 'Ionicons', basePrice: 200 },
 };
 
 function ServiceIcon({ icon, lib }: { icon: string; lib: string }) {

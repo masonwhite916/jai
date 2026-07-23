@@ -57,7 +57,7 @@ const SERVICE_LABELS: Record<string, string> = {
   tow: 'Tow truck', lockout: 'Lockout', mechanic: 'Mechanic', electric: 'Electrical',
 };
 const PAYOUTS: Record<string, number> = {
-  battery: 120, fuel: 80, tire: 350, tow: 500, lockout: 200, mechanic: 300, electric: 280,
+  battery: 120, fuel: 100, tire: 120, tow: 250, lockout: 200, mechanic: 200, electric: 200,
 };
 
 function apiStatusToLocal(status: string): ReqStatus {
