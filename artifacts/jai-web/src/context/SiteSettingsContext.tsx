@@ -52,7 +52,9 @@ function hexToHsl(hex: string): string | null {
 }
 
 function applyTheme(theme: SiteSettings['theme']) {
-  const root = document.documentElement;
+  // Write CSS variables to <body>, not <html>. Touching document.documentElement
+  // style after mount causes a React 19 hydration mismatch (error #418).
+  const target = document.body;
   const pairs: [string, string | undefined][] = [
     ['--primary',   theme.primary],
     ['--secondary', theme.secondary],
@@ -61,9 +63,9 @@ function applyTheme(theme: SiteSettings['theme']) {
   for (const [prop, hex] of pairs) {
     if (hex) {
       const hsl = hexToHsl(hex);
-      if (hsl) root.style.setProperty(prop, hsl);
+      if (hsl) target.style.setProperty(prop, hsl);
     } else {
-      root.style.removeProperty(prop);
+      target.style.removeProperty(prop);
     }
   }
 }

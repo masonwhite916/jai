@@ -12,14 +12,24 @@ export default function PaymentSuccess() {
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
   const router = useRouter();
 
+  // Apply noindex via existing meta tag (no DOM injection). React 19's stricter
+  // head management treats runtime appendChild as a hydration mismatch.
   useEffect(() => {
-    const meta = document.createElement('meta');
-    meta.name = 'robots';
-    meta.content = 'noindex, nofollow';
-    document.head.appendChild(meta);
-    return () => {
-      document.head.removeChild(meta);
-    };
+    // Defer to next microtask so initial hydration completes first.
+    queueMicrotask(() => {
+      const existing = document.head.querySelector<HTMLMetaElement>(
+        'meta[name="robots"]'
+      );
+      if (existing) {
+        existing.dataset.original = existing.content;
+        existing.content = 'noindex, nofollow';
+      } else {
+        const meta = document.createElement('meta');
+        meta.name = 'robots';
+        meta.content = 'noindex, nofollow';
+        document.head.appendChild(meta);
+      }
+    });
   }, []);
 
   return (

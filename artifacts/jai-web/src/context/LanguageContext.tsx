@@ -302,27 +302,33 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | null>(null);
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  // Always start with 'en' so server and client render the same initial HTML.
-  // Read localStorage only after mount to avoid a hydration mismatch.
+  // Always start with 'en' on both server and client so the SSR'd <html lang="en">
+  // matches the first client render. Reading localStorage or mutating <html> here
+  // would create a React-19 hydration mismatch.
   const [lang, setLang] = useState<Lang>('en');
+  const [mounted, setMounted] = useState(false);
 
   const isRTL = lang === 'ar';
 
   // On first mount, restore the saved language from localStorage.
   useEffect(() => {
+    setMounted(true);
     const stored = localStorage.getItem('jai-lang') as Lang | null;
     if (stored && stored !== lang) setLang(stored);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Patch document attributes on the body only (not <html>). With
+  // suppressHydrationWarning on <body>, React 19 ignores mismatches there.
   useEffect(() => {
-    document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-    document.documentElement.lang = lang;
+    if (!mounted) return;
+    document.body.dataset.lang = lang;
+    document.body.dir = isRTL ? 'rtl' : 'ltr';
     document.body.style.fontFamily = isRTL
       ? "'Cairo', 'Inter', sans-serif"
       : "'Inter', sans-serif";
     localStorage.setItem('jai-lang', lang);
-  }, [lang, isRTL]);
+  }, [lang, isRTL, mounted]);
 
   const { settings } = useSiteSettings();
 
