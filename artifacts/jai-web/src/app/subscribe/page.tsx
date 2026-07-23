@@ -1,13 +1,25 @@
 'use client';
-import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 
-const Subscribe = dynamic(() => import('@/screens/Subscribe'), { ssr: false });
+const FALLBACK = (
+  <div
+    style={{ minHeight: '100vh', backgroundColor: '#0F0826' }}
+    data-fallback="subscribe"
+  />
+);
 
 export default function SubscribePage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0F0826]" />}>
-      <Subscribe />
-    </Suspense>
-  );
+  const [Subscribe, setSubscribe] = useState<ComponentType | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    import('@/screens/Subscribe').then((mod) => {
+      if (alive) setSubscribe(() => mod.default);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  if (!Subscribe) return FALLBACK;
+  return <Subscribe />;
 }

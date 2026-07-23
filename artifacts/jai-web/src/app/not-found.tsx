@@ -1,13 +1,25 @@
 'use client';
-import { Suspense } from 'react';
-import dynamic from 'next/dynamic';
+import { useEffect, useState } from 'react';
+import type { ComponentType } from 'react';
 
-const NotFound = dynamic(() => import('@/screens/not-found'), { ssr: false });
+const FALLBACK = (
+  <div
+    style={{ minHeight: '100vh', backgroundColor: '#0F0826' }}
+    data-fallback="not-found"
+  />
+);
 
 export default function NotFoundPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0F0826]" />}>
-      <NotFound />
-    </Suspense>
-  );
+  const [NotFound, setNotFound] = useState<ComponentType | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    import('@/screens/not-found').then((mod) => {
+      if (alive) setNotFound(() => mod.default);
+    });
+    return () => { alive = false; };
+  }, []);
+
+  if (!NotFound) return FALLBACK;
+  return <NotFound />;
 }

@@ -90,7 +90,7 @@ export default function Footer() {
             <p className={arabic}>{t('footer_note2')}</p>
           </div>
           <div className={`font-medium ${arabic}`}>
-            © {new Date().getFullYear()} {t('footer_copy')}
+            © 2026 {t('footer_copy')}
           </div>
         </div>
       </div>
