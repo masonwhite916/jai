@@ -69,7 +69,7 @@ export default function Footer() {
                 <li key={key}>
                   <a
                     href="#services"
-                    className="hover:text-[#C21875] transition-colors cursor-pointer"
+                    className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer"
                   >
                     {t(key)}
                   </a>
