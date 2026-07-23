@@ -12,6 +12,9 @@ module.exports = {
   extra: {
     // The Replit shared-proxy host for this Expo app — used by the client
     // to reach the API server artifact at /api.
-    apiHost: process.env.REPLIT_EXPO_DEV_DOMAIN ?? 'localhost',
+    apiHost:
+      process.env.EXPO_PUBLIC_API_HOST ??
+      process.env.REPLIT_EXPO_DEV_DOMAIN ??
+      'localhost',
   },
 };
