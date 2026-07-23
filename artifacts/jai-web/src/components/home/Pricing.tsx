@@ -24,14 +24,14 @@ export default function Pricing() {
       arabicKey: 'plan_accidents_arabic',
       price: '299',
       popular: true,
-      featureKeys: ['plan_accidents_f1', 'plan_accidents_f2', 'plan_accidents_f3', 'plan_accidents_f4'],
+      featureKeys: ['plan_accidents_f1', 'plan_accidents_f2', 'plan_accidents_f3', 'plan_accidents_f4', 'plan_accidents_f5', 'plan_accidents_f6', 'plan_accidents_f7'],
     },
     {
       id: 'rental',
       nameKey: 'plan_rental_name',
       arabicKey: 'plan_rental_arabic',
       price: '600',
-      featureKeys: ['plan_rental_f1', 'plan_rental_f2', 'plan_rental_f3', 'plan_rental_f4'],
+      featureKeys: ['plan_rental_f1', 'plan_rental_f2', 'plan_rental_f3', 'plan_rental_f4', 'plan_rental_f5', 'plan_rental_f6'],
     },
   ] as const;
 

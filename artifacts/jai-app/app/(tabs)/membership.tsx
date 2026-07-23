@@ -62,7 +62,7 @@ const PLANS: Plan[] = [
       'Battery charge — 6 times',
       'Fuel supply — 6 times',
       'Tire change — 6 times',
-      'Light electrical & mechanical maintenance',
+      'Light electrical & mechanical maintenance — 2 times',
       'Car towing in breakdowns — 2 times',
       'Transfer to accident assessment center',
       'Workshop of client\'s choice',
@@ -95,7 +95,7 @@ const PLANS: Plan[] = [
       'Computer fault diagnostics — 3 times',
     ],
     benefitsAr: [
-      'شحن البطاريات — 6 مرات',
+      'شحن البطارية — 6 مرات',
       'تزويد الوقود — 6 مرات',
       'تغيير الإطارات — 6 مرات',
       'صيانة كهربائية وميكانيكية خفيفة — مرتان',
@@ -268,6 +268,19 @@ export default function MembershipScreen() {
           );
         })}
 
+        {/* Individual prices link */}
+        <TouchableOpacity
+          style={styles.individualPricesBtn}
+          onPress={() => router.push('/service-prices' as any)}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="pricetag-outline" size={16} color="#5B2C91" />
+          <Text style={[styles.individualPricesBtnText, { fontFamily: font.medium }]}>
+            {isRTL ? 'عرض أسعار الخدمات المفردة' : 'View individual service prices'}
+          </Text>
+          <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={16} color="#5B2C91" />
+        </TouchableOpacity>
+
         {/* Footer note */}
         <View style={styles.footerNote}>
           <Ionicons name="information-circle-outline" size={16} color="#9CA3AF" />
@@ -372,6 +385,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center', gap: 10,
   },
   subscribeBtnText: { fontSize: 15 },
+
+  // Individual prices link
+  individualPricesBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, backgroundColor: '#EDE8F8', borderRadius: 14,
+    paddingVertical: 14, paddingHorizontal: 18, marginBottom: 16,
+  },
+  individualPricesBtnText: { fontSize: 14, color: '#5B2C91', flex: 1, textAlign: 'center' },
 
   // Footer note
   footerNote: {
