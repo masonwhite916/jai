@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, Platform, ScrollView, KeyboardAvoidingView, Image,
@@ -23,6 +23,7 @@ export default function Auth() {
   const { t, isRTL, font, lang, toggleLanguage } = useLanguage();
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
+  const otpInputRef = useRef<TextInput>(null);
   const [step, setStep] = useState<Step>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -189,24 +190,32 @@ export default function Auth() {
               </Text>
             </View>
 
-            {/* OTP boxes — 6 digits (Twilio Verify) */}
-            <View style={[styles.otpRow, { flexDirection: rowDir }]}>
-              {[0, 1, 2, 3, 4, 5].map((i) => (
-                <View key={i} style={[styles.otpBox, otp.length > i && styles.otpBoxFilled]}>
-                  <Text style={[styles.otpDigit, { fontFamily: font.bold }]}>{otp[i] ?? ''}</Text>
-                </View>
-              ))}
-            </View>
-            {/* Hidden input captures the text */}
-            <TextInput
-              style={styles.hiddenInput}
-              value={otp}
-              onChangeText={setOtp}
-              keyboardType="number-pad"
-              maxLength={6}
-              autoFocus
-              caretHidden
-            />
+            {/* OTP boxes + hidden input in a relative container so the
+                invisible input can cover the full tap area on web */}
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={() => otpInputRef.current?.focus()}
+              style={styles.otpContainer}
+            >
+              <View style={[styles.otpRow, { flexDirection: rowDir }]}>
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <View key={i} style={[styles.otpBox, otp.length > i && styles.otpBoxFilled]}>
+                    <Text style={[styles.otpDigit, { fontFamily: font.bold }]}>{otp[i] ?? ''}</Text>
+                  </View>
+                ))}
+              </View>
+              {/* Transparent input covers the whole container — receives all taps */}
+              <TextInput
+                ref={otpInputRef}
+                style={styles.hiddenInput}
+                value={otp}
+                onChangeText={setOtp}
+                keyboardType="number-pad"
+                maxLength={6}
+                autoFocus
+                caretHidden
+              />
+            </TouchableOpacity>
 
             {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
 
@@ -301,7 +310,8 @@ const styles = StyleSheet.create({
   // OTP
   backRow: { alignItems: 'center', gap: 8, marginBottom: 24 },
   backText: { fontSize: 14, color: '#2D1B69' },
-  otpRow: { gap: 12, justifyContent: 'center', marginBottom: 8, zIndex: 1 },
+  otpContainer: { position: 'relative', marginBottom: 8 },
+  otpRow: { gap: 12, justifyContent: 'center', zIndex: 1 },
   otpBox: {
     width: 50, height: 58, borderRadius: 14,
     backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#E0DBEF',
@@ -312,7 +322,8 @@ const styles = StyleSheet.create({
   otpBoxFilled: { borderColor: '#2D1B69', backgroundColor: '#EDE8F8' },
   otpDigit: { fontSize: 26, color: '#120840' },
   hiddenInput: {
-    position: 'absolute', width: 1, height: 1, opacity: 0,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    opacity: 0, zIndex: 2,
   },
 
   error: { fontSize: 13, color: '#E74C3C', marginBottom: 10 },
