@@ -51,6 +51,8 @@ interface AppContextType {
   loginAsGuest: (user: User) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updates: Partial<User>) => Promise<void>;
+  /** Re-fetch the profile from the server (no-op for guests/offline). */
+  refreshUser: () => Promise<void>;
   // Active service request (real-time tracking)
   activeRequest: ActiveRequest | null;
   setActiveRequest: (r: ActiveRequest | null) => void;
@@ -258,6 +260,15 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setUser(updated);
   }
 
+  async function refreshUser() {
+    if (!getAuthToken()) return;
+    try {
+      const fresh = await apiFetch<User>('/api/users/me');
+      await AsyncStorage.setItem('jai_user', JSON.stringify(fresh));
+      setUser(fresh);
+    } catch { /* keep cached user on failure */ }
+  }
+
   function setActiveRequest(r: ActiveRequest | null) {
     setActiveRequestState(r);
   }
@@ -265,7 +276,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   return (
     <AppContext.Provider value={{
       isLoading, hasSeenOnboarding, isAuthenticated, user, role,
-      setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser,
+      setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser, refreshUser,
       activeRequest, setActiveRequest,
       notifReadIds, markNotifRead, markAllNotifsRead,
     }}>

@@ -122,6 +122,7 @@ function RootLayoutNav() {
       <Stack.Screen name="onboarding" />
       <Stack.Screen name="role" />
       <Stack.Screen name="auth" />
+      <Stack.Screen name="profile-setup" />
       <Stack.Screen name="driver-auth" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="(driver)" />

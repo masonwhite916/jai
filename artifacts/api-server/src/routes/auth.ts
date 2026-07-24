@@ -4,6 +4,7 @@ import { sendVerification, checkVerification, normalizePhone } from "../lib/taqn
 import { generateToken, hashToken, tokenExpiresAt } from "../lib/tokenAuth";
 import { db, users, userSessions, vehicles } from "@workspace/db";
 import { eq, and, gt, isNull } from "drizzle-orm";
+import { toVehicleDto } from "../lib/vehicleDto";
 
 // Max 5 OTP requests per IP per 10 minutes
 const otpLimiter = rateLimit({
@@ -124,9 +125,7 @@ router.post("/auth/verify-otp", async (req, res) => {
         ip_address:  ipAddress,
         expires_at:  expiresAt,
       }),
-      user.role === "technician"
-        ? db.select().from(vehicles).where(eq(vehicles.user_id, user.id))
-        : Promise.resolve([]),
+      db.select().from(vehicles).where(eq(vehicles.user_id, user.id)),
     ]);
 
     res.json({
@@ -141,7 +140,10 @@ router.post("/auth/verify-otp", async (req, res) => {
         points:        user.points,
         rating:        user.rating,
         jobsCompleted: user.jobs_completed,
-        vehicles:      userVehicles,
+        vehicles:      userVehicles.map(toVehicleDto),
+        // False when the user has never set a name (brand-new signups) —
+        // the customer app routes them to the profile-setup screen.
+        profile_complete: user.name != null && user.name.trim() !== "",
       },
     });
   } catch (err) {

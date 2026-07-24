@@ -92,7 +92,12 @@ export default function Auth() {
         vehicles:   apiUser.vehicles   ?? [],
       };
       await login(mergedUser, data.token);
-      router.replace('/(tabs)');
+      // Brand-new users (no name yet) complete their profile first
+      if (data.user?.profile_complete) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/profile-setup');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Verification failed. Try again.');
       setLoading(false);

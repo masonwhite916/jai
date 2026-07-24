@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useApp, type Vehicle } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
+import { apiFetch, getAuthToken } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
 const COLORS = ['White', 'Black', 'Silver', 'Grey', 'Red', 'Blue', 'Green', 'Brown', 'Gold'];
@@ -19,7 +20,7 @@ const CURRENT_YEAR = new Date().getFullYear();
 export default function AddVehicleScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, updateUser } = useApp();
+  const { user, updateUser, refreshUser } = useApp();
   const { isRTL, font } = useLanguage();
 
   const align = isRTL ? 'right' : 'left';
@@ -56,21 +57,43 @@ export default function AddVehicleScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSaving(true);
 
-    const newVehicle: Vehicle = {
-      id: `v${Date.now()}`,
-      make: make.trim(),
-      model: model.trim(),
-      year: year.trim(),
-      plate: plate.trim().toUpperCase(),
-      color,
-    };
-
-    const updated = [...(user?.vehicles ?? []), newVehicle];
-    await updateUser({ vehicles: updated });
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setSaving(false);
-    router.back();
+    try {
+      if (getAuthToken()) {
+        // Logged-in user → persist on the server, then refresh the profile
+        await apiFetch('/api/vehicles', {
+          method: 'POST',
+          body: JSON.stringify({
+            make:  make.trim(),
+            model: model.trim(),
+            year:  year.trim(),
+            plate: plate.trim().toUpperCase(),
+            color,
+          }),
+        });
+        await refreshUser();
+      } else {
+        // Guest → keep the vehicle locally only
+        const newVehicle: Vehicle = {
+          id: `v${Date.now()}`,
+          make: make.trim(),
+          model: model.trim(),
+          year: year.trim(),
+          plate: plate.trim().toUpperCase(),
+          color,
+        };
+        await updateUser({ vehicles: [...(user?.vehicles ?? []), newVehicle] });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setSaving(false);
+      router.back();
+    } catch {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setSaving(false);
+      setErrors(e => ({
+        ...e,
+        submit: isRTL ? 'تعذر حفظ المركبة. حاول مرة أخرى.' : 'Could not save vehicle. Try again.',
+      }));
+    }
   }
 
   return (
@@ -211,6 +234,10 @@ export default function AddVehicleScreen() {
             <Text style={[styles.errorText, { textAlign: align }]}>{errors.color}</Text>
           )}
         </View>
+
+        {!!errors.submit && (
+          <Text style={[styles.errorText, { textAlign: 'center', marginBottom: 10 }]}>{errors.submit}</Text>
+        )}
 
         {/* Save button */}
         <TouchableOpacity

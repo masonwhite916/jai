@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { db, users, userSessions, vehicles } from "@workspace/db";
 import { eq, and, isNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { toVehicleDto } from "../lib/vehicleDto";
 
 const router: IRouter = Router();
 
@@ -10,9 +11,7 @@ router.get("/users/me", requireAuth, async (req, res) => {
   try {
     const [rows, userVehicles] = await Promise.all([
       db.select().from(users).where(eq(users.id, req.userId!)).limit(1),
-      req.userRole === "technician"
-        ? db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!))
-        : Promise.resolve([]),
+      db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!)),
     ]);
 
     if (!rows.length) {
@@ -30,7 +29,7 @@ router.get("/users/me", requireAuth, async (req, res) => {
       rating:        u.rating,
       jobsCompleted: u.jobs_completed,
       earningsTotal: u.earnings_total,
-      vehicles:      userVehicles,
+      vehicles:      userVehicles.map(toVehicleDto),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -55,9 +54,7 @@ router.put("/users/me", requireAuth, async (req, res) => {
 
     const [[u], userVehicles] = await Promise.all([
       db.update(users).set(updates).where(eq(users.id, req.userId!)).returning(),
-      req.userRole === "technician"
-        ? db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!))
-        : Promise.resolve([]),
+      db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!)),
     ]);
 
     res.json({
@@ -70,7 +67,7 @@ router.put("/users/me", requireAuth, async (req, res) => {
       rating:        u.rating,
       jobsCompleted: u.jobs_completed,
       earningsTotal: u.earnings_total,
-      vehicles:      userVehicles,
+      vehicles:      userVehicles.map(toVehicleDto),
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
