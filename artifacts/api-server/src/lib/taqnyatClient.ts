@@ -94,12 +94,22 @@ async function verifyPost(body: Record<string, unknown>): Promise<{ code: number
   return { code: data.status, message: undefined };
 }
 
+const IS_DEV = process.env.NODE_ENV !== "production";
+const DEV_OTP = "000000";
+
 /**
  * Send an OTP via Taqnyat Verify.
  * Returns the normalised E.164 phone number.
+ *
+ * DEV MODE: when NODE_ENV !== "production", skips Taqnyat entirely.
+ * Use OTP 000000 to verify any number.
  */
 export async function sendVerification(phone: string): Promise<string> {
   const e164 = normalizePhone(phone);
+  if (IS_DEV) {
+    console.log(`[dev] OTP skipped for ${e164} — use code ${DEV_OTP} to verify`);
+    return e164;
+  }
 
   const { code, message } = await verifyPost({
     apiKey:    getApiKey(),
@@ -121,12 +131,19 @@ export async function sendVerification(phone: string): Promise<string> {
 /**
  * Verify an OTP. Returns { valid, status } in the same shape as the
  * old Twilio client so auth.ts needs no changes.
+ *
+ * DEV MODE: OTP 000000 is always valid when NODE_ENV !== "production".
  */
 export async function checkVerification(
   phone: string,
   activeKey: string,
 ): Promise<{ valid: boolean; status: string }> {
   const e164 = normalizePhone(phone);
+
+  if (IS_DEV && activeKey === DEV_OTP) {
+    console.log(`[dev] OTP accepted for ${e164} (magic dev code)`);
+    return { valid: true, status: "approved" };
+  }
 
   const { code, message } = await verifyPost({
     apiKey:    getApiKey(),
