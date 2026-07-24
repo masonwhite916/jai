@@ -60,6 +60,9 @@ const server = createServer((req, res) => {
       const index = join(filePath, 'index.html');
       if (existsSync(index)) return serveFile(res, index);
     }
+    // Try a flat .html file (Next.js static export emits /foo.html, not /foo/index.html)
+    const htmlFile = filePath.replace(/\/?$/, '.html');
+    if (existsSync(htmlFile)) return serveFile(res, htmlFile);
     // Fallback to index.html for SPA routes ( Next.js app routes )
     const index = join(publicDir, 'index.html');
     serveFile(res, index);
