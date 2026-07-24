@@ -27,6 +27,9 @@ export interface ActiveRequest {
   jobId: string;
   serviceType: string;
   status: 'pending' | 'assigned' | 'in_progress' | 'completed' | 'cancelled';
+  /** Customer's GPS position at time of request submission */
+  customerLat?: number;
+  customerLng?: number;
   /** Populated once a technician accepts the job via WebSocket event */
   tech?: {
     id: number;

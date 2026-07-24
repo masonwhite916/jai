@@ -87,6 +87,8 @@ export default function ServiceRequest() {
           serviceType: service ?? 'battery',
           status:      'pending',
           payout:      result.job?.payout ?? undefined,
+          customerLat: gps.coords?.latitude,
+          customerLng: gps.coords?.longitude,
         });
       } else {
         // Guest / offline — simulate delay

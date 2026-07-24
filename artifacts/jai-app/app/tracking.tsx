@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Platform,
-  Dimensions, Share, Linking, ActivityIndicator,
+  Share, Linking, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,45 +17,71 @@ import { jaiSocket } from '@/lib/socket';
 import { getAuthToken } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
-const { width, height } = Dimensions.get('window');
+// ── Haversine distance (km) between two GPS points ────────────────────────────
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R  = 6371;
+  const dL = ((lat2 - lat1) * Math.PI) / 180;
+  const dG = ((lng2 - lng1) * Math.PI) / 180;
+  const a  =
+    Math.sin(dL / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dG / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
-// ── Riyadh grid reference ──────────────────────────────────────────────────────
-// Maps real GPS lat/lng to a [0,1] screen position on the fake grid
-const CENTER_LAT = 24.7136;
-const CENTER_LNG = 46.6753;
-const SPREAD     = 0.15; // degrees visible in each direction
+// ── ETA: 30 km/h city speed → 2 min/km ───────────────────────────────────────
+function calcEta(customerLat: number, customerLng: number, techLat: number, techLng: number): number {
+  const km = haversineKm(customerLat, customerLng, techLat, techLng);
+  return Math.max(1, Math.round(km * 2));
+}
 
-function gpsToScreen(lat: number, lng: number): { x: number; y: number } {
-  const x = 0.5 + ((lng - CENTER_LNG) / SPREAD) * 0.4;
-  const y = 0.5 - ((lat - CENTER_LAT) / SPREAD) * 0.4;
-  return {
-    x: Math.max(0.05, Math.min(0.9, x)),
-    y: Math.max(0.05, Math.min(0.7, y)),
-  };
+// ── Real map using OpenStreetMap static tiles ─────────────────────────────────
+interface LiveMapProps {
+  customerLat: number;
+  customerLng: number;
+  techLat?: number;
+  techLng?: number;
+}
+
+function LiveMap({ customerLat, customerLng, techLat, techLng }: LiveMapProps) {
+  // Centre the map between customer and tech (or just on customer while searching)
+  const centreLat = techLat != null ? (customerLat + techLat) / 2 : customerLat;
+  const centreLng = techLng != null ? (customerLng + techLng) / 2 : customerLng;
+
+  // Pick zoom so both pins are visible
+  const zoom = techLat != null ? 13 : 15;
+
+  const markers = [
+    `${customerLat},${customerLng},red-pushpin`,
+    ...(techLat != null ? [`${techLat},${techLng},blue-pushpin`] : []),
+  ].join('|');
+
+  const mapUrl =
+    `https://staticmap.openstreetmap.de/staticmap.php` +
+    `?center=${centreLat},${centreLng}&zoom=${zoom}&size=400x300&markers=${markers}`;
+
+  // On web render a plain <img> (works inside nested iframes, no CORS issues)
+  // On native fall back to RN Image (same URL)
+  if (Platform.OS === 'web') {
+    return React.createElement('img', {
+      src: mapUrl,
+      style: { width: '100%', height: '100%', objectFit: 'cover' },
+      alt: 'Live map',
+      key: mapUrl, // forces reload when URL changes
+    });
+  }
+
+  const { Image } = require('react-native') as typeof import('react-native');
+  return (
+    <Image
+      source={{ uri: mapUrl }}
+      style={{ width: '100%', height: '100%' }}
+      resizeMode="cover"
+      key={mapUrl}
+    />
+  );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
-
-function MapBackground() {
-  return (
-    <View style={styles.mapBg}>
-      <LinearGradient
-        colors={['#EDE8F8', '#F0EDF8', '#E8E4F5']}
-        style={StyleSheet.absoluteFill}
-      />
-      {[0.2, 0.4, 0.6, 0.8].map((v, i) => (
-        <View key={`h${i}`} style={[styles.gridLine, { top: height * 0.5 * v, width: '100%', height: 1 }]} />
-      ))}
-      {[0.15, 0.35, 0.55, 0.75, 0.9].map((v, i) => (
-        <View key={`v${i}`} style={[styles.gridLine, { left: width * v, height: '100%', width: 1 }]} />
-      ))}
-      <View style={styles.routeLine} />
-      <View style={styles.destPin}>
-        <View style={styles.destPinDot} />
-      </View>
-    </View>
-  );
-}
 
 function PulsingDot({ color = '#2D1B69' }: { color?: string }) {
   const scale   = useSharedValue(1);
@@ -128,8 +154,11 @@ export default function TrackingScreen() {
   // Real-time state
   const [jobStatus, setJobStatus] = useState<string>(activeRequest?.status ?? 'pending');
   const [tech, setTech]           = useState<TechInfo | null>(activeRequest?.tech ?? null);
-  const [techPos, setTechPos]     = useState<{ x: number; y: number }>({ x: 0.35, y: 0.42 });
+  const [techGps, setTechGps]     = useState<{ lat: number; lng: number } | null>(null);
   const [etaMin, setEtaMin]       = useState<number | null>(activeRequest?.etaMin ?? null);
+
+  const customerLat = activeRequest?.customerLat;
+  const customerLng = activeRequest?.customerLng;
 
   const jobId     = activeRequest?.jobId;
   const requestId = activeRequest?.requestId;
@@ -170,16 +199,11 @@ export default function TrackingScreen() {
 
     const offLocation = jaiSocket.on('tech_location', (payload) => {
       const { lat, lng } = payload as { lat: number; lng: number };
-      // Map GPS coords to fake-map screen position
-      const pos = gpsToScreen(lat, lng);
-      setTechPos(pos);
-
-      // Very rough ETA estimate: ~1 min per 600m at city speeds (30 km/h)
-      const dLat  = lat  - CENTER_LAT;
-      const dLng  = lng  - CENTER_LNG;
-      const distDeg = Math.sqrt(dLat * dLat + dLng * dLng);
-      const distKm  = distDeg * 111; // 1° ≈ 111 km
-      setEtaMin(Math.max(1, Math.round(distKm * 2)));
+      setTechGps({ lat, lng });
+      // ETA from the customer's actual position to the tech
+      if (customerLat != null && customerLng != null) {
+        setEtaMin(calcEta(customerLat, customerLng, lat, lng));
+      }
     });
 
     return () => {
@@ -212,14 +236,25 @@ export default function TrackingScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <MapBackground />
-
-      {/* Technician marker — position driven by GPS or default */}
-      <View style={[styles.technicianMarker, { left: `${techPos.x * 100}%`, top: `${techPos.y * 100}%` }]}>
-        {isSearching
-          ? <PulsingDot color="#F39C12" />
-          : <PulsingDot color="#2D1B69" />
-        }
+      {/* Real map — fills the top half behind the bottom card */}
+      <View style={styles.mapArea}>
+        {customerLat != null && customerLng != null ? (
+          <LiveMap
+            customerLat={customerLat}
+            customerLng={customerLng}
+            techLat={techGps?.lat}
+            techLng={techGps?.lng}
+          />
+        ) : (
+          /* No GPS available — show subtle gradient placeholder */
+          <LinearGradient colors={['#EDE8F8', '#F0EDF8', '#E8E4F5']} style={StyleSheet.absoluteFill} />
+        )}
+        {/* Searching pulse overlay */}
+        {isSearching && (
+          <View style={styles.searchingOverlay}>
+            <PulsingDot color="#F39C12" />
+          </View>
+        )}
       </View>
 
       {/* Top bar */}
@@ -371,20 +406,12 @@ export default function TrackingScreen() {
 }
 
 const styles = StyleSheet.create({
-  mapBg: { ...StyleSheet.absoluteFillObject },
-  gridLine: { position: 'absolute', backgroundColor: 'rgba(91,44,145,0.08)' },
-  routeLine: {
-    position: 'absolute', left: '25%', top: '35%',
-    width: 3, height: '30%', backgroundColor: '#2D1B69',
-    borderRadius: 2, transform: [{ rotate: '20deg' }],
+  mapArea: { flex: 1, overflow: 'hidden' },
+  searchingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center',
+    backgroundColor: 'rgba(237,232,248,0.55)',
   },
-  destPin: {
-    position: 'absolute', left: '55%', top: '25%',
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: '#C21875', justifyContent: 'center', alignItems: 'center',
-  },
-  destPinDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#FFFFFF' },
-  technicianMarker: { position: 'absolute' },
   dotContainer: { justifyContent: 'center', alignItems: 'center' },
   pulseDot: { position: 'absolute', width: 36, height: 36, borderRadius: 18 },
   coreDot: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#FFFFFF' },
