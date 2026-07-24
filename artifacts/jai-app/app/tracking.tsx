@@ -35,6 +35,44 @@ function calcEta(customerLat: number, customerLng: number, techLat: number, tech
   return Math.max(1, Math.round(km * 2));
 }
 
+// ── Spinning wrench animation for "working" state ─────────────────────────────
+function SpinningWrench() {
+  const rotate = useSharedValue(0);
+  useEffect(() => {
+    rotate.value = withRepeat(
+      withTiming(360, { duration: 1800, easing: Easing.linear }),
+      -1,
+    );
+  }, []);
+  const spinStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${rotate.value}deg` }],
+  }));
+  return (
+    <Animated.View style={spinStyle}>
+      <Ionicons name="build" size={36} color="#FFFFFF" />
+    </Animated.View>
+  );
+}
+
+// ── Indeterminate progress bar (no fixed end-point) ──────────────────────────
+function IndeterminateBar() {
+  const x = useSharedValue(-1);
+  useEffect(() => {
+    x.value = withRepeat(
+      withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.ease) }),
+      -1,
+    );
+  }, []);
+  const barStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: `${x.value * 100}%` as any }],
+  }));
+  return (
+    <View style={{ height: 4, backgroundColor: '#F0F0F8', borderRadius: 2, overflow: 'hidden' }}>
+      <Animated.View style={[{ position: 'absolute', left: 0, right: 0, height: '100%', backgroundColor: '#2D1B69', borderRadius: 2, width: '55%' }, barStyle]} />
+    </View>
+  );
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function PulsingDot({ color = '#2D1B69' }: { color?: string }) {
@@ -168,21 +206,22 @@ export default function TrackingScreen() {
     };
   }, [jobId, requestId]);
 
-  const isSearching   = jobStatus === 'pending';
-  const isEnRoute     = jobStatus === 'en_route';
-  const isCompleted   = jobStatus === 'completed' || jobStatus === 'cancelled';
+  const isSearching = jobStatus === 'pending';
+  const isEnRoute   = jobStatus === 'en_route' || jobStatus === 'accepted';
+  const isArrived   = jobStatus === 'arrived';
+  const isWorking   = jobStatus === 'working';
+  const isCompleted = jobStatus === 'completed';
+  const isCancelled = jobStatus === 'cancelled';
 
-  const badgeLabel = isSearching
-    ? null  // searching badge handles itself
-    : isEnRoute
-      ? t('technicianEnRoute')
-      : jobStatus === 'arrived'
-        ? (isRTL ? 'الفني وصل' : 'Technician arrived')
-        : jobStatus === 'working'
-          ? (isRTL ? 'جارٍ العمل' : 'Working')
-          : jobStatus === 'completed'
-            ? (isRTL ? 'اكتمل' : 'Completed')
-            : t('technicianEnRoute');
+  const badgeDotColor = isWorking ? '#F39C12' : isArrived ? '#2ECC71' : isCompleted ? '#2ECC71' : '#2ECC71';
+
+  const badgeLabel = isSearching ? null
+    : isEnRoute   ? t('technicianEnRoute')
+    : isArrived   ? (isRTL ? 'الفني وصل' : 'Technician arrived')
+    : isWorking   ? (isRTL ? 'جارٍ العمل' : 'Working on it…')
+    : isCompleted ? (isRTL ? 'اكتمل ✓' : 'Completed ✓')
+    : isCancelled ? (isRTL ? 'ملغي' : 'Cancelled')
+    : t('technicianEnRoute');
 
   const initials = tech
     ? tech.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
@@ -235,40 +274,50 @@ export default function TrackingScreen() {
       {/* Bottom card */}
       <View style={[styles.bottomCard, { paddingBottom: insets.bottom + 16 + (Platform.OS === 'web' ? 34 : 0) }]}>
 
-        {isSearching ? (
-          // ── Searching state ────────────────────────────────────────────────
+        {/* ── Searching ──────────────────────────────────────────────────── */}
+        {isSearching && (
           <View style={styles.searchingContainer}>
             <ActivityIndicator size="large" color="#2D1B69" style={{ marginBottom: 16 }} />
             <Text style={[styles.searchingTitle, { fontFamily: font.bold }]}>
               {isRTL ? 'جارٍ البحث عن فني قريب…' : 'Finding a nearby technician…'}
             </Text>
             <Text style={[styles.searchingSubtitle, { fontFamily: font.regular }]}>
-              {isRTL ? 'سيصلك إشعار عند قبول طلبك' : 'You\'ll be notified when a technician accepts'}
+              {isRTL ? 'سيصلك إشعار عند قبول طلبك' : "You'll be notified when a technician accepts"}
             </Text>
           </View>
-        ) : (
-          // ── Technician en-route state ──────────────────────────────────────
+        )}
+
+        {/* ── En-route / arrived ─────────────────────────────────────────── */}
+        {(isEnRoute || isArrived) && (
           <>
-            <View style={[styles.etaRow, { flexDirection: rowDir }]}>
-              <View>
-                <Text style={[styles.etaTime, { fontFamily: font.bold, textAlign: align }]}>
-                  {etaMin != null ? `${etaMin}` : '--'} {isRTL ? 'دقيقة' : 'min'}
-                </Text>
-                <Text style={[styles.etaLabel, { fontFamily: font.regular, textAlign: align }]}>
-                  {t('estimatedArrival')}
+            {isEnRoute && (
+              <View style={[styles.etaRow, { flexDirection: rowDir }]}>
+                <View>
+                  <Text style={[styles.etaTime, { fontFamily: font.bold, textAlign: align }]}>
+                    {etaMin != null ? `${etaMin}` : '--'} {isRTL ? 'دقيقة' : 'min'}
+                  </Text>
+                  <Text style={[styles.etaLabel, { fontFamily: font.regular, textAlign: align }]}>
+                    {t('estimatedArrival')}
+                  </Text>
+                </View>
+                <View style={[styles.etaBadge, { flexDirection: rowDir }]}>
+                  <Ionicons name="navigate" size={14} color="#2ECC71" />
+                  <Text style={[styles.etaBadgeText, { fontFamily: font.semibold }]}>
+                    {isRTL ? 'في الطريق' : 'En route'}
+                  </Text>
+                </View>
+              </View>
+            )}
+            {isArrived && (
+              <View style={styles.arrivedBanner}>
+                <Ionicons name="checkmark-circle" size={22} color="#2ECC71" />
+                <Text style={[styles.arrivedText, { fontFamily: font.bold }]}>
+                  {isRTL ? 'وصل الفني إلى موقعك' : 'Technician has arrived!'}
                 </Text>
               </View>
-              <View style={[styles.etaBadge, { flexDirection: rowDir }]}>
-                <Ionicons name="location" size={14} color="#2ECC71" />
-                <Text style={[styles.etaBadgeText, { fontFamily: font.semibold }]}>
-                  {isRTL ? 'في الطريق' : 'En route'}
-                </Text>
-              </View>
-            </View>
-
-            <EtaProgress />
-
-            {/* Technician info */}
+            )}
+            {isEnRoute && <EtaProgress />}
+            {/* Tech info row */}
             <View style={[styles.techRow, { flexDirection: rowDir }]}>
               <LinearGradient colors={['#2D1B69', '#C21875']} style={styles.techAvatar}>
                 <Text style={[styles.techAvatarText, { fontFamily: font.bold }]}>{initials}</Text>
@@ -277,78 +326,151 @@ export default function TrackingScreen() {
                 <Text style={[styles.techName, { fontFamily: font.bold, textAlign: align }]}>
                   {tech?.name ?? t('techName')}
                 </Text>
-                <View style={[{ flexDirection: rowDir, alignItems: 'center' }]}>
-                  {[1, 2, 3, 4, 5].map((i) => (
-                    <Ionicons
-                      key={i}
-                      name={i <= Math.floor(tech?.rating ?? 4.8) ? 'star' : 'star-half'}
-                      size={13}
-                      color="#F39C12"
-                    />
+                <View style={{ flexDirection: rowDir, alignItems: 'center' }}>
+                  {[1,2,3,4,5].map((i) => (
+                    <Ionicons key={i} name={i <= Math.floor(tech?.rating ?? 4.8) ? 'star' : 'star-half'} size={13} color="#F39C12" />
                   ))}
                   <Text style={[styles.techRatingText, { fontFamily: font.regular }]}>
-                    {(tech?.rating ?? 4.8).toFixed(1)} · {t('batterySpecialist')}
+                    {(tech?.rating ?? 4.8).toFixed(1)}
                   </Text>
                 </View>
               </View>
               {tech && (
                 <View style={[styles.techActions, { flexDirection: rowDir }]}>
-                  <TouchableOpacity
-                    style={styles.techActionBtn}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      Linking.openURL(`tel:${tech.phone}`);
-                    }}
-                  >
+                  <TouchableOpacity style={styles.techActionBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${tech.phone}`); }}>
                     <Ionicons name="call" size={18} color="#2D1B69" />
                   </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.techActionBtn}
-                    onPress={() => {
-                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      Linking.openURL(`https://wa.me/${tech.phone.replace(/\D/g, '')}`);
-                    }}
-                  >
+                  <TouchableOpacity style={styles.techActionBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({ pathname: '/chat/[jobId]' as any, params: { jobId: String(jobId), partnerName: tech.name } }); }}>
                     <Ionicons name="chatbubble" size={18} color="#2D1B69" />
                   </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* Service/vehicle row */}
-            <View style={[styles.serviceRow, { flexDirection: rowDir }]}>
-              {activeRequest?.serviceType && (
-                <View style={[styles.serviceItem, { flexDirection: rowDir }]}>
-                  <Ionicons name="construct-outline" size={16} color="#6B7280" />
-                  <Text style={[styles.serviceItemText, { fontFamily: font.regular }]}>
-                    {activeRequest.serviceType}
-                  </Text>
-                </View>
-              )}
-              {activeRequest?.payout && (
-                <View style={[styles.serviceItem, { flexDirection: rowDir }]}>
-                  <Ionicons name="cash-outline" size={16} color="#6B7280" />
-                  <Text style={[styles.serviceItemText, { fontFamily: font.regular }]}>
-                    {activeRequest.payout} {isRTL ? 'ر.س' : 'SAR'}
-                  </Text>
                 </View>
               )}
             </View>
           </>
         )}
 
-        <TouchableOpacity
-          style={styles.cancelBtn}
-          onPress={() => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            setActiveRequest(null);
-            router.replace('/(tabs)' as any);
-          }}
-        >
-          <Text style={[styles.cancelText, { fontFamily: font.semibold }]}>
-            {isCompleted ? (isRTL ? 'إغلاق' : 'Close') : t('cancelRequest')}
-          </Text>
-        </TouchableOpacity>
+        {/* ── Working ────────────────────────────────────────────────────── */}
+        {isWorking && (
+          <>
+            {/* Animated header */}
+            <View style={styles.workingHeader}>
+              <LinearGradient colors={['#2D1B69', '#C21875']} style={styles.workingIconWrap}>
+                <SpinningWrench />
+              </LinearGradient>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.workingTitle, { fontFamily: font.bold, textAlign: align }]}>
+                  {isRTL ? 'الفني يعمل الآن على سيارتك' : 'Technician is working on your car'}
+                </Text>
+                <Text style={[styles.workingSubtitle, { fontFamily: font.regular, textAlign: align }]}>
+                  {isRTL ? 'يُرجى الانتظار بالقرب من مركبتك' : 'Please stay near your vehicle'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Indeterminate progress bar */}
+            <View style={styles.workingTrack}>
+              <IndeterminateBar />
+            </View>
+
+            {/* Service + price chips */}
+            <View style={[styles.workingChips, { flexDirection: rowDir }]}>
+              {activeRequest?.serviceType && (
+                <View style={styles.chip}>
+                  <Ionicons name="build-outline" size={14} color="#2D1B69" />
+                  <Text style={[styles.chipText, { fontFamily: font.semibold }]}>
+                    {activeRequest.serviceType}
+                  </Text>
+                </View>
+              )}
+              {activeRequest?.payout != null && (
+                <View style={[styles.chip, styles.chipGreen]}>
+                  <Ionicons name="cash-outline" size={14} color="#16a34a" />
+                  <Text style={[styles.chipText, { fontFamily: font.semibold, color: '#16a34a' }]}>
+                    {activeRequest.payout} {isRTL ? 'ر.س' : 'SAR'}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Tech info compact row */}
+            {tech && (
+              <View style={[styles.techRowCompact, { flexDirection: rowDir }]}>
+                <LinearGradient colors={['#2D1B69','#C21875']} style={styles.techAvatarSm}>
+                  <Text style={[styles.techAvatarText, { fontFamily: font.bold, fontSize: 14 }]}>{initials}</Text>
+                </LinearGradient>
+                <Text style={[styles.techNameSm, { fontFamily: font.semibold, textAlign: align }]}>
+                  {tech.name}
+                </Text>
+                <View style={[styles.techActions, { flexDirection: rowDir }]}>
+                  <TouchableOpacity style={styles.techActionBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); Linking.openURL(`tel:${tech.phone}`); }}>
+                    <Ionicons name="call" size={18} color="#2D1B69" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.techActionBtn} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push({ pathname: '/chat/[jobId]' as any, params: { jobId: String(jobId), partnerName: tech.name } }); }}>
+                    <Ionicons name="chatbubble" size={18} color="#2D1B69" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* ── Completed ──────────────────────────────────────────────────── */}
+        {isCompleted && (
+          <View style={styles.completedContainer}>
+            <View style={styles.completedIconWrap}>
+              <Ionicons name="checkmark-circle" size={52} color="#2ECC71" />
+            </View>
+            <Text style={[styles.completedTitle, { fontFamily: font.bold }]}>
+              {isRTL ? 'تم إنجاز الخدمة بنجاح!' : 'Service completed!'}
+            </Text>
+            <Text style={[styles.completedSubtitle, { fontFamily: font.regular }]}>
+              {isRTL ? 'شكراً لاختيارك جاي' : 'Thank you for using JAI'}
+            </Text>
+            {activeRequest?.payout != null && (
+              <View style={styles.completedPrice}>
+                <Text style={[styles.completedPriceLabel, { fontFamily: font.regular }]}>
+                  {isRTL ? 'المبلغ المدفوع' : 'Amount charged'}
+                </Text>
+                <Text style={[styles.completedPriceValue, { fontFamily: font.bold }]}>
+                  {activeRequest.payout} {isRTL ? 'ر.س' : 'SAR'}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Cancelled ──────────────────────────────────────────────────── */}
+        {isCancelled && (
+          <View style={styles.searchingContainer}>
+            <Ionicons name="close-circle-outline" size={40} color="#E74C3C" style={{ marginBottom: 12 }} />
+            <Text style={[styles.searchingTitle, { fontFamily: font.bold }]}>
+              {isRTL ? 'تم إلغاء الطلب' : 'Request cancelled'}
+            </Text>
+          </View>
+        )}
+
+        {/* ── Action button ──────────────────────────────────────────────── */}
+        {!isWorking && (
+          <TouchableOpacity
+            style={isCompleted || isCancelled ? styles.closeBtn : styles.cancelBtn}
+            onPress={() => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+              setActiveRequest(null);
+              router.replace('/(tabs)' as any);
+            }}
+          >
+            <Text style={[
+              isCompleted || isCancelled ? styles.closeBtnText : styles.cancelText,
+              { fontFamily: font.semibold },
+            ]}>
+              {isCompleted
+                ? (isRTL ? 'العودة للرئيسية' : 'Back to home')
+                : isCancelled
+                  ? (isRTL ? 'إغلاق' : 'Close')
+                  : t('cancelRequest')}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -426,7 +548,60 @@ const styles = StyleSheet.create({
   serviceItemText: { fontSize: 13, color: '#6B7280' },
   cancelBtn: {
     paddingVertical: 12, alignItems: 'center',
-    borderRadius: 12, borderWidth: 1.5, borderColor: '#FECACA',
+    borderRadius: 12, borderWidth: 1.5, borderColor: '#FECACA', marginTop: 16,
   },
   cancelText: { fontSize: 14, color: '#E74C3C' },
+  closeBtn: {
+    paddingVertical: 14, alignItems: 'center', borderRadius: 16,
+    backgroundColor: '#2D1B69', marginTop: 16,
+  },
+  closeBtnText: { fontSize: 15, color: '#FFFFFF' },
+
+  // ── Arrived banner ─────────────────────────────────────────────────────────
+  arrivedBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: '#E8F8F0', borderRadius: 14, padding: 14, marginBottom: 16,
+  },
+  arrivedText: { fontSize: 15, color: '#15803d', flex: 1 },
+
+  // ── Working state ─────────────────────────────────────────────────────────
+  workingHeader: {
+    flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 16,
+  },
+  workingIconWrap: {
+    width: 64, height: 64, borderRadius: 20,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  workingTitle: { fontSize: 16, color: '#1A1A1A', marginBottom: 4 },
+  workingSubtitle: { fontSize: 13, color: '#6B7280' },
+  workingTrack: { marginBottom: 20 },
+  workingChips: { gap: 10, marginBottom: 16 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#EDE8F8', borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 8, alignSelf: 'flex-start',
+  },
+  chipGreen: { backgroundColor: '#dcfce7' },
+  chipText: { fontSize: 13, color: '#2D1B69' },
+  techRowCompact: {
+    alignItems: 'center', gap: 12,
+    borderTopWidth: 1, borderTopColor: '#F0F0F8', paddingTop: 16,
+  },
+  techAvatarSm: {
+    width: 38, height: 38, borderRadius: 19,
+    justifyContent: 'center', alignItems: 'center',
+  },
+  techNameSm: { fontSize: 14, color: '#1A1A1A', flex: 1 },
+
+  // ── Completed state ───────────────────────────────────────────────────────
+  completedContainer: { alignItems: 'center', paddingVertical: 8 },
+  completedIconWrap:  { marginBottom: 12 },
+  completedTitle:     { fontSize: 20, color: '#1A1A1A', marginBottom: 6, textAlign: 'center' },
+  completedSubtitle:  { fontSize: 14, color: '#6B7280', marginBottom: 16, textAlign: 'center' },
+  completedPrice: {
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    backgroundColor: '#F0FDF4', borderRadius: 14, paddingHorizontal: 20, paddingVertical: 12,
+  },
+  completedPriceLabel: { fontSize: 13, color: '#6B7280' },
+  completedPriceValue: { fontSize: 22, color: '#15803d' },
 });

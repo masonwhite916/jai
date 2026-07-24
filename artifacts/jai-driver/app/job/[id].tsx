@@ -98,6 +98,11 @@ export default function JobDetailScreen() {
     Linking.openURL(`tel:${job.customerPhone.replace(/\s/g, '')}`);
   };
 
+  const handleChat = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({ pathname: '/chat/[jobId]' as any, params: { jobId: job.id, partnerName: job.customerName } });
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top + (Platform.OS === 'web' ? 67 : 0) }]}>
       <View style={[styles.header, { flexDirection: rowDir }]}>
@@ -123,9 +128,14 @@ export default function JobDetailScreen() {
               <Text style={[styles.name, { fontFamily: font.bold, color: colors.text, textAlign: align }]}>{job.customerName}</Text>
               <Text style={[styles.phone, { fontFamily: font.regular, color: colors.mutedForeground, textAlign: align }]}>{job.customerPhone}</Text>
             </View>
-            <TouchableOpacity activeOpacity={0.8} onPress={handleCall} style={[styles.callBtn, { backgroundColor: 'rgba(46,204,113,0.15)' }]}>
-              <Ionicons name="call" size={18} color={colors.success} />
-            </TouchableOpacity>
+            <View style={{ flexDirection: rowDir, gap: 8 }}>
+              <TouchableOpacity activeOpacity={0.8} onPress={handleCall} style={[styles.callBtn, { backgroundColor: 'rgba(46,204,113,0.15)' }]}>
+                <Ionicons name="call" size={18} color={colors.success} />
+              </TouchableOpacity>
+              <TouchableOpacity activeOpacity={0.8} onPress={handleChat} style={[styles.callBtn, { backgroundColor: 'rgba(45,27,105,0.12)' }]}>
+                <Ionicons name="chatbubble" size={18} color="#2D1B69" />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 

@@ -39,6 +39,10 @@ function RootLayoutNav() {
         name="job/[id]"
         options={{ presentation: 'modal', gestureEnabled: true }}
       />
+      <Stack.Screen
+        name="chat/[jobId]"
+        options={{ presentation: 'modal', gestureEnabled: true }}
+      />
     </Stack>
   );
 }

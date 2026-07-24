@@ -8,6 +8,7 @@ import jobsRouter          from "./jobs";
 import adminRouter         from "./admin";
 import notificationsRouter from "./notifications";
 import vehiclesRouter      from "./vehicles";
+import chatRouter          from "./chat";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(jobsRouter);
 router.use(adminRouter);
 router.use(notificationsRouter);
 router.use(vehiclesRouter);
+router.use(chatRouter);
 
 export default router;

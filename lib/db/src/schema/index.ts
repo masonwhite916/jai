@@ -136,6 +136,18 @@ export const siteSettings = pgTable("site_settings", {
   updated_at: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ── Job chat messages ─────────────────────────────────────────────────────────
+
+export const chatMessages = pgTable("chat_messages", {
+  id:          serial("id").primaryKey(),
+  job_id:      integer("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  sender_id:   integer("sender_id").notNull().references(() => users.id),
+  sender_role: text("sender_role").notNull(), // 'customer' | 'technician'
+  sender_name: text("sender_name"),
+  text:        text("text").notNull(),
+  created_at:  timestamp("created_at").notNull().defaultNow(),
+});
+
 // ── TypeScript types ──────────────────────────────────────────────────────────
 
 export type User           = typeof users.$inferSelect;
