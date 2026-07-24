@@ -2,5 +2,6 @@
   "/_not-found/page": "/_not-found",
   "/page": "/",
   "/payment-success/page": "/payment-success",
-  "/subscribe/page": "/subscribe"
+  "/subscribe/page": "/subscribe",
+  "/terms/page": "/terms"
 }

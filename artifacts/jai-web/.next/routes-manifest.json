@@ -51,6 +51,12 @@
       "regex": "^/subscribe(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/subscribe(?:/)?$"
+    },
+    {
+      "page": "/terms",
+      "regex": "^/terms(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/terms(?:/)?$"
     }
   ],
   "dataRoutes": [],
