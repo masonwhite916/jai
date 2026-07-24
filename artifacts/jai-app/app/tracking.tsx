@@ -190,18 +190,14 @@ export default function TrackingScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Interactive map — fills the top portion behind the bottom card */}
+      {/* Interactive map — always visible; falls back to Riyadh centre if GPS still loading */}
       <View style={styles.mapArea}>
-        {customerLat != null && customerLng != null ? (
-          <TrackingMap
-            customerLat={customerLat}
-            customerLng={customerLng}
-            techLat={techGps?.lat}
-            techLng={techGps?.lng}
-          />
-        ) : (
-          <LinearGradient colors={['#EDE8F8', '#F0EDF8', '#E8E4F5']} style={StyleSheet.absoluteFill} />
-        )}
+        <TrackingMap
+          customerLat={customerLat ?? 24.7136}
+          customerLng={customerLng ?? 46.6753}
+          techLat={techGps?.lat}
+          techLng={techGps?.lng}
+        />
         {/* Searching pulse overlay on top of map */}
         {isSearching && (
           <View style={styles.searchingOverlay}>
