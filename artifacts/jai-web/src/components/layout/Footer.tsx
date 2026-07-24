@@ -81,10 +81,26 @@ export default function Footer() {
           <div className={isRTL ? 'text-right' : ''}>
             <h4 className={`text-white font-semibold mb-6 ${arabic}`}>{t('footer_company')}</h4>
             <ul className={`space-y-4 text-white/50 text-sm ${arabic}`}>
-              <li>{t('footer_c1')}</li>
-              <li>{t('footer_c2')}</li>
-              <li>{t('footer_c3')}</li>
-              <li>{t('footer_c4')}</li>
+              <li>
+                <a href="#about" className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer">
+                  {t('footer_c1')}
+                </a>
+              </li>
+              <li>
+                <a href="#plans" className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer">
+                  {t('footer_c2')}
+                </a>
+              </li>
+              <li>
+                <a href="https://wa.me/966555616449" target="_blank" rel="noopener noreferrer" className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer">
+                  {t('footer_c3')}
+                </a>
+              </li>
+              <li>
+                <a href="/jai-web/terms" className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer">
+                  {t('footer_c4')}
+                </a>
+              </li>
             </ul>
           </div>
         </div>

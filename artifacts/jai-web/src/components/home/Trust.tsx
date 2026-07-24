@@ -16,7 +16,7 @@ export default function Trust() {
   const arabic = isRTL ? "font-['Cairo',sans-serif]" : '';
 
   return (
-    <section className="py-32 bg-[#0F0826] relative overflow-hidden z-10">
+    <section id="about" className="py-32 bg-[#0F0826] relative overflow-hidden z-10 scroll-mt-24">
       <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
       <div className="container mx-auto px-6">
         <div className="grid lg:grid-cols-2 gap-16 lg:gap-24 items-center">
