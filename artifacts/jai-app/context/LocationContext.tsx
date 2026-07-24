@@ -82,6 +82,26 @@ export function LocationProvider({ children }: { children: ReactNode }) {
   const [fullAddress, setFullAddress] = useState<string | null>(null);
   const [city, setCity] = useState<string | null>(null);
   const busy = useRef(false);
+  const geoLang = useRef(lang);
+  useEffect(() => { geoLang.current = lang; }, [lang]);
+
+  /** Update address labels for a given coordinate pair. */
+  const updateAddress = useCallback(async (c: Coords) => {
+    const sep = geoLang.current === 'ar' ? '، ' : ', ';
+    const geo = await reverseGeocode(c, geoLang.current);
+    if (geo) {
+      const full = dedupe(geo.fullParts).join(sep);
+      const cityLine = dedupe(geo.cityParts).join(sep);
+      setShortAddress(geo.short ?? (full || null));
+      setFullAddress(full || geo.short || null);
+      setCity(cityLine || null);
+    } else {
+      const raw = `${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}`;
+      setShortAddress(raw);
+      setFullAddress(raw);
+      setCity(null);
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     if (busy.current) return;
@@ -94,36 +114,68 @@ export function LocationProvider({ children }: { children: ReactNode }) {
         return;
       }
       const pos = await Promise.race([
-        Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('gps-timeout')), 15000)),
+        Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.High,
+          mayShowUserSettingsDialog: true,
+        }),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('gps-timeout')), 20000)),
       ]);
       const c = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
       setCoords(c);
-      const sep = lang === 'ar' ? '، ' : ', ';
-      const geo = await reverseGeocode(c, lang);
-      if (geo) {
-        const full = dedupe(geo.fullParts).join(sep);
-        const cityLine = dedupe(geo.cityParts).join(sep);
-        setShortAddress(geo.short ?? (full || null));
-        setFullAddress(full || geo.short || null);
-        setCity(cityLine || null);
-      } else {
-        const raw = `${c.latitude.toFixed(4)}, ${c.longitude.toFixed(4)}`;
-        setShortAddress(raw);
-        setFullAddress(raw);
-        setCity(null);
-      }
+      await updateAddress(c);
       setStatus('ready');
     } catch {
       setStatus('error');
     } finally {
       busy.current = false;
     }
-  }, [lang]);
+  }, [updateAddress]);
 
-  // Detect location once on launch — GPS is core to roadside assistance
+  // Start a high-accuracy position watcher on mount.
+  // It keeps coords fresh as the user moves without draining battery fast
+  // (distanceInterval means updates only fire when position shifts ≥ 10 m).
   useEffect(() => {
-    refresh();
+    let sub: Location.LocationSubscription | null = null;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (!perm.granted || cancelled) return;
+
+        // Kick off an immediate high-accuracy fix first
+        void refresh();
+
+        sub = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.High,
+            timeInterval: 5000,      // at most every 5 s
+            distanceInterval: 10,    // only when moved ≥ 10 m
+          },
+          (loc) => {
+            if (cancelled) return;
+            const c = {
+              latitude: loc.coords.latitude,
+              longitude: loc.coords.longitude,
+            };
+            setCoords(c);
+            setStatus('ready');
+            // Re-geocode only when accuracy is reasonable (≤ 50 m)
+            if ((loc.coords.accuracy ?? 999) <= 50) {
+              void updateAddress(c);
+            }
+          },
+        );
+      } catch {
+        // Watcher unavailable (e.g. on web in some browsers) —
+        // the one-shot refresh() above is still the fallback.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
