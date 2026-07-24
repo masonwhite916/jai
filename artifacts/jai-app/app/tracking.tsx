@@ -16,6 +16,7 @@ import { useApp } from '@/context/AppContext';
 import { jaiSocket } from '@/lib/socket';
 import { getAuthToken } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
+import TrackingMap from '@/components/TrackingMap';
 
 // ── Haversine distance (km) between two GPS points ────────────────────────────
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -32,53 +33,6 @@ function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 function calcEta(customerLat: number, customerLng: number, techLat: number, techLng: number): number {
   const km = haversineKm(customerLat, customerLng, techLat, techLng);
   return Math.max(1, Math.round(km * 2));
-}
-
-// ── Real map using OpenStreetMap static tiles ─────────────────────────────────
-interface LiveMapProps {
-  customerLat: number;
-  customerLng: number;
-  techLat?: number;
-  techLng?: number;
-}
-
-function LiveMap({ customerLat, customerLng, techLat, techLng }: LiveMapProps) {
-  // Centre the map between customer and tech (or just on customer while searching)
-  const centreLat = techLat != null ? (customerLat + techLat) / 2 : customerLat;
-  const centreLng = techLng != null ? (customerLng + techLng) / 2 : customerLng;
-
-  // Pick zoom so both pins are visible
-  const zoom = techLat != null ? 13 : 15;
-
-  const markers = [
-    `${customerLat},${customerLng},red-pushpin`,
-    ...(techLat != null ? [`${techLat},${techLng},blue-pushpin`] : []),
-  ].join('|');
-
-  const mapUrl =
-    `https://staticmap.openstreetmap.de/staticmap.php` +
-    `?center=${centreLat},${centreLng}&zoom=${zoom}&size=400x300&markers=${markers}`;
-
-  // On web render a plain <img> (works inside nested iframes, no CORS issues)
-  // On native fall back to RN Image (same URL)
-  if (Platform.OS === 'web') {
-    return React.createElement('img', {
-      src: mapUrl,
-      style: { width: '100%', height: '100%', objectFit: 'cover' },
-      alt: 'Live map',
-      key: mapUrl, // forces reload when URL changes
-    });
-  }
-
-  const { Image } = require('react-native') as typeof import('react-native');
-  return (
-    <Image
-      source={{ uri: mapUrl }}
-      style={{ width: '100%', height: '100%' }}
-      resizeMode="cover"
-      key={mapUrl}
-    />
-  );
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
@@ -236,20 +190,19 @@ export default function TrackingScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      {/* Real map — fills the top half behind the bottom card */}
+      {/* Interactive map — fills the top portion behind the bottom card */}
       <View style={styles.mapArea}>
         {customerLat != null && customerLng != null ? (
-          <LiveMap
+          <TrackingMap
             customerLat={customerLat}
             customerLng={customerLng}
             techLat={techGps?.lat}
             techLng={techGps?.lng}
           />
         ) : (
-          /* No GPS available — show subtle gradient placeholder */
           <LinearGradient colors={['#EDE8F8', '#F0EDF8', '#E8E4F5']} style={StyleSheet.absoluteFill} />
         )}
-        {/* Searching pulse overlay */}
+        {/* Searching pulse overlay on top of map */}
         {isSearching && (
           <View style={styles.searchingOverlay}>
             <PulsingDot color="#F39C12" />
