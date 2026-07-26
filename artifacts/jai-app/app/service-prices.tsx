@@ -7,24 +7,36 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useLanguage } from '@/context/LanguageContext';
+import { useApp } from '@/context/AppContext';
 
 type ServiceRow = {
+  id: string;
   icon: keyof typeof Ionicons.glyphMap;
   nameEn: string;
   nameAr: string;
-  price: string | null;   // null = free
+  price: string | null;   // null = always free
   noteEn?: string;
   noteAr?: string;
 };
 
+/** Which service IDs each plan covers (free of charge). */
+const PLAN_COVERED: Record<string, string[]> = {
+  basic:     ['battery', 'fuel', 'tire', 'tow_emergency', 'tow_breakdown', 'mechanic'],
+  accidents: ['battery', 'fuel', 'tire', 'tow_emergency', 'tow_breakdown', 'mechanic', 'accident_transport', 'workshop'],
+  rental:    ['battery', 'fuel', 'tire', 'tow_emergency', 'tow_breakdown', 'mechanic', 'diagnostics'],
+  premium:   ['battery', 'fuel', 'tire', 'tow_emergency', 'tow_breakdown', 'mechanic', 'lockout', 'diagnostics'],
+};
+
 const SERVICES: ServiceRow[] = [
   {
+    id: 'battery',
     icon: 'battery-charging-outline',
     nameEn: 'Battery Charge',
     nameAr: 'شحن البطارية',
     price: '120',
   },
   {
+    id: 'fuel',
     icon: 'water-outline',
     nameEn: 'Fuel Delivery',
     nameAr: 'تزويد الوقود',
@@ -33,18 +45,21 @@ const SERVICES: ServiceRow[] = [
     noteAr: 'سعر التوصيل فقط، دون احتساب سعر الوقود',
   },
   {
+    id: 'tire',
     icon: 'settings-outline',
     nameEn: 'Tire Change',
     nameAr: 'تغيير الإطارات',
     price: '120',
   },
   {
+    id: 'mechanic',
     icon: 'construct-outline',
     nameEn: 'Light Electrical & Mechanical Repair',
     nameAr: 'صيانة كهربائية وميكانيكية خفيفة',
     price: '200',
   },
   {
+    id: 'tow_emergency',
     icon: 'car-outline',
     nameEn: 'Emergency Tow',
     nameAr: 'سحب السيارة في حالات الطوارئ',
@@ -53,6 +68,7 @@ const SERVICES: ServiceRow[] = [
     noteAr: 'لمسافة متوسطة داخل المدينة',
   },
   {
+    id: 'tow_breakdown',
     icon: 'car-outline',
     nameEn: 'Breakdown Tow',
     nameAr: 'سحب السيارة في حالة العطل',
@@ -61,12 +77,14 @@ const SERVICES: ServiceRow[] = [
     noteAr: 'لمسافة متوسطة داخل المدينة',
   },
   {
+    id: 'accident_transport',
     icon: 'navigate-outline',
     nameEn: 'Accident Transport to Assessment Centre',
     nameAr: 'نقل سيارة الحادث إلى مركز تقدير الحوادث',
     price: '150',
   },
   {
+    id: 'workshop',
     icon: 'business-outline',
     nameEn: "Workshop Referral (client's choice)",
     nameAr: 'ورشة من اختيار العميل',
@@ -75,12 +93,14 @@ const SERVICES: ServiceRow[] = [
     noteAr: 'خدمة تسهيلية دون تكلفة مباشرة',
   },
   {
+    id: 'diagnostics',
     icon: 'laptop-outline',
     nameEn: 'Computer Fault Diagnostics',
     nameAr: 'كشف الأعطال بالكمبيوتر',
     price: '80',
   },
   {
+    id: 'carwash',
     icon: 'sparkles-outline',
     nameEn: 'Car Wash',
     nameAr: 'غسيل السيارة',
@@ -94,8 +114,11 @@ export default function ServicePricesScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isRTL, font } = useLanguage();
+  const { user } = useApp();
   const align = isRTL ? 'right' : 'left';
   const rowDir: 'row' | 'row-reverse' = isRTL ? 'row-reverse' : 'row';
+  const membership = user?.membership ?? 'none';
+  const coveredIds = PLAN_COVERED[membership] ?? [];
 
   return (
     <View style={styles.root}>
@@ -137,39 +160,71 @@ export default function ServicePricesScreen() {
           { paddingBottom: insets.bottom + 40 + (Platform.OS === 'web' ? 34 : 0) },
         ]}
       >
-        {SERVICES.map((svc, i) => (
-          <View key={i} style={[styles.row, { flexDirection: rowDir }, i < SERVICES.length - 1 && styles.rowDivider]}>
-            <View style={styles.iconWrap}>
-              <Ionicons name={svc.icon} size={20} color="#5B2C91" />
-            </View>
-
-            <View style={styles.rowBody}>
-              <Text style={[styles.rowName, { fontFamily: font.semibold, textAlign: align }]}>
-                {isRTL ? svc.nameAr : svc.nameEn}
-              </Text>
-              {(svc.noteEn || svc.noteAr) ? (
-                <Text style={[styles.rowNote, { fontFamily: font.regular, textAlign: align }]}>
-                  {isRTL ? svc.noteAr : svc.noteEn}
-                </Text>
-              ) : null}
-            </View>
-
-            <View style={styles.priceWrap}>
-              {svc.price ? (
-                <>
-                  <Text style={[styles.priceNum, { fontFamily: font.bold }]}>{svc.price}</Text>
-                  <Text style={[styles.priceCur, { fontFamily: font.regular }]}>
-                    {isRTL ? 'ر.س' : 'SAR'}
-                  </Text>
-                </>
-              ) : (
-                <Text style={[styles.priceFree, { fontFamily: font.semibold }]}>
-                  {isRTL ? 'مجاناً' : 'Free'}
-                </Text>
-              )}
-            </View>
+        {/* Covered-by-plan banner */}
+        {membership !== 'none' && (
+          <View style={[styles.planBanner, { flexDirection: rowDir }]}>
+            <Ionicons name="shield-checkmark" size={16} color="#2ECC71" />
+            <Text style={[styles.planBannerText, { fontFamily: font.medium, textAlign: align }]}>
+              {isRTL
+                ? 'الخدمات المميزة بالأخضر مشمولة مجاناً بباقتك الحالية'
+                : 'Services highlighted in green are free under your current plan'}
+            </Text>
           </View>
-        ))}
+        )}
+
+        {SERVICES.map((svc, i) => {
+          const covered = svc.price === null || coveredIds.includes(svc.id);
+          return (
+            <View
+              key={svc.id}
+              style={[
+                styles.row,
+                { flexDirection: rowDir },
+                i < SERVICES.length - 1 && styles.rowDivider,
+                covered && styles.rowCovered,
+              ]}
+            >
+              <View style={[styles.iconWrap, covered && styles.iconWrapCovered]}>
+                <Ionicons name={svc.icon} size={20} color={covered ? '#2ECC71' : '#5B2C91'} />
+              </View>
+
+              <View style={styles.rowBody}>
+                <Text style={[styles.rowName, { fontFamily: font.semibold, textAlign: align }]}>
+                  {isRTL ? svc.nameAr : svc.nameEn}
+                </Text>
+                {(svc.noteEn || svc.noteAr) ? (
+                  <Text style={[styles.rowNote, { fontFamily: font.regular, textAlign: align }]}>
+                    {isRTL ? svc.noteAr : svc.noteEn}
+                  </Text>
+                ) : null}
+              </View>
+
+              <View style={styles.priceWrap}>
+                {covered ? (
+                  <View style={{ alignItems: 'flex-end', gap: 1 }}>
+                    {svc.price && (
+                      <Text style={[styles.priceStrike, { fontFamily: font.regular }]}>{svc.price} {isRTL ? 'ر.س' : 'SAR'}</Text>
+                    )}
+                    <Text style={[styles.priceFree, { fontFamily: font.semibold }]}>
+                      {isRTL ? 'مجاناً' : 'Free'}
+                    </Text>
+                  </View>
+                ) : svc.price ? (
+                  <>
+                    <Text style={[styles.priceNum, { fontFamily: font.bold }]}>{svc.price}</Text>
+                    <Text style={[styles.priceCur, { fontFamily: font.regular }]}>
+                      {isRTL ? 'ر.س' : 'SAR'}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={[styles.priceFree, { fontFamily: font.semibold }]}>
+                    {isRTL ? 'مجاناً' : 'Free'}
+                  </Text>
+                )}
+              </View>
+            </View>
+          );
+        })}
 
         {/* Disclaimer */}
         <View style={[styles.disclaimer, { flexDirection: rowDir }]}>
@@ -227,6 +282,15 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
 
+  // Plan banner
+  planBanner: {
+    backgroundColor: 'rgba(46,204,113,0.1)',
+    borderRadius: 12, padding: 12, marginBottom: 8,
+    alignItems: 'center', gap: 8,
+    borderWidth: 1, borderColor: 'rgba(46,204,113,0.25)',
+  },
+  planBannerText: { fontSize: 13, color: '#1A1A1A', flex: 1, lineHeight: 18 },
+
   row: {
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
@@ -237,6 +301,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#EDE8F8',
   },
+  rowCovered: { backgroundColor: 'rgba(46,204,113,0.05)' },
 
   iconWrap: {
     width: 44,
@@ -249,6 +314,7 @@ const styles = StyleSheet.create({
     marginLeft: 14,
     flexShrink: 0,
   },
+  iconWrapCovered: { backgroundColor: 'rgba(46,204,113,0.15)' },
   rowBody: {
     flex: 1,
   },
@@ -282,6 +348,11 @@ const styles = StyleSheet.create({
   priceFree: {
     fontSize: 14,
     color: '#2ECC71',
+  },
+  priceStrike: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    textDecorationLine: 'line-through',
   },
 
   disclaimer: {

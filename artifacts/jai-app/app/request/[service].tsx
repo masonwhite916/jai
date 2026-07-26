@@ -26,6 +26,14 @@ const SERVICE_INFO: Record<string, ServiceDef> = {
   electric: { labelKey: 'serviceElectric', icon: 'flash', lib: 'Ionicons', basePrice: 200 },
 };
 
+/** Services covered (free) under each subscription plan. */
+const PLAN_COVERED: Record<string, string[]> = {
+  basic:     ['battery', 'fuel', 'tire', 'tow', 'mechanic', 'electric'],
+  accidents: ['battery', 'fuel', 'tire', 'tow', 'mechanic', 'electric'],
+  rental:    ['battery', 'fuel', 'tire', 'tow', 'mechanic', 'electric'],
+  premium:   ['battery', 'fuel', 'tire', 'tow', 'mechanic', 'electric', 'lockout'],
+};
+
 function ServiceIcon({ icon, lib }: { icon: string; lib: string }) {
   if (lib === 'Ionicons') return <Ionicons name={icon as any} size={28} color="#FFFFFF" />;
   return <MaterialCommunityIcons name={icon as any} size={28} color="#FFFFFF" />;
@@ -42,6 +50,8 @@ export default function ServiceRequest() {
   const align = isRTL ? 'right' : 'left';
 
   const info = SERVICE_INFO[service ?? 'battery'] ?? SERVICE_INFO.battery;
+  const membership = user?.membership ?? 'none';
+  const isCovered = membership !== 'none' && (PLAN_COVERED[membership] ?? []).includes(service ?? '');
   const [step, setStep] = useState(1);
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
@@ -288,23 +298,50 @@ export default function ServiceRequest() {
               ))}
               <View style={[styles.summaryRow, styles.summaryTotal, { flexDirection: rowDir }]}>
                 <Text style={[styles.totalLabel, { fontFamily: font.bold }]}>{t('estimatedCost')}</Text>
-                <Text style={[styles.totalValue, { fontFamily: font.bold }]}>{info.basePrice} SAR</Text>
+                {isCovered ? (
+                  <View style={styles.coveredPriceWrap}>
+                    <Text style={[styles.totalValueStrike, { fontFamily: font.regular }]}>{info.basePrice} SAR</Text>
+                    <Text style={[styles.totalValueFree, { fontFamily: font.bold }]}>
+                      {isRTL ? 'مجاناً' : 'Free'}
+                    </Text>
+                  </View>
+                ) : (
+                  <Text style={[styles.totalValue, { fontFamily: font.bold }]}>{info.basePrice} SAR</Text>
+                )}
               </View>
             </View>
 
-            <Text style={[styles.paymentTitle, { fontFamily: font.bold, textAlign: align }]}>{t('paymentMethod')}</Text>
-            {PAYMENT_OPTIONS.map((opt, i) => (
-              <TouchableOpacity
-                key={opt.label}
-                style={[styles.paymentOption, i === paymentIdx && styles.paymentOptionSelected, { flexDirection: rowDir }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPaymentIdx(i); }}
-                activeOpacity={0.85}
-              >
-                <Ionicons name={opt.iconName as any} size={20} color={i === paymentIdx ? '#2D1B69' : '#6B7280'} />
-                <Text style={[styles.paymentLabel, i === paymentIdx && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
-                {i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
-              </TouchableOpacity>
-            ))}
+            {isCovered ? (
+              <View style={[styles.planCoverageCard, { flexDirection: rowDir }]}>
+                <View style={styles.planCoverageIcon}>
+                  <Ionicons name="shield-checkmark" size={22} color="#2ECC71" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.planCoverageTitle, { fontFamily: font.bold, textAlign: align }]}>
+                    {isRTL ? 'مشمولة بباقتك' : 'Covered by your plan'}
+                  </Text>
+                  <Text style={[styles.planCoverageSub, { fontFamily: font.regular, textAlign: align }]}>
+                    {isRTL ? 'هذه الخدمة مجانية ضمن اشتراكك الحالي' : 'This service is free under your current subscription'}
+                  </Text>
+                </View>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.paymentTitle, { fontFamily: font.bold, textAlign: align }]}>{t('paymentMethod')}</Text>
+                {PAYMENT_OPTIONS.map((opt, i) => (
+                  <TouchableOpacity
+                    key={opt.label}
+                    style={[styles.paymentOption, i === paymentIdx && styles.paymentOptionSelected, { flexDirection: rowDir }]}
+                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPaymentIdx(i); }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name={opt.iconName as any} size={20} color={i === paymentIdx ? '#2D1B69' : '#6B7280'} />
+                    <Text style={[styles.paymentLabel, i === paymentIdx && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
+                    {i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
           </View>
         )}
       </ScrollView>
@@ -400,6 +437,21 @@ const styles = StyleSheet.create({
   summaryTotal: { borderBottomWidth: 0, marginTop: 4 },
   totalLabel: { fontSize: 16, fontWeight: '700', color: '#1A1A1A' },
   totalValue: { fontSize: 20, fontWeight: '700', color: '#2D1B69' },
+  coveredPriceWrap: { alignItems: 'flex-end', gap: 1 },
+  totalValueStrike: { fontSize: 13, color: '#9CA3AF', textDecorationLine: 'line-through' },
+  totalValueFree: { fontSize: 20, color: '#2ECC71' },
+  planCoverageCard: {
+    backgroundColor: 'rgba(46,204,113,0.08)', borderRadius: 16, padding: 16,
+    alignItems: 'center', gap: 14, marginBottom: 8,
+    borderWidth: 1.5, borderColor: 'rgba(46,204,113,0.25)',
+  },
+  planCoverageIcon: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(46,204,113,0.15)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  planCoverageTitle: { fontSize: 15, color: '#1A1A1A', marginBottom: 2 },
+  planCoverageSub: { fontSize: 13, color: '#6B7280', lineHeight: 19 },
   paymentTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 },
   paymentOption: {
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,
