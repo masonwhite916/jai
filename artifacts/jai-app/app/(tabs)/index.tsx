@@ -6,7 +6,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 import { useJaiLocation } from '@/context/LocationContext';
@@ -93,7 +93,9 @@ function PulsingSOS({ onPress }: { onPress: () => void }) {
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user } = useApp();
+  const { user, refreshUser } = useApp();
+
+  useFocusEffect(React.useCallback(() => { void refreshUser(); }, []));
   const { t, isRTL, font } = useLanguage();
   const gps = useJaiLocation();
 
@@ -213,41 +215,54 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 12, paddingRight: 4 }}
           >
-            {HOME_PLANS.map((plan) => (
-              <TouchableOpacity
-                key={plan.id}
-                activeOpacity={0.88}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/subscribe/${plan.id}` as any); }}
-              >
-                <LinearGradient colors={plan.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.planCard}>
-                  {plan.popular && (
-                    <View style={styles.planPopularBadge}>
-                      <Ionicons name="star" size={9} color="#FFD700" />
-                      <Text style={[styles.planPopularText, { fontFamily: font.bold }]}>
-                        {isRTL ? 'الأشهر' : 'TOP'}
+            {HOME_PLANS.map((plan) => {
+              const isActive = user?.membership === plan.id;
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  activeOpacity={isActive ? 1 : 0.88}
+                  onPress={() => { if (!isActive) { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/subscribe/${plan.id}` as any); } }}
+                >
+                  <LinearGradient colors={plan.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.planCard}>
+                    {isActive ? (
+                      <View style={styles.planActiveBadge}>
+                        <Ionicons name="checkmark-circle" size={9} color="#2ECC71" />
+                        <Text style={[styles.planPopularText, { fontFamily: font.bold }]}>
+                          {isRTL ? 'نشط' : 'ACTIVE'}
+                        </Text>
+                      </View>
+                    ) : plan.popular ? (
+                      <View style={styles.planPopularBadge}>
+                        <Ionicons name="star" size={9} color="#FFD700" />
+                        <Text style={[styles.planPopularText, { fontFamily: font.bold }]}>
+                          {isRTL ? 'الأشهر' : 'TOP'}
+                        </Text>
+                      </View>
+                    ) : <View style={{ height: 22 }} />}
+                    <Text style={[styles.planCardName, { fontFamily: font.bold }]}>
+                      {isRTL ? plan.nameAr : plan.nameEn}
+                    </Text>
+                    <Text style={[styles.planCardSub, { fontFamily: font.regular }]}>
+                      {isRTL ? plan.subtitleAr : plan.subtitleEn}
+                    </Text>
+                    <View style={styles.planCardPriceRow}>
+                      <Text style={[styles.planCardPrice, { fontFamily: font.bold }]}>{plan.price}</Text>
+                      <Text style={[styles.planCardCurrency, { fontFamily: font.regular }]}>
+                        {isRTL ? 'ر.س/سنة' : 'SAR/yr'}
                       </Text>
                     </View>
-                  )}
-                  <Text style={[styles.planCardName, { fontFamily: font.bold }]}>
-                    {isRTL ? plan.nameAr : plan.nameEn}
-                  </Text>
-                  <Text style={[styles.planCardSub, { fontFamily: font.regular }]}>
-                    {isRTL ? plan.subtitleAr : plan.subtitleEn}
-                  </Text>
-                  <View style={styles.planCardPriceRow}>
-                    <Text style={[styles.planCardPrice, { fontFamily: font.bold }]}>{plan.price}</Text>
-                    <Text style={[styles.planCardCurrency, { fontFamily: font.regular }]}>
-                      {isRTL ? 'ر.س/سنة' : 'SAR/yr'}
-                    </Text>
-                  </View>
-                  <View style={styles.planCardBtn}>
-                    <Text style={[styles.planCardBtnText, { fontFamily: font.semibold }]}>
-                      {isRTL ? 'اشترك' : 'Subscribe'}
-                    </Text>
-                  </View>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
+                    <View style={[styles.planCardBtn, isActive && styles.planCardBtnActive]}>
+                      {isActive
+                        ? <Ionicons name="checkmark-circle" size={14} color="#2ECC71" />
+                        : null}
+                      <Text style={[styles.planCardBtnText, { fontFamily: font.semibold, color: isActive ? '#2ECC71' : '#FFFFFF' }]}>
+                        {isActive ? (isRTL ? 'باقتك الحالية' : 'Current Plan') : (isRTL ? 'اشترك' : 'Subscribe')}
+                      </Text>
+                    </View>
+                  </LinearGradient>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -507,10 +522,17 @@ const styles = StyleSheet.create({
   planCardPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginBottom: 16 },
   planCardPrice: { fontSize: 28, color: '#FFFFFF' },
   planCardCurrency: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
-  planCardBtn: {
-    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10,
-    paddingVertical: 8, alignItems: 'center',
+  planActiveBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(46,204,113,0.25)', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 10,
   },
+  planCardBtn: {
+    flexDirection: 'row', gap: 5,
+    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10,
+    paddingVertical: 8, alignItems: 'center', justifyContent: 'center',
+  },
+  planCardBtnActive: { backgroundColor: 'rgba(46,204,113,0.2)' },
   planCardBtnText: { fontSize: 13, color: '#FFFFFF' },
 
   // Contact
