@@ -129,11 +129,11 @@ export default function JobDetailScreen() {
               <Text style={[styles.phone, { fontFamily: font.regular, color: colors.mutedForeground, textAlign: align }]}>{job.customerPhone}</Text>
             </View>
             <View style={{ flexDirection: rowDir, gap: 8 }}>
-              <TouchableOpacity activeOpacity={0.8} onPress={handleCall} style={[styles.callBtn, { backgroundColor: 'rgba(46,204,113,0.15)' }]}>
-                <Ionicons name="call" size={18} color={colors.success} />
+              <TouchableOpacity activeOpacity={0.8} onPress={handleCall} style={[styles.actionBtn, { backgroundColor: 'rgba(46,204,113,0.15)' }]}>
+                <Ionicons name="call" size={20} color={colors.success} />
               </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} onPress={handleChat} style={[styles.callBtn, { backgroundColor: 'rgba(45,27,105,0.12)' }]}>
-                <Ionicons name="chatbubble" size={18} color="#2D1B69" />
+              <TouchableOpacity activeOpacity={0.8} onPress={handleChat} style={[styles.actionBtn, { backgroundColor: 'rgba(194,24,117,0.15)' }]}>
+                <Ionicons name="chatbubble-ellipses" size={20} color="#C21875" />
               </TouchableOpacity>
             </View>
           </View>
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   avatarText: { color: '#FFFFFF', fontSize: 18 },
   name: { fontSize: 17 },
   phone: { fontSize: 13, marginTop: 2 },
-  callBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
+  actionBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   sectionTitle: { fontSize: 16, marginBottom: 10 },
   text: { fontSize: 14, lineHeight: 20 },
   detailRow: { justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
