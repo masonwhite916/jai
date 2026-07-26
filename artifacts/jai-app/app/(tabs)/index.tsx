@@ -18,6 +18,34 @@ import * as Haptics from 'expo-haptics';
 const JAI_LOGO = require('../../assets/images/jai-logo.png');
 const { width } = Dimensions.get('window');
 
+// ── Subscription plans (compact — matches membership.tsx) ─────────────────────
+const HOME_PLANS = [
+  {
+    id: 'basic',
+    nameEn: 'Basic', nameAr: 'الأساسية',
+    subtitleEn: 'Daily Use', subtitleAr: 'للاستخدام اليومي',
+    price: '199',
+    gradient: ['#5B2C91', '#7B2A9E'] as [string, string],
+    popular: false,
+  },
+  {
+    id: 'accidents',
+    nameEn: 'Accidents', nameAr: 'الحوادث',
+    subtitleEn: 'Emergency Coverage', subtitleAr: 'لحالات الطوارئ',
+    price: '299',
+    gradient: ['#2D1B69', '#5B2C91'] as [string, string],
+    popular: true,
+  },
+  {
+    id: 'rental',
+    nameEn: 'Rental', nameAr: 'الإجرة',
+    subtitleEn: 'Full Coverage', subtitleAr: 'تغطية شاملة',
+    price: '600',
+    gradient: ['#8B35BB', '#C21875'] as [string, string],
+    popular: false,
+  },
+];
+
 // 4-column grid: 20px padding each side + 3 gaps of 10px
 const CELL = (width - 40 - 30) / 4;
 
@@ -167,6 +195,61 @@ export default function HomeScreen() {
             />
           </LinearGradient>
         </TouchableOpacity>
+
+        {/* ── Subscription Plans ─────────────────────────────────────────── */}
+        <View style={styles.section}>
+          <View style={[styles.sectionRow, { flexDirection: rowDir }]}>
+            <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>
+              {isRTL ? 'باقاتنا' : 'Our Packages'}
+            </Text>
+            <TouchableOpacity onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}>
+              <Text style={[styles.seeAll, { fontFamily: font.medium }]}>
+                {isRTL ? 'عرض الكل' : 'See all'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 12, paddingRight: 4 }}
+          >
+            {HOME_PLANS.map((plan) => (
+              <TouchableOpacity
+                key={plan.id}
+                activeOpacity={0.88}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push(`/subscribe/${plan.id}` as any); }}
+              >
+                <LinearGradient colors={plan.gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.planCard}>
+                  {plan.popular && (
+                    <View style={styles.planPopularBadge}>
+                      <Ionicons name="star" size={9} color="#FFD700" />
+                      <Text style={[styles.planPopularText, { fontFamily: font.bold }]}>
+                        {isRTL ? 'الأشهر' : 'TOP'}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.planCardName, { fontFamily: font.bold }]}>
+                    {isRTL ? plan.nameAr : plan.nameEn}
+                  </Text>
+                  <Text style={[styles.planCardSub, { fontFamily: font.regular }]}>
+                    {isRTL ? plan.subtitleAr : plan.subtitleEn}
+                  </Text>
+                  <View style={styles.planCardPriceRow}>
+                    <Text style={[styles.planCardPrice, { fontFamily: font.bold }]}>{plan.price}</Text>
+                    <Text style={[styles.planCardCurrency, { fontFamily: font.regular }]}>
+                      {isRTL ? 'ر.س/سنة' : 'SAR/yr'}
+                    </Text>
+                  </View>
+                  <View style={styles.planCardBtn}>
+                    <Text style={[styles.planCardBtnText, { fontFamily: font.semibold }]}>
+                      {isRTL ? 'اشترك' : 'Subscribe'}
+                    </Text>
+                  </View>
+                </LinearGradient>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
 
         {/* ── Services Grid ──────────────────────────────────────────────── */}
         <View style={styles.section}>
@@ -402,6 +485,33 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 8, elevation: 3,
   },
   svcLabel: { fontSize: 11, color: '#333', textAlign: 'center' },
+
+  // Section header row (title + see-all)
+  sectionRow: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  seeAll: { fontSize: 13, color: '#C21875' },
+
+  // Plan cards (horizontal scroll)
+  planCard: {
+    width: 150, borderRadius: 20, padding: 16,
+    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25, shadowRadius: 12, elevation: 8,
+  },
+  planPopularBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10,
+    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 10,
+  },
+  planPopularText: { fontSize: 9, color: '#FFFFFF', letterSpacing: 1 },
+  planCardName: { fontSize: 16, color: '#FFFFFF', marginBottom: 2 },
+  planCardSub: { fontSize: 11, color: 'rgba(255,255,255,0.65)', marginBottom: 14 },
+  planCardPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4, marginBottom: 16 },
+  planCardPrice: { fontSize: 28, color: '#FFFFFF' },
+  planCardCurrency: { fontSize: 11, color: 'rgba(255,255,255,0.7)' },
+  planCardBtn: {
+    backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 10,
+    paddingVertical: 8, alignItems: 'center',
+  },
+  planCardBtnText: { fontSize: 13, color: '#FFFFFF' },
 
   // Contact
   contactRow: { gap: 12 },
