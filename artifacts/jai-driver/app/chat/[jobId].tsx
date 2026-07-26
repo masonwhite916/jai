@@ -59,7 +59,7 @@ export default function DriverChatScreen() {
   const { jobId, partnerName } = useLocalSearchParams<{ jobId: string; partnerName?: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { driver } = useDriver();
+  const { driver, clearUnread } = useDriver();
   const { isRTL, font } = useLanguage();
 
   const [messages, setMessages] = useState<ChatMsg[]>([]);
@@ -71,6 +71,8 @@ export default function DriverChatScreen() {
 
   useEffect(() => {
     if (!jobId) return;
+    // Clear the unread badge in the Messages tab when the chat opens
+    clearUnread(jobId);
     apiFetch<ChatMsg[]>(`/api/jobs/${jobId}/messages`)
       .then((msgs) => { setMessages(msgs); setLoading(false); })
       .catch(() => setLoading(false));

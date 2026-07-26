@@ -65,12 +65,29 @@ export interface ServerUser {
 
 type MutationResult = { ok: true } | { ok: false; status?: number; error: string };
 
+// ── Chat types (shared with chat screens) ────────────────────────────────────
+export interface ChatMessage {
+  id:          number;
+  job_id:      number;
+  sender_id:   number;
+  sender_role: string;
+  sender_name: string | null;
+  text:        string;
+  created_at:  string;
+}
+
 interface DriverContextType {
   driver: Driver | null;
   jobs: Job[];
   activeJob: Job | null;
   isLoading: boolean;
   loadError: string | null;
+  /** Per-job unread message counts (reset by clearUnread). */
+  unreadByJob: Record<string, number>;
+  /** Per-job latest received message (for preview rows). */
+  lastMsgByJob: Record<string, ChatMessage>;
+  /** Call when the driver opens a chat to clear the unread badge for that job. */
+  clearUnread: (jobId: string) => void;
   login: (user: ServerUser, token: string) => Promise<void>;
   logout: () => Promise<void>;
   toggleOnline: () => void;
@@ -179,6 +196,14 @@ export function DriverProvider({ children }: { children: ReactNode }) {
 
   const myIdRef = useRef<number | null>(null);
   myIdRef.current = profile ? Number(profile.id) : null;
+
+  // ── Chat state ─────────────────────────────────────────────────────────────
+  const [unreadByJob,  setUnreadByJob]  = useState<Record<string, number>>({});
+  const [lastMsgByJob, setLastMsgByJob] = useState<Record<string, ChatMessage>>({});
+
+  const clearUnread = useCallback((jobId: string) => {
+    setUnreadByJob((prev) => prev[jobId] ? { ...prev, [jobId]: 0 } : prev);
+  }, []);
 
   // ── Jobs enriched with client-side distance/ETA ────────────────────────────
   const jobs = useMemo<Job[]>(() => {
@@ -446,10 +471,24 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         prev.map((j) => (j.id === jobId ? { ...j, status } : j)),
       );
     });
-    return () => {
-      off();
-      jaiSocket.leaveRoom(room);
-    };
+    // Do NOT call leaveRoom on cleanup — the driver must stay in the room to
+    // receive chat messages even when navigating between tabs.  The room will
+    // be cleaned up naturally when the socket disconnects on logout.
+    return () => { off(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJob?.id]);
+
+  // ── Persistent chat listener — captures messages on any screen ─────────────
+  useEffect(() => {
+    if (!activeJob) return;
+    const jobIdStr = activeJob.id;
+    const off = jaiSocket.on('chat_message', (payload) => {
+      const msg = payload as unknown as ChatMessage;
+      if (String(msg.job_id) !== jobIdStr) return;
+      setLastMsgByJob((prev) => ({ ...prev, [jobIdStr]: msg }));
+      setUnreadByJob((prev) => ({ ...prev, [jobIdStr]: (prev[jobIdStr] ?? 0) + 1 }));
+    });
+    return () => { off(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeJob?.id]);
 
@@ -524,6 +563,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     activeJob,
     isLoading,
     loadError,
+    unreadByJob,
+    lastMsgByJob,
+    clearUnread,
     login,
     logout,
     toggleOnline,

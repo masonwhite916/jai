@@ -23,6 +23,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: 'bolt.badge.a', selected: 'bolt.badge.a.fill' }} />
         <Label>{t('tabActive')}</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="messages">
+        <Icon sf={{ default: 'message', selected: 'message.fill' }} />
+        <Label>{t('tabMessages')}</Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="earnings">
         <Icon sf={{ default: 'creditcard', selected: 'creditcard.fill' }} />
         <Label>{t('tabEarnings')}</Label>
@@ -42,7 +46,8 @@ function ClassicTabLayout() {
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
   const { t, isRTL } = useLanguage();
-  const { activeJob } = useDriver();
+  const { activeJob, unreadByJob } = useDriver();
+  const totalUnread = Object.values(unreadByJob).reduce((s, n) => s + n, 0);
 
   return (
     <Tabs
@@ -98,6 +103,19 @@ function ClassicTabLayout() {
               <Feather name="zap" size={22} color={color} />
             ),
           tabBarBadge: activeJob ? '' : undefined,
+        }}
+      />
+      <Tabs.Screen
+        name="messages"
+        options={{
+          title: t('tabMessages'),
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="message" tintColor={color} size={24} />
+            ) : (
+              <Feather name="message-circle" size={22} color={color} />
+            ),
+          tabBarBadge: totalUnread > 0 ? totalUnread : undefined,
         }}
       />
       <Tabs.Screen
