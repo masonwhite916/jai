@@ -131,6 +131,10 @@ function RootLayoutNav() {
         options={{ presentation: 'modal', gestureEnabled: true }}
       />
       <Stack.Screen
+        name="emergency"
+        options={{ presentation: 'modal', gestureEnabled: true }}
+      />
+      <Stack.Screen
         name="request/[service]"
         options={{ presentation: 'modal', gestureEnabled: true }}
       />

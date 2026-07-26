@@ -171,7 +171,7 @@ export default function HomeScreen() {
         {/* ── SOS Emergency Card ─────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.sosCard}
-          onPress={() => handleSvc('tow')}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); router.push('/emergency' as any); }}
           activeOpacity={0.9}
         >
           <LinearGradient
@@ -180,7 +180,7 @@ export default function HomeScreen() {
             style={[styles.sosCardGrad, { flexDirection: rowDir }]}
           >
             <View style={styles.sosBtnWrap}>
-              <PulsingSOS onPress={() => handleSvc('tow')} />
+              <PulsingSOS onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy); router.push('/emergency' as any); }} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={[styles.sosTitle, { fontFamily: font.bold, textAlign: align }]}>
