@@ -194,6 +194,7 @@ export default function MessagesTab() {
       {/* List */}
       <FlatList
         data={activeJobs}
+        extraData={{ lastMsgByJob, unreadByJob }}
         keyExtractor={(j) => j.id}
         contentContainerStyle={[
           styles.list,
