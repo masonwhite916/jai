@@ -99,9 +99,9 @@ export default function ActiveScreen() {
     Linking.openURL(`tel:${activeJob.customerPhone.replace(/\s/g, '')}`);
   };
 
-  const handleWhatsApp = () => {
+  const handleChat = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL(`https://wa.me/${activeJob.customerPhone.replace(/\D/g, '')}`);
+    router.push({ pathname: '/chat/[jobId]' as any, params: { jobId: activeJob.id, partnerName: activeJob.customerName } });
   };
 
   return (
@@ -151,9 +151,9 @@ export default function ActiveScreen() {
               <Ionicons name="call" size={18} color={colors.success} />
               <Text style={[styles.contactText, { fontFamily: font.medium, color: colors.success }]}>{t('sosCall')}</Text>
             </TouchableOpacity>
-            <TouchableOpacity activeOpacity={0.8} onPress={handleWhatsApp} style={[styles.contactBtn, { backgroundColor: 'rgba(194,24,117,0.15)' }]}>
-              <Ionicons name="logo-whatsapp" size={18} color={colors.primary} />
-              <Text style={[styles.contactText, { fontFamily: font.medium, color: colors.primary }]}>WhatsApp</Text>
+            <TouchableOpacity activeOpacity={0.8} onPress={handleChat} style={[styles.contactBtn, { backgroundColor: 'rgba(45,27,105,0.12)' }]}>
+              <Ionicons name="chatbubble" size={18} color="#2D1B69" />
+              <Text style={[styles.contactText, { fontFamily: font.medium, color: '#2D1B69' }]}>{isRTL ? 'رسالة' : 'Message'}</Text>
             </TouchableOpacity>
           </View>
         </View>
