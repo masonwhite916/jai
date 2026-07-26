@@ -9,6 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 
 type Plan = {
@@ -113,12 +114,18 @@ const PLAN_ICONS = {
 
 export default function MembershipScreen() {
   const insets = useSafeAreaInsets();
-  const { user } = useApp();
+  const { user, refreshUser } = useApp();
   const { isRTL, font, t } = useLanguage();
   const router = useRouter();
 
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
+
+  // Re-fetch profile every time this screen comes into focus so the
+  // active-plan badge always reflects the latest membership from the server.
+  useFocusEffect(
+    React.useCallback(() => { void refreshUser(); }, []),
+  );
 
   function handleSubscribe(plan: Plan) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
