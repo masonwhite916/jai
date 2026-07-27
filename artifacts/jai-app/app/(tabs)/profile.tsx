@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking,
+  Alert, Modal, ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useJaiLocation } from '@/context/LocationContext';
+import { apiFetch } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
 function MenuItem({ icon, label, sublabel, onPress, accent, rightLabel }: {
@@ -38,6 +40,7 @@ export default function ProfileScreen() {
   const { user, logout, setRole } = useApp();
   const { t, isRTL, font, toggleLanguage, lang } = useLanguage();
   const gps = useJaiLocation();
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
@@ -53,6 +56,35 @@ export default function ProfileScreen() {
     await logout();
     await setRole(null);
     router.replace('/role');
+  }
+
+  function handleDeleteAccount() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Alert.alert(
+      t('deleteAccountTitle'),
+      t('deleteAccountMessage'),
+      [
+        { text: t('cancel') ?? 'Cancel', style: 'cancel' },
+        {
+          text: t('deleteAccountConfirm'),
+          style: 'destructive',
+          onPress: confirmDeleteAccount,
+        },
+      ],
+    );
+  }
+
+  async function confirmDeleteAccount() {
+    setIsDeleting(true);
+    try {
+      await apiFetch('/api/users/me', { method: 'DELETE' });
+      await logout();
+      router.replace('/auth');
+    } catch {
+      Alert.alert('Error', 'Could not delete account. Please try again.');
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   function goTo(topic: string) {
@@ -166,9 +198,22 @@ export default function ProfileScreen() {
             <MenuItem icon="shield-checkmark-outline" label={t('privacyPolicy')} onPress={() => Linking.openURL('https://jaiksa.replit.app/jai-web/privacy')} />
             <MenuItem icon="swap-horizontal-outline" label={t('switchRole')} onPress={handleSwitchRole} />
             <MenuItem icon="log-out-outline" label={t('signOut')} onPress={handleLogout} accent />
+            <MenuItem icon="trash-outline" label={t('deleteAccount')} onPress={handleDeleteAccount} accent />
           </View>
         </View>
       </ScrollView>
+
+      {/* Deletion loading overlay */}
+      {isDeleting && (
+        <Modal transparent animationType="fade">
+          <View style={styles.loadingOverlay}>
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="large" color="#2D1B69" />
+              <Text style={[styles.loadingText, { fontFamily: font.medium }]}>{t('deleting')}</Text>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -223,4 +268,16 @@ const styles = StyleSheet.create({
   vehiclePlate: { fontSize: 13, color: '#6B7280', marginTop: 2 },
   addBtn: { alignItems: 'center', gap: 8, paddingVertical: 10 },
   addBtnText: { fontSize: 14, color: '#2D1B69' },
+  loadingOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  loadingBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 20,
+    paddingVertical: 32, paddingHorizontal: 40,
+    alignItems: 'center', gap: 16,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12, shadowRadius: 24, elevation: 10,
+  },
+  loadingText: { fontSize: 15, color: '#1A1A1A' },
 });
