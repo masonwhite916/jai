@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Platform,
-  Share, Linking, ActivityIndicator, Dimensions, ScrollView,
+  Share, Linking, ActivityIndicator, Dimensions, ScrollView, TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,7 +17,7 @@ const { height: SCREEN_H } = Dimensions.get('window');
 import { useLanguage } from '@/context/LanguageContext';
 import { useApp } from '@/context/AppContext';
 import { jaiSocket } from '@/lib/socket';
-import { getAuthToken } from '@/lib/api';
+import { getAuthToken, apiFetch } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 import TrackingMap from '@/components/TrackingMap';
 
@@ -216,6 +216,28 @@ export default function TrackingScreen() {
   const isCompleted = jobStatus === 'completed';
   const isCancelled = jobStatus === 'cancelled';
 
+  // ── Rating state (customer rates technician) ─────────────────────────────
+  const [ratingStars,     setRatingStars]     = useState(0);
+  const [ratingComment,   setRatingComment]   = useState('');
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [ratingBusy,      setRatingBusy]      = useState(false);
+
+  async function submitRating() {
+    if (!ratingStars || !jobId) return;
+    setRatingBusy(true);
+    try {
+      await apiFetch(`/api/jobs/${jobId}/rate`, {
+        method: 'POST',
+        body: JSON.stringify({ stars: ratingStars, comment: ratingComment.trim() || undefined }),
+      });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch { /* already rated or server error — still mark done */ }
+    finally {
+      setRatingSubmitted(true);
+      setRatingBusy(false);
+    }
+  }
+
   // ── Draggable bottom sheet ───────────────────────────────────────────────────
   // Sheet occupies top: 0..SHEET_H. translateY slides it down so only 240px peeks.
   const SHEET_H       = SCREEN_H * 0.84;
@@ -224,6 +246,13 @@ export default function TrackingScreen() {
 
   const sheetY  = useSharedValue(SNAP_PEEK);
   const startY  = useSharedValue(SNAP_PEEK);
+
+  // Auto-expand sheet when job completes so the rating card is immediately visible
+  useEffect(() => {
+    if (isCompleted) {
+      sheetY.value = withSpring(SNAP_EXPANDED, { damping: 22, stiffness: 200 });
+    }
+  }, [isCompleted]);
 
   const panGesture = Gesture.Pan()
     .onBegin(() => { startY.value = sheetY.value; })
@@ -476,6 +505,63 @@ export default function TrackingScreen() {
                 </Text>
               </View>
             )}
+
+            {/* ── Rate the technician ─────────────────────────────────── */}
+            <View style={styles.ratingCard}>
+              {ratingSubmitted ? (
+                <View style={styles.ratingThanks}>
+                  <Ionicons name="star" size={24} color="#F39C12" />
+                  <Text style={[styles.ratingThanksText, { fontFamily: font.semibold }]}>
+                    {isRTL ? 'شكراً على تقييمك!' : 'Thanks for your rating!'}
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  <Text style={[styles.ratingTitle, { fontFamily: font.semibold }]}>
+                    {tech
+                      ? (isRTL ? `كيف كانت خدمة ${tech.name}؟` : `How was ${tech.name}'s service?`)
+                      : (isRTL ? 'كيف كانت الخدمة؟' : 'How was the service?')}
+                  </Text>
+                  <View style={styles.starsRow}>
+                    {[1,2,3,4,5].map((s) => (
+                      <TouchableOpacity
+                        key={s}
+                        onPress={() => { setRatingStars(s); Haptics.selectionAsync(); }}
+                        hitSlop={8}
+                      >
+                        <Ionicons
+                          name={s <= ratingStars ? 'star' : 'star-outline'}
+                          size={36}
+                          color="#F39C12"
+                        />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                  {ratingStars > 0 && (
+                    <TextInput
+                      style={[styles.ratingInput, { fontFamily: font.regular, textAlign: isRTL ? 'right' : 'left' }]}
+                      placeholder={isRTL ? 'أضف تعليقاً (اختياري)' : 'Add a comment (optional)'}
+                      placeholderTextColor="#9CA3AF"
+                      value={ratingComment}
+                      onChangeText={setRatingComment}
+                      multiline
+                      maxLength={200}
+                    />
+                  )}
+                  <TouchableOpacity
+                    style={[styles.ratingSubmitBtn, { opacity: ratingStars === 0 || ratingBusy ? 0.45 : 1 }]}
+                    onPress={submitRating}
+                    disabled={ratingStars === 0 || ratingBusy}
+                  >
+                    <Text style={[styles.ratingSubmitText, { fontFamily: font.semibold }]}>
+                      {ratingBusy
+                        ? (isRTL ? 'جارٍ الإرسال…' : 'Submitting…')
+                        : (isRTL ? 'إرسال التقييم' : 'Submit Rating')}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
         )}
 
@@ -651,4 +737,26 @@ const styles = StyleSheet.create({
   },
   completedPriceLabel: { fontSize: 13, color: '#6B7280' },
   completedPriceValue: { fontSize: 22, color: '#15803d' },
+
+  // ── Rating ────────────────────────────────────────────────────────────────
+  ratingCard: {
+    width: '100%', marginTop: 20,
+    backgroundColor: '#F9F7FF', borderRadius: 16,
+    padding: 18, alignItems: 'center',
+    borderWidth: 1, borderColor: '#E8E4F5',
+  },
+  ratingTitle:      { fontSize: 15, color: '#1A1A1A', marginBottom: 14, textAlign: 'center' },
+  starsRow:         { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  ratingInput: {
+    width: '100%', minHeight: 72, borderWidth: 1, borderColor: '#D1D5DB',
+    borderRadius: 12, padding: 12, fontSize: 14, color: '#1A1A1A',
+    backgroundColor: '#FFFFFF', marginBottom: 12,
+  },
+  ratingSubmitBtn: {
+    width: '100%', height: 46, borderRadius: 12,
+    backgroundColor: '#2D1B69', alignItems: 'center', justifyContent: 'center',
+  },
+  ratingSubmitText: { color: '#FFFFFF', fontSize: 15 },
+  ratingThanks:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 4 },
+  ratingThanksText: { fontSize: 15, color: '#1A1A1A' },
 });
