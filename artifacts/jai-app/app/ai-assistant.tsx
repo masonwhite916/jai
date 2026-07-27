@@ -98,11 +98,14 @@ export default function AiAssistantScreen() {
   const router = useRouter();
   const { isRTL, font, t } = useLanguage();
 
-  const [messages,  setMessages]  = useState<Msg[]>([]);
-  const [input,     setInput]     = useState('');
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
-  const [showChips, setShowChips] = useState(true);
+  const [messages,         setMessages]         = useState<Msg[]>([]);
+  const [input,            setInput]            = useState('');
+  const [loading,          setLoading]          = useState(false);
+  const [error,            setError]            = useState<string | null>(null);
+  const [showChips,        setShowChips]        = useState(true);
+  const [showStorageWarn,  setShowStorageWarn]  = useState(false);
+  /** Ensures the storage-size banner fires at most once per session. */
+  const storageWarnShown = useRef(false);
   const listRef = useRef<FlatList>(null);
 
   // ── Greeting helper ────────────────────────────────────────────────────────
@@ -126,7 +129,11 @@ export default function AiAssistantScreen() {
       );
       const serialised = JSON.stringify(toStore);
       // Non-fatal size guard: warn if the payload is unusually large.
-      checkStorageSize(serialised);
+      // Show a one-time in-app notice if the soft limit is crossed.
+      if (checkStorageSize(serialised) && !storageWarnShown.current) {
+        storageWarnShown.current = true;
+        setShowStorageWarn(true);
+      }
       await AsyncStorage.setItem(HISTORY_KEY, serialised);
     } catch {
       // Storage errors are non-fatal
@@ -271,6 +278,24 @@ export default function AiAssistantScreen() {
           <Ionicons name="trash-outline" size={18} color="rgba(255,255,255,0.75)" />
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* ── Storage size notice (once per session, dismissible) ── */}
+      {showStorageWarn && (
+        <View style={styles.storageWarnBanner}>
+          <Text style={[styles.storageWarnText, { fontFamily: font.regular }]}>
+            {isRTL
+              ? 'سجل المحادثة كبير — يمكنك مسحه لتوفير المساحة'
+              : 'Your chat history is getting large — consider clearing it to save space'}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setShowStorageWarn(false)}
+            accessibilityLabel={isRTL ? 'إغلاق' : 'Dismiss'}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={16} color="#6B4FA0" />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* ── Messages + input ── */}
       <KeyboardAvoidingView
@@ -437,4 +462,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   sendBtnDisabled: { backgroundColor: '#C4B5E8' },
+
+  storageWarnBanner: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#EDE9FA',
+    borderBottomWidth: 1, borderBottomColor: '#C4B5E8',
+    paddingHorizontal: 16, paddingVertical: 10, gap: 10,
+  },
+  storageWarnText: {
+    flex: 1, fontSize: 13, color: '#3D2080', lineHeight: 18,
+  },
 });

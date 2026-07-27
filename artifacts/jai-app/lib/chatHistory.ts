@@ -38,8 +38,9 @@ export function stampMessages(msgs: StoredMsg[], now: number = Date.now()): Stor
 
 /**
  * Warn (non-fatal) if a serialised payload is larger than MAX_SIZE_BYTES.
+ * @returns true if the payload exceeds the soft limit, false otherwise.
  */
-export function checkStorageSize(serialised: string): void {
+export function checkStorageSize(serialised: string): boolean {
   // Use byte length where possible; fall back to char count.
   const bytes =
     typeof TextEncoder !== 'undefined'
@@ -50,5 +51,7 @@ export function checkStorageSize(serialised: string): void {
       `[AI chat] Stored history is ${bytes} bytes — exceeds the ${MAX_SIZE_BYTES}-byte soft limit. ` +
         'Consider clearing the chat to free space on this device.',
     );
+    return true;
   }
+  return false;
 }
