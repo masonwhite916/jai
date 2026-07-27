@@ -1,16 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Platform,
-  Share, Linking, ActivityIndicator,
+  Share, Linking, ActivityIndicator, Dimensions, ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue, useAnimatedStyle,
-  withRepeat, withTiming, withSequence, Easing,
+  withRepeat, withTiming, withSequence, Easing, withSpring, runOnJS,
 } from 'react-native-reanimated';
+
+const { height: SCREEN_H } = Dimensions.get('window');
 import { useLanguage } from '@/context/LanguageContext';
 import { useApp } from '@/context/AppContext';
 import { jaiSocket } from '@/lib/socket';
@@ -213,6 +216,33 @@ export default function TrackingScreen() {
   const isCompleted = jobStatus === 'completed';
   const isCancelled = jobStatus === 'cancelled';
 
+  // ── Draggable bottom sheet ───────────────────────────────────────────────────
+  // Sheet occupies top: 0..SHEET_H. translateY slides it down so only 240px peeks.
+  const SHEET_H       = SCREEN_H * 0.84;
+  const SNAP_PEEK     = SCREEN_H - 240;               // collapsed: 240 px visible
+  const SNAP_EXPANDED = SCREEN_H - SHEET_H + 8;       // expanded: almost full sheet
+
+  const sheetY  = useSharedValue(SNAP_PEEK);
+  const startY  = useSharedValue(SNAP_PEEK);
+
+  const panGesture = Gesture.Pan()
+    .onBegin(() => { startY.value = sheetY.value; })
+    .onUpdate((e) => {
+      sheetY.value = Math.max(SNAP_EXPANDED, Math.min(SNAP_PEEK, startY.value + e.translationY));
+    })
+    .onEnd((e) => {
+      const mid = (SNAP_PEEK + SNAP_EXPANDED) / 2;
+      if (e.velocityY < -600 || sheetY.value < mid) {
+        sheetY.value = withSpring(SNAP_EXPANDED, { damping: 22, stiffness: 200 });
+      } else {
+        sheetY.value = withSpring(SNAP_PEEK, { damping: 22, stiffness: 200 });
+      }
+    });
+
+  const sheetAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetY.value }],
+  }));
+
   const badgeDotColor = isWorking ? '#F39C12' : isArrived ? '#2ECC71' : isCompleted ? '#2ECC71' : '#2ECC71';
 
   const badgeLabel = isSearching ? null
@@ -271,8 +301,18 @@ export default function TrackingScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Bottom card */}
-      <View style={[styles.bottomCard, { paddingBottom: insets.bottom + 16 + (Platform.OS === 'web' ? 34 : 0) }]}>
+      {/* Draggable bottom sheet */}
+      <Animated.View style={[styles.bottomCard, { height: SHEET_H }, sheetAnimStyle]}>
+          {/* Drag handle — only this area drives the pan gesture */}
+          <GestureDetector gesture={panGesture}>
+            <View style={styles.dragHandleWrap} hitSlop={16}>
+              <View style={styles.dragHandle} />
+            </View>
+          </GestureDetector>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }}
+          >
 
         {/* ── Searching ──────────────────────────────────────────────────── */}
         {isSearching && (
@@ -471,7 +511,8 @@ export default function TrackingScreen() {
             </Text>
           </TouchableOpacity>
         )}
-      </View>
+          </ScrollView>
+        </Animated.View>
     </View>
   );
 }
@@ -505,11 +546,17 @@ const styles = StyleSheet.create({
   activeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#2ECC71' },
   topBadgeText: { fontSize: 13, fontWeight: '600', color: '#1A1A1A' },
   bottomCard: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
+    position: 'absolute', top: 0, left: 0, right: 0,
     backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 24,
     shadowColor: '#000', shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12, shadowRadius: 20, elevation: 12,
+    overflow: 'hidden',
+  },
+  dragHandleWrap: {
+    alignItems: 'center', paddingTop: 12, paddingBottom: 6,
+  },
+  dragHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: '#D1D5DB',
   },
   searchingContainer: { alignItems: 'center', paddingVertical: 16 },
   searchingTitle:    { fontSize: 18, color: '#1A1A1A', marginBottom: 8, textAlign: 'center' },
