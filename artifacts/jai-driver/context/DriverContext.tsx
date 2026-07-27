@@ -40,6 +40,10 @@ export interface Job {
   completedAt: string | null;
   /** True when this job is assigned to the signed-in technician. */
   mine: boolean;
+  /** Customer's problem description. */
+  notes?: string;
+  /** URLs of photos attached by the customer. */
+  photoUrls?: string[];
 }
 
 export interface Driver {
@@ -127,6 +131,8 @@ interface ServerJobRow {
   vehicle_year?: string | null;
   vehicle_plate?: string | null;
   vehicle_color?: string | null;
+  notes?: string | null;
+  photo_urls?: string | null;
 }
 
 function str(v: unknown): string {
@@ -163,6 +169,12 @@ function mapServerJob(j: ServerJobRow, myId: number | null): Job {
     createdAt: str(j.created_at || new Date().toISOString()),
     completedAt: j.completed_at ? String(j.completed_at) : null,
     mine: myId != null && j.technician_id === myId,
+    notes: (req.notes ?? j.notes) ? str(req.notes ?? j.notes) : undefined,
+    photoUrls: (() => {
+      const raw = (req.photo_urls ?? j.photo_urls) as string | undefined | null;
+      if (!raw) return undefined;
+      try { return JSON.parse(raw) as string[]; } catch { return undefined; }
+    })(),
   };
 }
 

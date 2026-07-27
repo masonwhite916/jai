@@ -51,6 +51,7 @@ export const serviceRequests = pgTable("service_requests", {
   location_lng:  real("location_lng"),
   address:       text("address"),
   notes:         text("notes"),
+  photo_urls:    text("photo_urls"),   // JSON array of upload paths
   created_at:    timestamp("created_at").notNull().defaultNow(),
   updated_at:    timestamp("updated_at").notNull().defaultNow(),
 });

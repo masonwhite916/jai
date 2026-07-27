@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { getApiBaseUrl } from '@/lib/api';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
@@ -157,6 +158,32 @@ export default function JobDetailScreen() {
           />
         )}
 
+        {/* ── Customer's problem description ───────────────────────────── */}
+        {(job.notes || (job.photoUrls && job.photoUrls.length > 0)) && (
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
+            <Text style={[styles.sectionTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>
+              {isRTL ? 'وصف المشكلة' : 'Problem Description'}
+            </Text>
+            {job.notes ? (
+              <Text style={[styles.notesText, { fontFamily: font.regular, color: colors.mutedForeground, textAlign: align }]}>
+                {job.notes}
+              </Text>
+            ) : null}
+            {job.photoUrls && job.photoUrls.length > 0 && (
+              <View style={[styles.photoRow, { flexDirection: rowDir }]}>
+                {job.photoUrls.map((url, i) => (
+                  <Image
+                    key={i}
+                    source={{ uri: url.startsWith('/') ? `${getApiBaseUrl()}${url}` : url }}
+                    style={styles.photo}
+                    resizeMode="cover"
+                  />
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={[styles.card, { backgroundColor: colors.card }]}>
           <Text style={[styles.sectionTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>{t('jobDetails')}</Text>
           <DetailRow label={t('address')} value={job.address || '—'} colors={colors} font={font} rowDir={rowDir} align={align} />
@@ -235,4 +262,7 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFFFFF', fontSize: 16 },
   cancelBtn: { marginTop: 12, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
   cancelText: { fontSize: 15 },
+  notesText: { fontSize: 14, lineHeight: 21, marginTop: 4 },
+  photoRow: { flexWrap: 'wrap', gap: 10, marginTop: 12 },
+  photo: { width: 90, height: 90, borderRadius: 12 },
 });

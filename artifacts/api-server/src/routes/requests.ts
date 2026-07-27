@@ -12,13 +12,13 @@ router.post("/requests", requireAuth, async (req, res) => {
   try {
     const {
       service_type, vehicle_make, vehicle_model, vehicle_year,
-      vehicle_plate, vehicle_color, location_lat, location_lng, address, notes,
+      vehicle_plate, vehicle_color, location_lat, location_lng, address, notes, photo_urls,
     } = req.body as {
       service_type: string;
       vehicle_make?: string; vehicle_model?: string; vehicle_year?: string;
       vehicle_plate?: string; vehicle_color?: string;
       location_lat?: number; location_lng?: number;
-      address?: string; notes?: string;
+      address?: string; notes?: string; photo_urls?: string;
     };
 
     if (!service_type) {
@@ -40,6 +40,7 @@ router.post("/requests", requireAuth, async (req, res) => {
         vehicle_make, vehicle_model, vehicle_year,
         vehicle_plate, vehicle_color,
         location_lat, location_lng, address, notes,
+        photo_urls,
       })
       .returning();
 
@@ -77,6 +78,8 @@ router.post("/requests", requireAuth, async (req, res) => {
         vehicle_year:  vehicle_year  ?? null,
         vehicle_plate: vehicle_plate ?? null,
         vehicle_color: vehicle_color ?? null,
+        notes:        notes         ?? null,
+        photo_urls:   photo_urls    ?? null,
         created_at:   job.created_at,
         request:      req_,
         customer: {

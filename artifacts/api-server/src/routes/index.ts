@@ -9,10 +9,12 @@ import adminRouter         from "./admin";
 import notificationsRouter from "./notifications";
 import vehiclesRouter      from "./vehicles";
 import chatRouter          from "./chat";
+import uploadsRouter       from "./uploads";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(uploadsRouter);
 router.use(whopRouter);
 router.use(authRouter);
 router.use(usersRouter);

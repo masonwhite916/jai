@@ -11,7 +11,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 import { useJaiLocation } from '@/context/LocationContext';
-import { apiFetch, getAuthToken } from '@/lib/api';
+import { apiFetch, getAuthToken, getApiBaseUrl } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
 type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
@@ -56,6 +56,7 @@ export default function ServiceRequest() {
   const [selectedVehicle, setSelectedVehicle] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [photoAssets, setPhotoAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
   const [paymentIdx, setPaymentIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
@@ -71,12 +72,14 @@ export default function ServiceRequest() {
     try {
       if (getAuthToken()) {
         // Build request body from collected form state
+        const uploadedUrls = await uploadPhotos();
         const body: Record<string, unknown> = {
           service_type: service ?? 'battery',
           notes:        notes.trim() || null,
           location_lat: gps.coords?.latitude  ?? null,
           location_lng: gps.coords?.longitude ?? null,
           address:      gps.fullAddress       ?? null,
+          photo_urls:   uploadedUrls.length ? JSON.stringify(uploadedUrls) : null,
         };
         // Attach vehicle snapshot if one was selected
         if (selectedVehicleData) {
@@ -129,11 +132,38 @@ export default function ServiceRequest() {
       mediaTypes: ['images'],
       allowsMultipleSelection: true,
       selectionLimit: 4,
-      quality: 0.7,
+      quality: 0.6,
+      base64: true,
     });
     if (!res.canceled) {
-      setPhotos(prev => [...prev, ...res.assets.map(a => a.uri)].slice(0, 4));
+      // Store assets (uri + base64) so we can upload them on submit
+      setPhotos(prev =>
+        [...prev, ...res.assets.map(a => a.uri)].slice(0, 4),
+      );
+      setPhotoAssets(prev =>
+        [...prev, ...res.assets].slice(0, 4),
+      );
     }
+  }
+
+  /** Upload all pending photo assets to the API; returns an array of server URLs. */
+  async function uploadPhotos(): Promise<string[]> {
+    const urls: string[] = [];
+    for (const asset of photoAssets) {
+      if (!asset.base64) continue;
+      try {
+        const mimeType = asset.mimeType ?? 'image/jpeg';
+        const result = await apiFetch<{ url: string }>('/api/uploads', {
+          method: 'POST',
+          body: JSON.stringify({ base64: asset.base64, mimeType }),
+        });
+        const base = getApiBaseUrl();
+        urls.push(result.url.startsWith('/') ? `${base}${result.url}` : result.url);
+      } catch {
+        // Non-fatal — skip failed upload
+      }
+    }
+    return urls;
   }
 
   function refreshLocation() {
@@ -232,7 +262,10 @@ export default function ServiceRequest() {
                     <Image source={{ uri }} style={styles.photoThumb} />
                     <TouchableOpacity
                       style={styles.photoRemove}
-                      onPress={() => setPhotos(p => p.filter(u => u !== uri))}
+                      onPress={() => {
+                        setPhotos(p => p.filter(u => u !== uri));
+                        setPhotoAssets(p => p.filter(a => a.uri !== uri));
+                      }}
                       hitSlop={6}
                     >
                       <Ionicons name="close" size={12} color="#FFFFFF" />
