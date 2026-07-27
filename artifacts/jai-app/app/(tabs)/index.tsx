@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
     elevation: 14,
   },
   logoRow: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  logo: { width: 110, height: 48, margin: 1 },
+  logo: { width: 110, height: 48, marginHorizontal: 4, paddingVertical: 4 },
   greeting: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 2 },
   userName: { fontSize: 22, color: '#FFFFFF', marginBottom: 10 },
   locationPill: {
