@@ -295,9 +295,21 @@ router.post("/payment/checkout/tamara", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/webhook
 // Moyasar server-to-server callback — marks subscription active on paid status.
-// Moyasar sends: { id, status, metadata, ... }
+// Moyasar sends the secret token in the Authorization header as a Bearer token.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/webhook", async (req, res) => {
+  // Verify the request is genuinely from Moyasar
+  const expectedSecret = process.env.MOYASAR_WEBHOOK_SECRET;
+  if (expectedSecret) {
+    const authHeader = (req.headers["authorization"] ?? "").toString();
+    const incoming   = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (incoming !== expectedSecret) {
+      console.warn("[payment/webhook] rejected — invalid secret token");
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+  }
+
   try {
     const { id, status, metadata } = req.body as {
       id: string;
