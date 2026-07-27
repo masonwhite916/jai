@@ -293,6 +293,148 @@ router.post("/payment/checkout/tamara", async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/payment/applepay-form
+// Returns an HTML page with Moyasar.js initialised for Apple Pay.
+// Open this URL in expo-web-browser on iOS — Safari handles the native
+// Apple Pay sheet and Moyasar.js sends the token to Moyasar's servers.
+//
+// Requires in Moyasar dashboard: Apple Pay enabled + Merchant ID registered.
+// Requires env var: APPLE_PAY_MERCHANT_ID  (from Apple Developer portal)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/payment/applepay-form", (req, res) => {
+  const { plan, name, email } = req.query as {
+    plan?: string; name?: string; email?: string;
+  };
+
+  const amount      = PLAN_AMOUNTS[plan ?? "basic"] ?? 19900;
+  const description = PLAN_NAMES[plan ?? "basic"]   ?? "JAI Subscription";
+  const pubKey      = process.env.MOYASAR_PUBLISHABLE_KEY ?? "";
+  const callbackUrl = process.env.MOYASAR_CALLBACK_URL    ?? "";
+  const baseUrl     = process.env.API_BASE_URL ?? "https://jaiksa.replit.app";
+  const safeName    = (name  ?? "").replace(/'/g, "\\'");
+  const safeEmail   = (email ?? "").replace(/'/g, "\\'");
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>JAI — Apple Pay</title>
+  <link rel="stylesheet" href="https://cdn.moyasar.com/mpf/1.14.0/moyasar.css">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#F5F3FF;
+         min-height:100vh;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;padding:32px 24px}
+    h1{font-size:20px;color:#2D1B69;margin-bottom:6px;text-align:center}
+    p{font-size:14px;color:#6B7280;text-align:center;margin-bottom:8px}
+    .amt{font-size:30px;font-weight:700;color:#5B2C91;
+         text-align:center;margin-bottom:28px}
+    #moyasar-form{width:100%;max-width:380px}
+  </style>
+</head>
+<body>
+  <h1>JAI Roadside Assistance</h1>
+  <p>${description}</p>
+  <div class="amt">${(amount / 100).toFixed(0)} ريال</div>
+  <div id="moyasar-form"></div>
+  <script src="https://cdn.moyasar.com/mpf/1.14.0/moyasar.js"></script>
+  <script>
+    Moyasar.init({
+      element: '#moyasar-form',
+      amount: ${amount},
+      currency: 'SAR',
+      description: '${description}',
+      publishable_api_key: '${pubKey}',
+      callback_url: '${callbackUrl}',
+      methods: ['applepay'],
+      apple_pay: {
+        country: 'SA',
+        label: 'JAI Roadside Assistance',
+        validate_merchant_url: '${baseUrl}/api/payment/applepay-validate',
+      },
+      metadata: { plan: '${plan ?? "basic"}', name: '${safeName}', email: '${safeEmail}' },
+    });
+  </script>
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/applepay-validate
+// Proxies Apple Pay merchant session validation to Apple's servers.
+// Called automatically by Moyasar.js inside the Safari payment sheet.
+//
+// To activate: add APPLE_PAY_MERCHANT_ID, APPLE_PAY_CERT_PEM, APPLE_PAY_KEY_PEM
+// as secrets (from Apple Developer → Certificates, Identifiers & Profiles).
+// See: https://developer.apple.com/documentation/apple_pay_on_the_web/providing_merchant_validation
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/applepay-validate", async (req, res) => {
+  const merchantId = process.env.APPLE_PAY_MERCHANT_ID;
+  if (!merchantId) {
+    res.status(503).json({
+      error:
+        "Apple Pay merchant not configured. Add APPLE_PAY_MERCHANT_ID, " +
+        "APPLE_PAY_CERT_PEM, and APPLE_PAY_KEY_PEM as secrets.",
+    });
+    return;
+  }
+
+  try {
+    const { validationURL } = req.body as { validationURL: string };
+    if (!validationURL?.startsWith("https://apple-pay-gateway")) {
+      res.status(400).json({ error: "Invalid Apple Pay validation URL" });
+      return;
+    }
+
+    // Mutual TLS with Apple using your merchant certificate + private key
+    // (stored as PEM strings in APPLE_PAY_CERT_PEM / APPLE_PAY_KEY_PEM secrets)
+    const https = await import("https");
+    const cert  = process.env.APPLE_PAY_CERT_PEM ?? "";
+    const key   = process.env.APPLE_PAY_KEY_PEM  ?? "";
+
+    const payload = JSON.stringify({
+      merchantIdentifier: merchantId,
+      displayName:        "JAI Roadside Assistance",
+      initiative:         "web",
+      initiativeContext:  req.headers.origin ?? "jaiksa.replit.app",
+    });
+
+    const response = await new Promise<string>((resolve, reject) => {
+      const url = new URL(validationURL);
+      const reqOpts = {
+        hostname: url.hostname,
+        path:     url.pathname + url.search,
+        method:   "POST",
+        cert,
+        key,
+        headers: {
+          "Content-Type":   "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+      };
+      const r = https.request(reqOpts, (appleRes) => {
+        let data = "";
+        appleRes.on("data", (chunk) => { data += chunk; });
+        appleRes.on("end", () => resolve(data));
+      });
+      r.on("error", reject);
+      r.write(payload);
+      r.end();
+    });
+
+    res.setHeader("Content-Type", "application/json");
+    res.send(response);
+  } catch (err) {
+    console.error("[applepay-validate] error:", err);
+    res.status(500).json({ error: "Merchant validation failed" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/webhook
 // Moyasar server-to-server callback — marks subscription active on paid status.
 // Moyasar sends the secret token in the Authorization header as a Bearer token.

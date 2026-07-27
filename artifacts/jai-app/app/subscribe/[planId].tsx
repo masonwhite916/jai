@@ -12,7 +12,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import * as Haptics from 'expo-haptics';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, getApiBaseUrl } from '@/lib/api';
 
 // ─── Plan data ────────────────────────────────────────────────────────────────
 const PLAN_DATA = {
@@ -75,7 +75,7 @@ const PLAN_DATA = {
 };
 
 type PlanId = keyof typeof PLAN_DATA;
-type PayMethod = 'card' | 'tabby' | 'tamara';
+type PayMethod = 'card' | 'tabby' | 'tamara' | 'applepay';
 
 // ─── Card number formatter ────────────────────────────────────────────────────
 function formatCardNumber(raw: string) {
@@ -141,8 +141,9 @@ export default function SubscribeScreen() {
         e.cvc = isRTL ? 'رمز CVV غير صحيح' : 'Invalid CVV';
     }
 
-    if (payMethod !== 'card' && !buyerPhone.trim())
-      e.buyerPhone = req;
+    if (payMethod === 'tabby' || payMethod === 'tamara') {
+      if (!buyerPhone.trim()) e.buyerPhone = req;
+    }
 
     setFieldErrors(e);
     return Object.keys(e).length === 0;
@@ -262,6 +263,32 @@ export default function SubscribeScreen() {
     }
   }
 
+  // ─── Apple Pay via Moyasar.js in Safari WebBrowser ───────────────────────────
+  async function handleApplePayCheckout() {
+    setErrorMsg(null);
+    setLoading(true);
+    try {
+      const base    = getApiBaseUrl();
+      const formUrl = `${base}/api/payment/applepay-form`
+        + `?plan=${encodeURIComponent(planId ?? 'basic')}`
+        + `&name=${encodeURIComponent(buyerName.trim())}`
+        + `&email=${encodeURIComponent(buyerEmail.trim())}`;
+
+      setLoading(false);
+      await WebBrowser.openBrowserAsync(formUrl, {
+        dismissButtonStyle: 'done',
+        presentationStyle:  WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+      });
+      // Moyasar.js handles payment server-side; show pending until webhook fires
+      setPending(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : (isRTL ? 'حدث خطأ' : 'Something went wrong'));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    }
+  }
+
   // ─── Main submit handler ──────────────────────────────────────────────────────
   async function handleSubmit() {
     if (!validate()) {
@@ -270,9 +297,10 @@ export default function SubscribeScreen() {
     }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    if (payMethod === 'card')   return handleCardCheckout();
-    if (payMethod === 'tabby')  return handleBnplCheckout('tabby');
-    if (payMethod === 'tamara') return handleBnplCheckout('tamara');
+    if (payMethod === 'card')     return handleCardCheckout();
+    if (payMethod === 'tabby')    return handleBnplCheckout('tabby');
+    if (payMethod === 'tamara')   return handleBnplCheckout('tamara');
+    if (payMethod === 'applepay') return handleApplePayCheckout();
   }
 
   // ─── Success screen ──────────────────────────────────────────────────────────
@@ -354,16 +382,19 @@ export default function SubscribeScreen() {
         </Text>
         <View style={[styles.methodTabs, { flexDirection: rowDir }]}>
           {([
-            { id: 'card',   labelEn: 'Card',  labelAr: 'بطاقة', icon: 'card-outline' },
-            { id: 'tabby',  labelEn: 'Tabby', labelAr: 'تابي',  icon: 'calendar-outline' },
-            { id: 'tamara', labelEn: 'Tamara',labelAr: 'تمارا', icon: 'layers-outline' },
+            { id: 'card',   labelEn: 'Card',      labelAr: 'بطاقة',   icon: 'card-outline'     },
+            { id: 'tabby',  labelEn: 'Tabby',     labelAr: 'تابي',    icon: 'calendar-outline' },
+            { id: 'tamara', labelEn: 'Tamara',    labelAr: 'تمارا',   icon: 'layers-outline'   },
+            ...(Platform.OS === 'ios'
+              ? [{ id: 'applepay', labelEn: 'Apple Pay', labelAr: 'Apple Pay', icon: 'logo-apple' }]
+              : []),
           ] as const).map((m) => (
             <TouchableOpacity
               key={m.id}
               style={[styles.methodTab, payMethod === m.id && styles.methodTabActive]}
-              onPress={() => { setPayMethod(m.id); setErrorMsg(null); }}
+              onPress={() => { setPayMethod(m.id as PayMethod); setErrorMsg(null); }}
             >
-              <Ionicons name={m.icon} size={18} color={payMethod === m.id ? '#5B2C91' : '#9CA3AF'} />
+              <Ionicons name={m.icon as any} size={18} color={payMethod === m.id ? '#5B2C91' : '#9CA3AF'} />
               <Text style={[
                 styles.methodTabText,
                 { fontFamily: font.semibold, color: payMethod === m.id ? '#5B2C91' : '#6B7280' },
@@ -400,7 +431,7 @@ export default function SubscribeScreen() {
             placeholderTextColor="#C0C0D4"
           />
         </Field>
-        {payMethod !== 'card' && (
+        {(payMethod === 'tabby' || payMethod === 'tamara') && (
           <Field label={isRTL ? 'رقم الجوال' : 'Phone number'} error={fieldErrors.buyerPhone} align={align} font={font.medium}>
             <TextInput
               style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
@@ -497,7 +528,17 @@ export default function SubscribeScreen() {
             {isRTL ? 'ملخص الطلب' : 'Order summary'}
           </Text>
           <SummaryRow label={isRTL ? plan.nameAr : plan.nameEn} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold />
-          <SummaryRow label={isRTL ? 'المدة' : 'Duration'} value={isRTL ? '12 شهراً' : '12 months'} font={font} rowDir={rowDir} />
+          <SummaryRow
+            label={isRTL ? 'طريقة السداد' : 'Payment'}
+            value={
+              payMethod === 'tamara'
+                ? (isRTL ? '4 أقساط بدون فوائد' : '4 interest-free instalments')
+                : payMethod === 'tabby'
+                  ? (isRTL ? 'أقساط بدون فوائد' : 'Interest-free instalments')
+                  : (isRTL ? '12 شهراً' : '12 months')
+            }
+            font={font} rowDir={rowDir}
+          />
           <View style={styles.divider} />
           <SummaryRow label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT incl.)'} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold accent />
         </View>
@@ -545,7 +586,9 @@ export default function SubscribeScreen() {
                     ? (isRTL ? `ادفع ${plan.price} ريال` : `Pay SAR ${plan.price}`)
                     : payMethod === 'tabby'
                       ? (isRTL ? 'الدفع عبر تابي' : 'Continue with Tabby')
-                      : (isRTL ? 'الدفع عبر تمارا' : 'Continue with Tamara')}
+                      : payMethod === 'tamara'
+                        ? (isRTL ? 'الدفع عبر تمارا' : 'Continue with Tamara')
+                        : (isRTL ? 'الدفع عبر Apple Pay' : 'Pay with Apple Pay')}
                 </Text>
               </>
             )}
