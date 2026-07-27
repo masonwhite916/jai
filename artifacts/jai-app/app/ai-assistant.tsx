@@ -104,6 +104,7 @@ export default function AiAssistantScreen() {
   const [error,            setError]            = useState<string | null>(null);
   const [showChips,        setShowChips]        = useState(true);
   const [showStorageWarn,  setShowStorageWarn]  = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
   /** Ensures the storage-size banner fires at most once per session. */
   const storageWarnShown = useRef(false);
   /**
@@ -182,6 +183,7 @@ export default function AiAssistantScreen() {
 
   // ── Clear chat ────────────────────────────────────────────────────────────
   const doClear = useCallback(async () => {
+    setShowClearConfirm(false);
     chatGeneration.current += 1;
     await AsyncStorage.removeItem(HISTORY_KEY);
     setMessages([makeGreeting(isRTL)]);
@@ -192,21 +194,17 @@ export default function AiAssistantScreen() {
   }, [isRTL, makeGreeting]);
 
   const clearChat = useCallback(() => {
+    if (Platform.OS === 'web') {
+      // Alert.alert and window.confirm are both blocked in iframes — use inline banner.
+      setShowClearConfirm(true);
+      return;
+    }
     const title   = isRTL ? 'مسح المحادثة' : 'Clear chat';
     const message = isRTL
       ? 'هل تريد مسح سجل المحادثة والبدء من جديد؟'
       : 'Start a fresh conversation? Your current history will be removed.';
     const cancel  = isRTL ? 'إلغاء' : 'Cancel';
     const confirm = isRTL ? 'مسح' : 'Clear';
-
-    if (Platform.OS === 'web') {
-      // Alert.alert is a no-op on web — use the browser's built-in confirm dialog.
-      if (window.confirm(`${title}\n${message}`)) {
-        doClear();
-      }
-      return;
-    }
-
     Alert.alert(title, message, [
       { text: cancel,  style: 'cancel' },
       { text: confirm, style: 'destructive', onPress: doClear },
@@ -304,6 +302,27 @@ export default function AiAssistantScreen() {
           <Ionicons name="trash-outline" size={18} color="rgba(255,255,255,0.75)" />
         </TouchableOpacity>
       </LinearGradient>
+
+      {/* ── Inline clear-chat confirmation (web-safe, no Alert/window.confirm) ── */}
+      {showClearConfirm && (
+        <View style={styles.clearConfirmBanner}>
+          <Text style={[styles.clearConfirmText, { fontFamily: font.regular }]}>
+            {isRTL ? 'مسح سجل المحادثة؟' : 'Clear chat history?'}
+          </Text>
+          <View style={styles.clearConfirmBtns}>
+            <TouchableOpacity onPress={() => setShowClearConfirm(false)} style={styles.clearConfirmCancel}>
+              <Text style={[styles.clearConfirmCancelText, { fontFamily: font.regular }]}>
+                {isRTL ? 'إلغاء' : 'Cancel'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={doClear} style={styles.clearConfirmOk}>
+              <Text style={[styles.clearConfirmOkText, { fontFamily: font.bold }]}>
+                {isRTL ? 'مسح' : 'Clear'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {/* ── Storage size notice (once per session, dismissible) ── */}
       {showStorageWarn && (
@@ -488,6 +507,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center', alignItems: 'center',
   },
   sendBtnDisabled: { backgroundColor: '#C4B5E8' },
+
+  clearConfirmBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#2D1B69',
+    paddingHorizontal: 16, paddingVertical: 12, gap: 12,
+  },
+  clearConfirmText: { flex: 1, fontSize: 13, color: '#fff' },
+  clearConfirmBtns: { flexDirection: 'row', gap: 8 },
+  clearConfirmCancel: {
+    paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  clearConfirmCancelText: { fontSize: 13, color: '#fff' },
+  clearConfirmOk: {
+    paddingHorizontal: 14, paddingVertical: 6,
+    borderRadius: 8, backgroundColor: '#C21875',
+  },
+  clearConfirmOkText: { fontSize: 13, color: '#fff' },
 
   storageWarnBanner: {
     flexDirection: 'row', alignItems: 'center',
