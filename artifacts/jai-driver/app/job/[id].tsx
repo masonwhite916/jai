@@ -150,38 +150,43 @@ export default function JobDetailScreen() {
           </Text>
         </View>
 
+        {/* ── Customer's problem description ───────────────────────────── */}
+        <View style={[styles.card, styles.problemCard, { backgroundColor: colors.card }]}>
+          <View style={[styles.problemHeader, { flexDirection: rowDir }]}>
+            <Ionicons name="document-text-outline" size={16} color="#C21875" />
+            <Text style={[styles.sectionTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align, marginBottom: 0 }]}>
+              {isRTL ? 'وصف المشكلة' : 'Problem Description'}
+            </Text>
+          </View>
+          {job.notes ? (
+            <Text style={[styles.notesText, { fontFamily: font.regular, color: colors.text, textAlign: align }]}>
+              {job.notes}
+            </Text>
+          ) : (
+            <Text style={[styles.notesEmpty, { fontFamily: font.regular, textAlign: align }]}>
+              {isRTL ? 'لم يُضف العميل وصفاً للمشكلة' : 'No description added by customer'}
+            </Text>
+          )}
+          {job.photoUrls && job.photoUrls.length > 0 && (
+            <View style={[styles.photoRow, { flexDirection: rowDir }]}>
+              {job.photoUrls.map((url, i) => (
+                <Image
+                  key={i}
+                  source={{ uri: url.startsWith('/') ? `${getApiBaseUrl()}${url}` : url }}
+                  style={styles.photo}
+                  resizeMode="cover"
+                />
+              ))}
+            </View>
+          )}
+        </View>
+
         {job.coords && (
           <MapCard
             latitude={job.coords.latitude}
             longitude={job.coords.longitude}
             address={job.address}
           />
-        )}
-
-        {/* ── Customer's problem description ───────────────────────────── */}
-        {(job.notes || (job.photoUrls && job.photoUrls.length > 0)) && (
-          <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <Text style={[styles.sectionTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>
-              {isRTL ? 'وصف المشكلة' : 'Problem Description'}
-            </Text>
-            {job.notes ? (
-              <Text style={[styles.notesText, { fontFamily: font.regular, color: colors.mutedForeground, textAlign: align }]}>
-                {job.notes}
-              </Text>
-            ) : null}
-            {job.photoUrls && job.photoUrls.length > 0 && (
-              <View style={[styles.photoRow, { flexDirection: rowDir }]}>
-                {job.photoUrls.map((url, i) => (
-                  <Image
-                    key={i}
-                    source={{ uri: url.startsWith('/') ? `${getApiBaseUrl()}${url}` : url }}
-                    style={styles.photo}
-                    resizeMode="cover"
-                  />
-                ))}
-              </View>
-            )}
-          </View>
         )}
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
@@ -262,7 +267,10 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFFFFF', fontSize: 16 },
   cancelBtn: { marginTop: 12, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
   cancelText: { fontSize: 15 },
-  notesText: { fontSize: 14, lineHeight: 21, marginTop: 4 },
+  problemCard: { borderLeftWidth: 3, borderLeftColor: '#C21875' },
+  problemHeader: { alignItems: 'center', gap: 8, marginBottom: 10 },
+  notesText: { fontSize: 14, lineHeight: 21 },
+  notesEmpty: { fontSize: 13, color: '#9CA3AF', fontStyle: 'italic' },
   photoRow: { flexWrap: 'wrap', gap: 10, marginTop: 12 },
   photo: { width: 90, height: 90, borderRadius: 12 },
 });
