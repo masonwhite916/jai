@@ -264,7 +264,6 @@ export default function MembershipScreen() {
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={styles.subscribeBtnGrad}
                   >
-                    <Ionicons name="logo-whatsapp" size={18} color="#FFFFFF" />
                     <Text style={[styles.subscribeBtnText, { fontFamily: font.bold, color: '#FFFFFF' }]}>
                       {isRTL ? 'اشترك الآن' : 'Subscribe Now'}
                     </Text>
