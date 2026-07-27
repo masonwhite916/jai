@@ -55,7 +55,31 @@ async function reverseGeocode(coords: Coords, lang: string): Promise<GeoResult |
   } catch {
     // reverseGeocodeAsync is unavailable on web — fall through to HTTP geocoder
   }
-  // Keyless client-side geocoder (works on web)
+  // Nominatim (OpenStreetMap) — free, returns neighbourhood/suburb detail
+  try {
+    const resp = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?lat=${coords.latitude}&lon=${coords.longitude}&format=json&accept-language=${lang}`,
+      { headers: { 'Accept-Language': lang } },
+    );
+    if (resp.ok) {
+      const d = await resp.json();
+      const a = d.address ?? {};
+      // neighbourhood → suburb → quarter → road as the "district" detail
+      const district = a.neighbourhood || a.suburb || a.quarter || a.county || null;
+      const street   = a.road || a.pedestrian || a.footway || null;
+      const city     = a.city || a.town || a.village || a.county || null;
+      const country  = a.country || null;
+      return {
+        short: district || street || city || null,
+        fullParts: [street, district, city],
+        cityParts: [city, country],
+      };
+    }
+  } catch {
+    // offline / blocked — fall through
+  }
+
+  // BigDataCloud — last resort
   try {
     const resp = await fetch(
       `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${coords.latitude}&longitude=${coords.longitude}&localityLanguage=${lang}`,
