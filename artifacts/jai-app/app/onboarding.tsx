@@ -164,7 +164,7 @@ const styles = StyleSheet.create({
   flatList: { flex: 1 },
   slide: { width, height: height - CARD_H, position: 'relative', overflow: 'hidden' },
   logoWrap: { alignItems: 'center', zIndex: 2, paddingBottom: 8 },
-  logo: { width: 140, height: 58 },
+  logo: { width: 220, height: 96 },
   illustrationWrap: { flex: 1, position: 'relative', marginTop: 8 },
   illustration: { width: '100%', height: '100%' },
   illustrationFade: {
