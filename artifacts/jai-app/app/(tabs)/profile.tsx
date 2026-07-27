@@ -163,6 +163,7 @@ export default function ProfileScreen() {
               rightLabel={lang === 'en' ? 'English' : 'العربية'}
               onPress={toggleLanguage}
             />
+            <MenuItem icon="shield-checkmark-outline" label={t('privacyPolicy')} onPress={() => Linking.openURL('https://jaiksa.replit.app/jai-web/privacy')} />
             <MenuItem icon="swap-horizontal-outline" label={t('switchRole')} onPress={handleSwitchRole} />
             <MenuItem icon="log-out-outline" label={t('signOut')} onPress={handleLogout} accent />
           </View>

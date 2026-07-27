@@ -101,6 +101,11 @@ export default function Footer() {
                   {t('footer_c4')}
                 </a>
               </li>
+              <li>
+                <a href="/jai-web/privacy" className="hover:text-[#C21875] active:text-[#C21875] transition-colors cursor-pointer">
+                  {t('footer_c5')}
+                </a>
+              </li>
             </ul>
           </div>
         </div>

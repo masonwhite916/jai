@@ -47,6 +47,12 @@
       "namedRegex": "^/payment\\-success(?:/)?$"
     },
     {
+      "page": "/privacy",
+      "regex": "^/privacy(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/privacy(?:/)?$"
+    },
+    {
       "page": "/subscribe",
       "regex": "^/subscribe(?:/)?$",
       "routeKeys": {},
