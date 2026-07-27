@@ -32,14 +32,15 @@ const TAB_META = {
   profile:       { iconDefault: 'person-outline',        iconActive: 'person',        labelEn: 'Profile',  labelAr: 'حسابي'    },
 } as const;
 
-const NOTIF_IDS = ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'];
+// Only the IDs that start as unread in notifications.tsx (n3-n6 start read:true)
+const NOTIF_IDS_UNREAD = ['n1', 'n2'];
 
 // ─── Floating Pill Tab Bar (no absoluteFillObject inside tabs) ───────────────
 function FloatingTabBar({ state, navigation }: { state: any; navigation: any }) {
   const insets = useSafeAreaInsets();
   const { lang } = useLanguage();
   const { notifReadIds } = useApp();
-  const unreadNotifs = NOTIF_IDS.filter(id => !notifReadIds.includes(id)).length;
+  const unreadNotifs = NOTIF_IDS_UNREAD.filter(id => !notifReadIds.includes(id)).length;
 
   return (
     <View
