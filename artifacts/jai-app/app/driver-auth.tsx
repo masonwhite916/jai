@@ -249,8 +249,8 @@ export default function DriverAuth() {
             </Text>
             <Text style={[styles.hint, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>
               {isAR
-                ? `أُرسل رمز مكوّن من ٦ أرقام إلى +966 ${phone} عبر واتساب`
-                : `A 6-digit code was sent to +966 ${phone} via WhatsApp`}
+                ? `أُرسل رمز مكوّن من ٦ أرقام إلى +966 ${phone} عبر SMS`
+                : `A 6-digit code was sent to +966 ${phone} via SMS`}
             </Text>
             <TextInput
               style={[styles.input, { fontFamily: font.medium, textAlign: 'center', letterSpacing: 6, fontSize: 22 }]}

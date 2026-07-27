@@ -187,11 +187,11 @@ export default function Auth() {
 
             <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterOTP')}</Text>
             <View style={[styles.whatsappHint, { flexDirection: rowDir }]}>
-              <Ionicons name="logo-whatsapp" size={15} color="#25D366" />
+              <Ionicons name="chatbubble-ellipses-outline" size={15} color="#2D1B69" />
               <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align, marginBottom: 0 }]}>
                 {isRTL
-                  ? `تم إرسال رمز التحقق عبر واتساب إلى +966 ${phone}`
-                  : `Code sent via WhatsApp to +966 ${phone}`}
+                  ? `تم إرسال رمز التحقق عبر SMS إلى +966 ${phone}`
+                  : `Verification code sent via SMS to +966 ${phone}`}
               </Text>
             </View>
 

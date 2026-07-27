@@ -35,7 +35,18 @@ router.post("/auth/send-otp", otpLimiter, async (req, res) => {
     res.json({ ok: true, phone: normalised });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: message });
+    const isServiceError =
+      message.includes("TAQNYAT_BEARER_TOKEN") ||
+      message.includes("balance too low") ||
+      message.includes("sender name not activated");
+    const isBadNumber = message.includes("not recognised");
+    if (isServiceError) {
+      res.status(503).json({ error: "SMS service is temporarily unavailable. Please try again later." });
+    } else if (isBadNumber) {
+      res.status(400).json({ error: "This phone number is not recognised. Please check and try again." });
+    } else {
+      res.status(500).json({ error: "Could not send verification code. Please try again." });
+    }
   }
 });
 
