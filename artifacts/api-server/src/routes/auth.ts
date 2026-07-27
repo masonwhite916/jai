@@ -86,24 +86,27 @@ router.post("/auth/verify-otp", async (req, res) => {
       .where(eq(users.phone, canonicalPhone))
       .limit(1);
 
+    const isValidCode =
+      TECH_INVITE_CODE !== undefined &&
+      TECH_INVITE_CODE.length > 0 &&
+      typeof invite_code === "string" &&
+      invite_code.trim() === TECH_INVITE_CODE;
+
     let user;
     if (existing.length) {
       const updates: Partial<typeof users.$inferInsert> = { updated_at: new Date() };
       if (name) updates.name = name;
+      // Upgrade customer → technician if a valid invite code is now supplied
+      if (isValidCode && existing[0].role === "customer") {
+        updates.role = "technician";
+      }
       [user] = await db
         .update(users)
         .set(updates)
         .where(eq(users.phone, canonicalPhone))
         .returning();
     } else {
-      const isValidCode =
-        TECH_INVITE_CODE !== undefined &&
-        TECH_INVITE_CODE.length > 0 &&
-        typeof invite_code === "string" &&
-        invite_code.trim() === TECH_INVITE_CODE;
-
       const role: "customer" | "technician" = isValidCode ? "technician" : "customer";
-
       [user] = await db
         .insert(users)
         .values({ phone: canonicalPhone, name: name ?? null, role })
