@@ -300,7 +300,7 @@ export default function GameScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   return (
-    <View style={[styles.root, { paddingTop: topPad }]}>
+    <View style={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 8 }]}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <LinearGradient colors={['#2D1B69', '#1a0f3f']} style={styles.header}>
