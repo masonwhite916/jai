@@ -29,7 +29,7 @@ const statusLabels: Record<JobStatus, string> = {
   cancelled: 'driverStatusCancelled',
 };
 
-function JobCard({ job, onAccept }: { job: Job; onAccept?: (id: string) => void }) {
+function JobCard({ job, onAccept, onDecline }: { job: Job; onAccept?: (id: string) => void; onDecline?: (id: string) => void }) {
   const { t, isRTL, font } = useLanguage();
   const colors = useDriverColors();
   const rowDir = isRTL ? 'row-reverse' : 'row';
@@ -85,6 +85,7 @@ function JobCard({ job, onAccept }: { job: Job; onAccept?: (id: string) => void 
           </TouchableOpacity>
           <TouchableOpacity
             activeOpacity={0.7}
+            onPress={() => onDecline?.(job.id)}
             style={[styles.declineBtn, { borderColor: colors.border }]}
           >
             <Text style={[styles.declineText, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('driverDecline')}</Text>
@@ -118,7 +119,7 @@ export default function DriverRequestsScreen() {
   const router = useRouter();
   const { t, isRTL, font } = useLanguage();
   const colors = useDriverColors();
-  const { driver, jobs, acceptJob, refreshJobs, activeJob } = useDriver();
+  const { driver, jobs, acceptJob, cancelJob, refreshJobs, activeJob } = useDriver();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
   const [refreshing, setRefreshing] = React.useState(false);
@@ -133,6 +134,11 @@ export default function DriverRequestsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     await acceptJob(id);
     router.push(`/job/${id}` as any);
+  };
+
+  const handleDecline = async (id: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    await cancelJob(id);
   };
 
   const pendingJobs = jobs.filter((j) => j.status === 'pending');
@@ -189,7 +195,7 @@ export default function DriverRequestsScreen() {
             <Text style={[styles.emptyText, { fontFamily: font.medium, color: colors.mutedForeground }]}>{t('driverNoRequests')}</Text>
           </View>
         }
-        renderItem={({ item }) => <JobCard job={item} onAccept={handleAccept} />}
+        renderItem={({ item }) => <JobCard job={item} onAccept={handleAccept} onDecline={handleDecline} />}
         showsVerticalScrollIndicator={false}
       />
     </View>
