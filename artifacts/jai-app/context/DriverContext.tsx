@@ -239,7 +239,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
   async function loadJobs() {
     const token = getAuthToken();
     if (!token) {
-      setJobs(FALLBACK_JOBS);
+      setJobs([]);
       return;
     }
     try {
