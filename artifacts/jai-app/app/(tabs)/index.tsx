@@ -125,18 +125,16 @@ export default function HomeScreen() {
             paddingTop: insets.top + 14 + (Platform.OS === 'web' ? 67 : 0),
           }]}
         >
-          {/* Logo row */}
-          <View style={[styles.logoRow, { flexDirection: rowDir }]}>
+          {/* Logo + Greeting stacked */}
+          <View style={styles.logoGreetingBlock}>
             <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
+            <Text style={[styles.greeting, { fontFamily: font.regular }]}>
+              {t('goodMorning')}
+            </Text>
+            <Text style={[styles.userName, { fontFamily: font.bold }]}>
+              {firstName} 👋
+            </Text>
           </View>
-
-          {/* Greeting */}
-          <Text style={[styles.greeting, { fontFamily: font.regular, textAlign: 'right', alignSelf: 'flex-end' }]}>
-            {t('goodMorning')}
-          </Text>
-          <Text style={[styles.userName, { fontFamily: font.bold, textAlign: 'right', alignSelf: 'flex-end' }]}>
-            {firstName} 👋
-          </Text>
 
           {/* Location */}
           <TouchableOpacity
@@ -469,10 +467,10 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 14,
   },
-  logoRow: { justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  logo: { width: 110, height: 48, marginHorizontal: 4, paddingVertical: 4 },
-  greeting: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 2 },
-  userName: { fontSize: 22, color: '#FFFFFF', marginBottom: 10 },
+  logoGreetingBlock: { alignItems: 'center', marginBottom: 16 },
+  logo: { width: 130, height: 58, marginBottom: 10 },
+  greeting: { fontSize: 13, color: 'rgba(255,255,255,0.65)', marginBottom: 2, textAlign: 'center' },
+  userName: { fontSize: 22, color: '#FFFFFF', marginBottom: 10, textAlign: 'center' },
   locationPill: {
     backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5,
