@@ -2,6 +2,7 @@ import {
   pruneOldMessages,
   stampMessages,
   checkStorageSize,
+  parseStoredHistory,
   MAX_AGE_MS,
   MAX_SIZE_BYTES,
   type StoredMsg,
@@ -98,5 +99,44 @@ describe('checkStorageSize', () => {
     const exact = 'x'.repeat(MAX_SIZE_BYTES);
     checkStorageSize(exact);
     expect(console.warn).not.toHaveBeenCalled();
+  });
+});
+
+// ── parseStoredHistory ────────────────────────────────────────────────────────
+
+describe('parseStoredHistory', () => {
+  it('returns [] when AsyncStorage gives back null (storage cleared by OS)', () => {
+    expect(parseStoredHistory(null, NOW)).toEqual([]);
+  });
+
+  it('returns [] when AsyncStorage gives back an empty string', () => {
+    expect(parseStoredHistory('', NOW)).toEqual([]);
+  });
+
+  it('returns [] for malformed JSON (partial write / corruption)', () => {
+    expect(parseStoredHistory('{not valid json[[[', NOW)).toEqual([]);
+  });
+
+  it('returns [] when every stored entry is expired — fresh greeting + chips should show', () => {
+    const allExpired: StoredMsg[] = [
+      { id: '1', role: 'user',      content: 'old msg',      savedAt: NOW - 31 * DAY },
+      { id: '2', role: 'assistant', content: 'old reply',    savedAt: NOW - 45 * DAY },
+    ];
+    expect(parseStoredHistory(JSON.stringify(allExpired), NOW)).toEqual([]);
+  });
+
+  it('keeps only fresh entries when history is mixed (expired + valid)', () => {
+    const mixed: StoredMsg[] = [
+      { id: '1', role: 'user',      content: 'expired',  savedAt: NOW - 31 * DAY },
+      { id: '2', role: 'assistant', content: 'fresh',    savedAt: NOW - 1 * DAY  },
+      { id: '3', role: 'user',      content: 'recent',   savedAt: NOW - 5 * DAY  },
+    ];
+    const result = parseStoredHistory(JSON.stringify(mixed), NOW);
+    expect(result).toHaveLength(2);
+    expect(result.map((m) => m.id)).toEqual(['2', '3']);
+  });
+
+  it('returns [] when the stored value is valid JSON but not an array', () => {
+    expect(parseStoredHistory(JSON.stringify({ role: 'user' }), NOW)).toEqual([]);
   });
 });

@@ -24,7 +24,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   HISTORY_KEY,
   MAX_STORED,
-  pruneOldMessages,
+  parseStoredHistory,
   stampMessages,
   checkStorageSize,
   type StoredMsg,
@@ -147,19 +147,16 @@ export default function AiAssistantScreen() {
       try {
         const raw = await AsyncStorage.getItem(HISTORY_KEY);
         if (cancelled) return;
-        if (raw) {
-          // Prune entries older than 30 days before using the stored history.
-          const parsed: StoredMsg[] = JSON.parse(raw);
-          const stored = pruneOldMessages(parsed);
-          if (stored.length > 0) {
-            // Prepend greeting so the UI always starts with the welcome bubble
-            setMessages([makeGreeting(isRTL), ...stored]);
-            setShowChips(false);
-            return;
-          }
+        // parseStoredHistory handles null, malformed JSON, and fully-expired history.
+        const stored = parseStoredHistory(raw);
+        if (stored.length > 0) {
+          // Prepend greeting so the UI always starts with the welcome bubble.
+          setMessages([makeGreeting(isRTL), ...stored]);
+          setShowChips(false);
+          return;
         }
       } catch {
-        // Ignore parse/read errors — fall through to fresh greeting
+        // Ignore unexpected read errors — fall through to fresh greeting
       }
       if (!cancelled) {
         setMessages([makeGreeting(isRTL)]);

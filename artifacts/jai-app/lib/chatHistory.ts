@@ -37,6 +37,29 @@ export function stampMessages(msgs: StoredMsg[], now: number = Date.now()): Stor
 }
 
 /**
+ * Parse a raw AsyncStorage value into a pruned list of StoredMsg entries.
+ *
+ * Handles the three failure modes that can occur when the OS evicts storage:
+ *  - null / empty  → returns []
+ *  - malformed JSON → returns []
+ *  - all entries expired → returns []
+ *
+ * @param raw  The string returned by AsyncStorage.getItem (may be null).
+ * @param now  Current time in ms (injectable for testing).
+ * @returns    Pruned array; an empty array is the safe default for every failure.
+ */
+export function parseStoredHistory(raw: string | null, now: number = Date.now()): StoredMsg[] {
+  if (!raw) return [];
+  try {
+    const parsed: StoredMsg[] = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return pruneOldMessages(parsed, now);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Warn (non-fatal) if a serialised payload is larger than MAX_SIZE_BYTES.
  * @returns true if the payload exceeds the soft limit, false otherwise.
  */
