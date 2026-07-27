@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   langBtnText: { color: '#FFFFFF', fontSize: 13 },
-  logo: { width: 200, height: 88 },
+  logo: { width: 240, height: 110 },
   tagline: { color: 'rgba(255,255,255,0.55)', fontSize: 13, marginTop: 6 },
 
   scroll: { flex: 1, backgroundColor: '#F4F2FA' },
