@@ -2,6 +2,10 @@
  * AI Assistant chat screen.
  * History is persisted to AsyncStorage (last 20 messages) so the conversation
  * survives navigation away and app restarts.
+ *
+ * Storage guards:
+ *  - Entries older than 30 days are pruned on load.
+ *  - A non-fatal warning is logged if the serialised payload exceeds 50 KB.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -17,9 +21,14 @@ import { useLanguage } from '@/context/LanguageContext';
 import { getApiBaseUrl } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-const HISTORY_KEY = 'jai_ai_chat_history';
-const MAX_STORED  = 20;
+import {
+  HISTORY_KEY,
+  MAX_STORED,
+  pruneOldMessages,
+  stampMessages,
+  checkStorageSize,
+  type StoredMsg,
+} from '@/lib/chatHistory';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Msg {
@@ -108,11 +117,17 @@ export default function AiAssistantScreen() {
   // ── Persist helper ─────────────────────────────────────────────────────────
   const persistHistory = useCallback(async (msgs: Msg[]) => {
     try {
-      // Strip the greeting bubble — it is re-generated from locale on mount
-      const toStore = msgs
-        .filter((m) => m.id !== 'greeting')
-        .slice(-MAX_STORED);
-      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(toStore));
+      // Strip the greeting bubble — it is re-generated from locale on mount.
+      // Stamp each message with the current time so the 30-day pruner can work.
+      const toStore: StoredMsg[] = stampMessages(
+        msgs
+          .filter((m) => m.id !== 'greeting')
+          .slice(-MAX_STORED),
+      );
+      const serialised = JSON.stringify(toStore);
+      // Non-fatal size guard: warn if the payload is unusually large.
+      checkStorageSize(serialised);
+      await AsyncStorage.setItem(HISTORY_KEY, serialised);
     } catch {
       // Storage errors are non-fatal
     }
@@ -126,7 +141,9 @@ export default function AiAssistantScreen() {
         const raw = await AsyncStorage.getItem(HISTORY_KEY);
         if (cancelled) return;
         if (raw) {
-          const stored: Msg[] = JSON.parse(raw);
+          // Prune entries older than 30 days before using the stored history.
+          const parsed: StoredMsg[] = JSON.parse(raw);
+          const stored = pruneOldMessages(parsed);
           if (stored.length > 0) {
             // Prepend greeting so the UI always starts with the welcome bubble
             setMessages([makeGreeting(isRTL), ...stored]);
