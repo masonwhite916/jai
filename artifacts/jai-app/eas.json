@@ -21,7 +21,8 @@
     "production": {
       "channel": "production",
       "android": {
-        "buildType": "app-bundle"
+        "buildType": "app-bundle",
+        "autoIncrement": true
       },
       "env": {
         "EXPO_PUBLIC_API_HOST": "workspaceapi-server-production-9836.up.railway.app"

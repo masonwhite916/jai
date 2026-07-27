@@ -1,0 +1,46 @@
+{
+  "_INSTRUCTIONS": [
+    "⚠️  REPLACE THIS FILE with the real google-services.json from your Firebase project.",
+    "",
+    "Steps:",
+    "  1. Go to https://console.firebase.google.com",
+    "  2. Create a project (or open an existing one)",
+    "  3. Click 'Add app' → Android",
+    "  4. Enter package name: com.jai.roadside",
+    "  5. Download google-services.json",
+    "  6. Replace this file with the downloaded one",
+    "",
+    "This file is required for push notifications (FCM) on Android.",
+    "The EAS build will fail without a valid google-services.json.",
+    "",
+    "⚠️  Do NOT commit the real google-services.json to a public repository.",
+    "    Add it to .gitignore or use EAS secrets for CI builds."
+  ],
+  "project_info": {
+    "project_number": "REPLACE_WITH_FIREBASE_PROJECT_NUMBER",
+    "project_id": "REPLACE_WITH_FIREBASE_PROJECT_ID",
+    "storage_bucket": "REPLACE_WITH_FIREBASE_PROJECT_ID.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "REPLACE_WITH_FIREBASE_APP_ID",
+        "android_client_info": {
+          "package_name": "com.jai.roadside"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "REPLACE_WITH_FIREBASE_API_KEY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
