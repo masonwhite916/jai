@@ -103,6 +103,11 @@ function apiJobToJob(j: Record<string, any>): Job {
 }
 
 
+// ── Deduplicate jobs by id — applied to every setJobs call ───────────────────
+function dedupeJobs(jobs: Job[]): Job[] {
+  return [...new Map(jobs.map((j) => [j.id, j])).values()];
+}
+
 // ── Location permission request (best-effort) ─────────────────────────────────
 async function requestLocationPermission() {
   try {
@@ -175,11 +180,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       const raw = payload.job as Record<string, any> | undefined;
       if (!raw) return;
       const job = apiJobToJob(raw);
-      setJobs((prev) => {
-        // Don't add duplicates
-        if (prev.some((j) => j.id === job.id)) return prev;
-        return [job, ...prev];
-      });
+      setJobs((prev) => dedupeJobs(
+        prev.some((j) => j.id === job.id) ? prev : [job, ...prev]
+      ));
     });
 
     // Job status changes relayed from the server (for the active job)
@@ -260,7 +263,7 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       // De-duplicate by id
       const unique = [...new Map(merged.map((j) => [j.id, j])).values()];
       const mapped = unique.map(apiJobToJob);
-      setJobs(mapped);
+      setJobs(dedupeJobs(mapped));
     } catch {
       setJobs([]);
     }
