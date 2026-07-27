@@ -1,13 +1,14 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
-import { useDriver, type JobStatus } from '@/context/DriverContext';
+import { useDriver, type Job, type JobStatus } from '@/context/DriverContext';
 import { useDriverColors } from '@/hooks/useDriverColors';
 import { Ionicons } from '@expo/vector-icons';
+import { apiFetch } from '@/lib/api';
 
 const statusLabels: Record<JobStatus, string> = {
   pending: 'driverStatusPending',
@@ -45,15 +46,78 @@ export default function JobDetailScreen() {
   const router = useRouter();
   const { t, isRTL, font } = useLanguage();
   const colors = useDriverColors();
-  const { jobs, acceptJob, updateJobStatus, cancelJob } = useDriver();
+  const { jobs, isLoading, acceptJob, updateJobStatus, cancelJob } = useDriver();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
 
-  const job = jobs.find((j) => j.id === id);
+  // Direct-fetch fallback: when the job arrives via notification tap before
+  // DriverContext has finished loading, fetch it by ID straight from the API.
+  const [fetchedJob, setFetchedJob] = useState<Job | null>(null);
+  const [fetching, setFetching]     = useState(false);
+
+  const localJob = jobs.find((j) => j.id === id);
+  const job      = localJob ?? fetchedJob;
+
+  useEffect(() => {
+    // Only fetch directly if context is done loading and job still isn't there
+    if (isLoading || localJob || fetching || !id) return;
+    setFetching(true);
+    apiFetch<Record<string, any>>(`/api/jobs/${id}`)
+      .then((data) => {
+        // Map the server shape to the local Job interface the same way DriverContext does
+        const j = data.job ?? data;
+        const req = j.request ?? {};
+        const customer = j.customer ?? {};
+        setFetchedJob({
+          id:            String(j.id),
+          service:       (req.service_type ?? j.service_type ?? 'battery') as Job['service'],
+          urgency:       'standard',
+          status:        j.status as JobStatus,
+          customerName:  customer.name  ?? 'Customer',
+          customerPhone: customer.phone ?? '',
+          vehicle: {
+            make:  req.vehicle_make  ?? j.vehicle_make  ?? '',
+            model: req.vehicle_model ?? j.vehicle_model ?? '',
+            year:  req.vehicle_year  ?? j.vehicle_year  ?? '',
+            plate: req.vehicle_plate ?? j.vehicle_plate ?? '',
+            color: req.vehicle_color ?? j.vehicle_color ?? '',
+          },
+          address: req.address ?? j.address ?? '',
+          coords: {
+            latitude:  req.location_lat ?? j.location_lat ?? 24.7136,
+            longitude: req.location_lng ?? j.location_lng ?? 46.6753,
+          },
+          distanceKm: j.distance_km ?? 0,
+          etaMin:     j.eta_min     ?? 0,
+          payout:     j.payout      ?? 120,
+          createdAt:  j.created_at  ?? new Date().toISOString(),
+        });
+      })
+      .catch(() => { /* leave fetchedJob null → show not-found */ })
+      .finally(() => setFetching(false));
+  }, [isLoading, localJob, id]);
+
+  // Still loading from context or direct fetch — show spinner
+  if (isLoading || fetching) {
+    return (
+      <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color="#2D1B69" />
+      </View>
+    );
+  }
+
   if (!job) {
     return (
-      <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
-        <Text style={{ color: colors.text, padding: 24 }}>Job not found</Text>
+      <View style={[styles.container, styles.center, { backgroundColor: colors.background }]}>
+        <Ionicons name="alert-circle-outline" size={40} color={colors.mutedForeground} style={{ marginBottom: 12 }} />
+        <Text style={[{ color: colors.mutedForeground, fontSize: 15 }]}>
+          {isRTL ? 'لم يتم العثور على المهمة' : 'Job not found'}
+        </Text>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 20 }}>
+          <Text style={{ color: '#2D1B69', fontSize: 14 }}>
+            {isRTL ? 'العودة' : 'Go back'}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -174,6 +238,7 @@ export default function JobDetailScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  center: { justifyContent: 'center', alignItems: 'center' },
   header: { paddingHorizontal: 16, paddingVertical: 12, alignItems: 'center', justifyContent: 'space-between' },
   title: { fontSize: 20 },
   card: { borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#EBEBF5' },
