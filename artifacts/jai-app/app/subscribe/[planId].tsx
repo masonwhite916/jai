@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   TextInput, Platform, Animated, ActivityIndicator,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +14,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import * as Haptics from 'expo-haptics';
 import { apiFetch } from '@/lib/api';
 
-// ─── Plan data (mirrors membership screen) ───────────────────────────────────
+// ─── Plan data ────────────────────────────────────────────────────────────────
 const PLAN_DATA = {
   basic: {
     nameEn: 'Basic Package',      nameAr: 'الباقة الأساسية',
@@ -74,379 +75,456 @@ const PLAN_DATA = {
 };
 
 type PlanId = keyof typeof PLAN_DATA;
+type PayMethod = 'card' | 'tabby' | 'tamara';
 
-// HTTPS redirect URL for Whop (required — custom schemes are rejected).
-// Whop will redirect here after payment; the in-app browser shows the
-// website success page, then the user closes it and the app verifies.
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? '';
-const REDIRECT_URL = DOMAIN
-  ? `https://${DOMAIN}/jai-web/payment-success`
-  : 'https://example.com/payment-success';
+// ─── Card number formatter ────────────────────────────────────────────────────
+function formatCardNumber(raw: string) {
+  return raw.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+}
+function formatExpiry(raw: string) {
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+}
 
 export default function SubscribeScreen() {
-  const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const insets  = useSafeAreaInsets();
+  const router  = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
   const { user, updateUser } = useApp();
   const { isRTL, font } = useLanguage();
 
-  const plan = PLAN_DATA[planId as PlanId] ?? PLAN_DATA.basic;
-  const align = isRTL ? 'right' : 'left';
-  const rowDir = isRTL ? 'row-reverse' : 'row';
+  const plan     = PLAN_DATA[planId as PlanId] ?? PLAN_DATA.basic;
+  const align    = isRTL ? 'right' : 'left';
+  const rowDir   = isRTL ? 'row-reverse' : 'row';
   const features = isRTL ? plan.featuresAr : plan.featuresEn;
 
-  // Pre-checkout form state
-  const [name,        setName]        = useState(user?.name ?? '');
-  const [email,       setEmail]       = useState('');
+  // ── Payment method tab ──────────────────────────────────────────────────────
+  const [payMethod, setPayMethod] = useState<PayMethod>('card');
+
+  // ── Buyer info (shared across all methods) ──────────────────────────────────
+  const [buyerName,  setBuyerName]  = useState(user?.name ?? '');
+  const [buyerEmail, setBuyerEmail] = useState('');
+  const [buyerPhone, setBuyerPhone] = useState(user?.phone ?? '');
+
+  // ── Card fields ─────────────────────────────────────────────────────────────
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry,     setExpiry]     = useState('');
+  const [cvc,        setCvc]        = useState('');
+
+  // ── Flow state ──────────────────────────────────────────────────────────────
+  const [loading,  setLoading]  = useState(false);
+  const [success,  setSuccess]  = useState(false);
+  const [pending,  setPending]  = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-  // Flow state
-  const [loading,        setLoading]        = useState(false);
-  const [verifying,      setVerifying]      = useState(false);
-  const [success,        setSuccess]        = useState(false);
-  const [paymentPending, setPaymentPending] = useState(false);
-  const [errorMsg,       setErrorMsg]       = useState<string | null>(null);
-
-  // Success animation
+  // ── Success animation ───────────────────────────────────────────────────────
   const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
 
-  // ── Validation ───────────────────────────────────────────────────────────
+  // ─── Validation ─────────────────────────────────────────────────────────────
   function validate() {
     const e: Record<string, string> = {};
-    if (!name.trim())  e.name  = isRTL ? 'مطلوب' : 'Required';
-    if (!email.trim()) e.email = isRTL ? 'البريد الإلكتروني مطلوب' : 'Email is required';
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-      e.email = isRTL ? 'بريد إلكتروني غير صحيح' : 'Invalid email address';
+    const req = isRTL ? 'مطلوب' : 'Required';
+
+    if (!buyerName.trim())  e.buyerName  = req;
+    if (!buyerEmail.trim()) e.buyerEmail = isRTL ? 'البريد مطلوب' : 'Email required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail.trim()))
+      e.buyerEmail = isRTL ? 'بريد غير صحيح' : 'Invalid email';
+
+    if (payMethod === 'card') {
+      if (cardNumber.replace(/\D/g, '').length < 16)
+        e.cardNumber = isRTL ? 'رقم البطاقة غير صحيح' : 'Invalid card number';
+      if (expiry.length < 5)
+        e.expiry = isRTL ? 'تاريخ انتهاء غير صحيح' : 'Invalid expiry';
+      if (cvc.length < 3)
+        e.cvc = isRTL ? 'رمز CVV غير صحيح' : 'Invalid CVV';
+    }
+
+    if (payMethod !== 'card' && !buyerPhone.trim())
+      e.buyerPhone = req;
+
     setFieldErrors(e);
     return Object.keys(e).length === 0;
   }
 
-  // ── Verify membership with Whop (with retries) ───────────────────────────
-  async function verifyMembership(userEmail: string) {
-    setVerifying(true);
+  // ─── Animate success ─────────────────────────────────────────────────────────
+  function animateSuccess() {
+    setSuccess(true);
+    Animated.parallel([
+      Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
+      Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
+    ]).start();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setTimeout(() => router.replace('/(tabs)/membership'), 2600);
+  }
+
+  // ─── Poll Moyasar payment status ─────────────────────────────────────────────
+  async function pollStatus(paymentId: string, attempts = 8): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 2000));
+      try {
+        const data = await apiFetch<{ status: string }>(`/api/payment/status/${paymentId}`);
+        if (data.status === 'paid')   return true;
+        if (data.status === 'failed') return false;
+      } catch { /* network blip — keep polling */ }
+    }
+    return false;
+  }
+
+  // ─── Card checkout via Moyasar ────────────────────────────────────────────────
+  async function handleCardCheckout() {
+    setErrorMsg(null);
+    setLoading(true);
     try {
-      // Retry up to 4 times — Whop may take a moment to activate the membership
-      for (let attempt = 0; attempt < 4; attempt++) {
-        if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
-        const data = await apiFetch<{ active?: boolean; plan?: string | null }>(
-          `/api/whop/membership-status?email=${encodeURIComponent(userEmail)}&plan=${encodeURIComponent(planId ?? 'basic')}`,
-        );
-        if (data.active) {
-          await updateUser({
-            membership: (data.plan ?? planId ?? 'basic') as any,
-            points: (user?.points ?? 0) + 100,
-          });
-          setVerifying(false);
-          setSuccess(true);
-          Animated.parallel([
-            Animated.spring(scaleAnim,   { toValue: 1, useNativeDriver: true, tension: 60, friction: 6 }),
-            Animated.timing(opacityAnim, { toValue: 1, useNativeDriver: true, duration: 300 }),
-          ]).start();
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          setTimeout(() => router.replace('/(tabs)/membership'), 2500);
-          return;
-        }
+      const [mm, yy] = expiry.split('/');
+      const data = await apiFetch<{
+        paymentId: string;
+        status: string;
+        transactionUrl: string | null;
+      }>('/api/payment/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          plan:        planId ?? 'basic',
+          cardName:    buyerName.trim(),
+          cardNumber:  cardNumber.replace(/\D/g, ''),
+          month:       mm?.trim(),
+          year:        `20${yy?.trim()}`,
+          cvc:         cvc.trim(),
+        }),
+      });
+
+      // 3DS redirect required
+      if (data.transactionUrl) {
+        setLoading(false);
+        await WebBrowser.openBrowserAsync(data.transactionUrl, {
+          dismissButtonStyle: 'done',
+          presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+        });
       }
-      // Membership not yet visible after retries — show pending state
-      setVerifying(false);
-      setPaymentPending(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    } catch {
-      setVerifying(false);
-      setPaymentPending(true); // still likely paid — show pending rather than error
+
+      // If already paid (no 3DS), or after 3DS close — poll for confirmation
+      if (data.status === 'paid') {
+        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+        animateSuccess();
+        return;
+      }
+
+      setLoading(true);
+      const paid = await pollStatus(data.paymentId);
+      setLoading(false);
+
+      if (paid) {
+        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+        animateSuccess();
+      } else {
+        setPending(true);
+      }
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg(err instanceof Error ? err.message : (isRTL ? 'حدث خطأ' : 'Something went wrong'));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }
 
-  // ── Open Whop Checkout ────────────────────────────────────────────────────
-  async function handleCheckout() {
-    if (!validate()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      return;
-    }
+  // ─── BNPL checkout (Tabby / Tamara) ──────────────────────────────────────────
+  async function handleBnplCheckout(provider: 'tabby' | 'tamara') {
     setErrorMsg(null);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
-
     try {
-      // 1. Create a Whop checkout session via the API server
-      const data = await apiFetch<{ purchase_url: string; checkout_id: string }>(
-        '/api/whop/checkout',
+      const data = await apiFetch<{ checkoutUrl: string }>(
+        `/api/payment/checkout/${provider}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            plan: planId ?? 'basic',
-            redirect_url: REDIRECT_URL,
-            subscriber_name: name.trim(),
-            subscriber_email: email.trim(),
+            plan:       planId ?? 'basic',
+            buyerName:  buyerName.trim(),
+            buyerEmail: buyerEmail.trim(),
+            buyerPhone: buyerPhone.trim(),
           }),
         },
       );
 
       setLoading(false);
-
-      // 2. Open Whop hosted checkout in a modal browser.
-      //    openBrowserAsync shows a dismissible in-app browser; it resolves
-      //    when the user closes it (after paying or cancelling).
-      //    We always run verification after close — if they paid, the API
-      //    confirms it; if not, they see the pending screen.
-      await WebBrowser.openBrowserAsync(data.purchase_url, {
+      await WebBrowser.openBrowserAsync(data.checkoutUrl, {
         dismissButtonStyle: 'done',
         presentationStyle: WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
       });
-      setLoading(false);
-
-      // Always verify — the user may have completed payment before closing
-      await verifyMembership(email.trim());
+      // After the user closes the browser, show pending confirmation
+      setPending(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (err) {
       setLoading(false);
-      setVerifying(false);
-      const msg = err instanceof Error ? err.message : 'Something went wrong.';
-      setErrorMsg(msg);
+      setErrorMsg(err instanceof Error ? err.message : (isRTL ? 'حدث خطأ' : 'Something went wrong'));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   }
 
-  // ── Verifying overlay ─────────────────────────────────────────────────────
-  if (verifying) {
-    return (
-      <View style={styles.successRoot}>
-        <LinearGradient
-          colors={plan.gradient}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={[styles.successCard, { gap: 20 }]}>
-          <ActivityIndicator size="large" color="#5B2C91" />
-          <Text style={[styles.successTitle, { fontFamily: font.bold, marginTop: 16 }]}>
-            {isRTL ? 'جاري التحقق من الدفع…' : 'Verifying payment…'}
-          </Text>
-          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
-            {isRTL ? 'يرجى الانتظار لحظة' : 'Please wait a moment'}
-          </Text>
-        </View>
-      </View>
-    );
+  // ─── Main submit handler ──────────────────────────────────────────────────────
+  async function handleSubmit() {
+    if (!validate()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (payMethod === 'card')   return handleCardCheckout();
+    if (payMethod === 'tabby')  return handleBnplCheckout('tabby');
+    if (payMethod === 'tamara') return handleBnplCheckout('tamara');
   }
 
-  // ── Success overlay ───────────────────────────────────────────────────────
+  // ─── Success screen ──────────────────────────────────────────────────────────
   if (success) {
     return (
-      <View style={styles.successRoot}>
-        <LinearGradient
-          colors={plan.gradient}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <Animated.View style={[styles.successCard, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}>
-          <View style={styles.successCheck}>
-            <Ionicons name="checkmark-circle" size={72} color="#2ECC71" />
-          </View>
+      <View style={[styles.container, { backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+        <Animated.View style={{ transform: [{ scale: scaleAnim }], opacity: opacityAnim, alignItems: 'center' }}>
+          <LinearGradient colors={plan.gradient} style={styles.successIcon}>
+            <Ionicons name="checkmark" size={52} color="#FFFFFF" />
+          </LinearGradient>
           <Text style={[styles.successTitle, { fontFamily: font.bold }]}>
-            {isRTL ? '🎉 تم الاشتراك بنجاح!' : '🎉 Subscribed!'}
+            {isRTL ? 'تم الاشتراك بنجاح!' : 'Subscribed!'}
           </Text>
           <Text style={[styles.successSub, { fontFamily: font.regular }]}>
             {isRTL
-              ? `لقد اشتركت في ${plan.nameAr}. سيتم تفعيل العضوية خلال 48 ساعة.`
-              : `You've subscribed to ${plan.nameEn}. Membership activates within 48 hours.`}
+              ? `مرحباً بك في ${plan.nameAr}`
+              : `Welcome to ${plan.nameEn}`}
           </Text>
-          <View style={styles.successPoints}>
-            <Ionicons name="star" size={16} color="#FFD700" />
-            <Text style={[styles.successPointsText, { fontFamily: font.semibold }]}>
-              {isRTL ? '+100 نقطة أضيفت لحسابك' : '+100 points added to your account'}
-            </Text>
-          </View>
         </Animated.View>
       </View>
     );
   }
 
-  // ── Payment pending screen ────────────────────────────────────────────────
-  if (paymentPending) {
+  // ─── Pending screen ──────────────────────────────────────────────────────────
+  if (pending) {
     return (
-      <View style={styles.successRoot}>
-        <LinearGradient
-          colors={plan.gradient}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View style={styles.successCard}>
-          <View style={[styles.successCheck, { backgroundColor: '#FFF8E1', borderRadius: 50, padding: 12 }]}>
-            <Ionicons name="time-outline" size={52} color="#F59E0B" />
-          </View>
-          <Text style={[styles.successTitle, { fontFamily: font.bold }]}>
-            {isRTL ? '⏳ تأكيد الدفع قيد المعالجة' : '⏳ Payment Pending'}
+      <View style={[styles.container, { backgroundColor: '#F5F3FF', justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+        <Ionicons name="time-outline" size={64} color="#7B2A9E" style={{ marginBottom: 24 }} />
+        <Text style={[styles.successTitle, { fontFamily: font.bold, color: '#2D1B69' }]}>
+          {isRTL ? 'جاري التحقق من الدفع' : 'Payment received'}
+        </Text>
+        <Text style={[styles.successSub, { fontFamily: font.regular, color: '#6B7280', textAlign: 'center', marginBottom: 32 }]}>
+          {isRTL
+            ? 'تم استلام طلبك وسيتم تفعيل الاشتراك خلال 24 ساعة وستصلك إشعار بذلك.'
+            : 'Your payment was received. Membership activates within 24 hours — we will notify you.'}
+        </Text>
+        <TouchableOpacity onPress={() => router.replace('/(tabs)')} style={styles.pendingBtn}>
+          <Text style={[styles.pendingBtnText, { fontFamily: font.semibold }]}>
+            {isRTL ? 'العودة للرئيسية' : 'Back to home'}
           </Text>
-          <Text style={[styles.successSub, { fontFamily: font.regular }]}>
-            {isRTL
-              ? 'تمت عملية الدفع ويتم التحقق منها. سيتم تفعيل عضويتك وإعلامك خلال 24 ساعة.'
-              : "Your payment was received and is being verified. Your membership will be activated and you'll be notified within 24 hours."}
-          </Text>
-          <TouchableOpacity
-            onPress={() => router.replace('/(tabs)/membership')}
-            activeOpacity={0.85}
-            style={styles.pendingBtn}
-          >
-            <Text style={[styles.pendingBtnText, { fontFamily: font.semibold }]}>
-              {isRTL ? 'العودة إلى الرئيسية' : 'Back to Home'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  // ── Main screen ───────────────────────────────────────────────────────────
+  // ─── Main checkout form ───────────────────────────────────────────────────────
   return (
-    <View style={{ flex: 1, backgroundColor: '#F4F2FA' }}>
-      {/* Gradient header */}
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      {/* Header */}
       <LinearGradient
         colors={plan.gradient}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
+        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        style={[styles.header, { paddingTop: insets.top + 8 }]}
       >
-        <TouchableOpacity
-          onPress={() => router.back()}
-          style={[styles.backBtn, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}
-        >
-          <Ionicons name={isRTL ? 'arrow-forward' : 'arrow-back'} size={22} color="#FFFFFF" />
+        <TouchableOpacity onPress={() => router.back()} hitSlop={12}>
+          <Ionicons name={isRTL ? 'chevron-forward' : 'chevron-back'} size={24} color="#FFF" />
         </TouchableOpacity>
-
-        {/* Plan summary */}
-        <View style={styles.planSummary}>
-          <Text style={[styles.planSummaryName, { fontFamily: font.bold, textAlign: 'center' }]}>
+        <View style={{ flex: 1, marginHorizontal: 12 }}>
+          <Text style={[styles.headerTitle, { fontFamily: font.bold, textAlign: align }]}>
             {isRTL ? plan.nameAr : plan.nameEn}
           </Text>
-          <Text style={[styles.planSummarySubtitle, { fontFamily: font.regular }]}>
-            {isRTL ? plan.subtitleAr : plan.subtitleEn}
+          <Text style={[styles.headerPrice, { fontFamily: font.regular, textAlign: align }]}>
+            {plan.price} {isRTL ? 'ريال / سنة' : 'SAR / year'}
           </Text>
-          <View style={styles.planSummaryPrice}>
-            <Text style={[styles.planSummaryPriceNum, { fontFamily: font.bold }]}>{plan.price}</Text>
-            <Text style={[styles.planSummaryPriceCur, { fontFamily: font.medium }]}>
-              {isRTL ? ' ريال / سنة' : ' SAR / year'}
-            </Text>
-          </View>
         </View>
       </LinearGradient>
 
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: insets.bottom + 40 + (Platform.OS === 'web' ? 34 : 0) },
-        ]}
-        showsVerticalScrollIndicator={false}
+        style={{ flex: 1, backgroundColor: '#F5F3FF' }}
+        contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* ── Payment methods badge ── */}
-        <View style={[styles.methodsBadge, { flexDirection: rowDir }]}>
-          <Ionicons name="shield-checkmark" size={15} color="#5B2C91" />
-          <Text style={[styles.methodsText, { fontFamily: font.medium }]}>
-            {isRTL
-              ? 'Apple Pay • Google Pay • بطاقة ائتمانية'
-              : 'Apple Pay • Google Pay • Credit Card'}
-          </Text>
+        {/* ── Payment method tabs ── */}
+        <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 10 }]}>
+          {isRTL ? 'طريقة الدفع' : 'Payment method'}
+        </Text>
+        <View style={[styles.methodTabs, { flexDirection: rowDir }]}>
+          {([
+            { id: 'card',   labelEn: 'Card',  labelAr: 'بطاقة', icon: 'card-outline' },
+            { id: 'tabby',  labelEn: 'Tabby', labelAr: 'تابي',  icon: 'calendar-outline' },
+            { id: 'tamara', labelEn: 'Tamara',labelAr: 'تمارا', icon: 'layers-outline' },
+          ] as const).map((m) => (
+            <TouchableOpacity
+              key={m.id}
+              style={[styles.methodTab, payMethod === m.id && styles.methodTabActive]}
+              onPress={() => { setPayMethod(m.id); setErrorMsg(null); }}
+            >
+              <Ionicons name={m.icon} size={18} color={payMethod === m.id ? '#5B2C91' : '#9CA3AF'} />
+              <Text style={[
+                styles.methodTabText,
+                { fontFamily: font.semibold, color: payMethod === m.id ? '#5B2C91' : '#6B7280' },
+              ]}>
+                {isRTL ? m.labelAr : m.labelEn}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
-        {/* ── Contact info ── */}
-        <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align }]}>
-          {isRTL ? 'معلومات التواصل' : 'Contact Information'}
+        {/* ── Buyer info (always shown) ── */}
+        <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginTop: 20, marginBottom: 10 }]}>
+          {isRTL ? 'بيانات المشترك' : 'Your details'}
         </Text>
-        <Text style={[styles.sectionHint, { fontFamily: font.regular, textAlign: align }]}>
-          {isRTL
-            ? 'ستُستخدم هذه البيانات للتحقق من اشتراكك وإرسال الفواتير.'
-            : 'These details are used to verify your subscription and send receipts.'}
-        </Text>
-
-        {/* Full name */}
-        <FormField
-          label={isRTL ? 'الاسم الكامل' : 'Full Name'}
-          error={fieldErrors.name}
-          align={align}
-          font={font.medium}
-        >
+        <Field label={isRTL ? 'الاسم الكامل' : 'Full name'} error={fieldErrors.buyerName} align={align} font={font.medium}>
           <TextInput
             style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
-            value={name}
-            onChangeText={setName}
+            value={buyerName}
+            onChangeText={v => { setBuyerName(v); setFieldErrors(p => ({ ...p, buyerName: '' })); }}
             autoCapitalize="words"
-            placeholder={isRTL ? 'الاسم الكامل' : 'Your full name'}
+            placeholder={isRTL ? 'محمد العمري' : 'John Smith'}
             placeholderTextColor="#C0C0D4"
           />
-        </FormField>
-
-        {/* Email (also used to confirm payment after checkout) */}
-        <FormField
-          label={isRTL ? 'البريد الإلكتروني (للتحقق من الدفع)' : 'Email (used to confirm your payment)'}
-          error={fieldErrors.email}
-          align={align}
-          font={font.medium}
-        >
+        </Field>
+        <Field label={isRTL ? 'البريد الإلكتروني' : 'Email'} error={fieldErrors.buyerEmail} align={align} font={font.medium}>
           <TextInput
             style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
-            value={email}
-            onChangeText={v => { setEmail(v); setFieldErrors(prev => ({ ...prev, email: '' })); }}
+            value={buyerEmail}
+            onChangeText={v => { setBuyerEmail(v); setFieldErrors(p => ({ ...p, buyerEmail: '' })); }}
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
-            placeholder={isRTL ? 'example@email.com' : 'your@email.com'}
+            placeholder="your@email.com"
             placeholderTextColor="#C0C0D4"
           />
-        </FormField>
+        </Field>
+        {payMethod !== 'card' && (
+          <Field label={isRTL ? 'رقم الجوال' : 'Phone number'} error={fieldErrors.buyerPhone} align={align} font={font.medium}>
+            <TextInput
+              style={[styles.input, { fontFamily: font.medium, textAlign: align }]}
+              value={buyerPhone}
+              onChangeText={v => { setBuyerPhone(v); setFieldErrors(p => ({ ...p, buyerPhone: '' })); }}
+              keyboardType="phone-pad"
+              placeholder="+966 5X XXX XXXX"
+              placeholderTextColor="#C0C0D4"
+            />
+          </Field>
+        )}
+
+        {/* ── Card fields ── */}
+        {payMethod === 'card' && (
+          <View style={styles.cardSection}>
+            <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 10 }]}>
+              {isRTL ? 'تفاصيل البطاقة' : 'Card details'}
+            </Text>
+
+            {/* Accepted card logos */}
+            <View style={[styles.cardLogos, { flexDirection: rowDir }]}>
+              {['mada', 'visa', 'mc'].map((b) => (
+                <View key={b} style={styles.cardLogo}>
+                  <Text style={styles.cardLogoText}>
+                    {b === 'mada' ? 'مدى' : b === 'visa' ? 'VISA' : 'MC'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            <Field label={isRTL ? 'رقم البطاقة' : 'Card number'} error={fieldErrors.cardNumber} align={align} font={font.medium}>
+              <TextInput
+                style={[styles.input, { fontFamily: font.medium, textAlign: isRTL ? 'right' : 'left', letterSpacing: 1.5 }]}
+                value={cardNumber}
+                onChangeText={v => { setCardNumber(formatCardNumber(v)); setFieldErrors(p => ({ ...p, cardNumber: '' })); }}
+                keyboardType="numeric"
+                maxLength={19}
+                placeholder="XXXX XXXX XXXX XXXX"
+                placeholderTextColor="#C0C0D4"
+              />
+            </Field>
+
+            <View style={[{ flexDirection: rowDir, gap: 12 }]}>
+              <View style={{ flex: 1 }}>
+                <Field label={isRTL ? 'تاريخ الانتهاء' : 'Expiry (MM/YY)'} error={fieldErrors.expiry} align={align} font={font.medium}>
+                  <TextInput
+                    style={[styles.input, { fontFamily: font.medium, textAlign: 'center' }]}
+                    value={expiry}
+                    onChangeText={v => { setExpiry(formatExpiry(v)); setFieldErrors(p => ({ ...p, expiry: '' })); }}
+                    keyboardType="numeric"
+                    maxLength={5}
+                    placeholder="MM/YY"
+                    placeholderTextColor="#C0C0D4"
+                  />
+                </Field>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Field label="CVV" error={fieldErrors.cvc} align={align} font={font.medium}>
+                  <TextInput
+                    style={[styles.input, { fontFamily: font.medium, textAlign: 'center' }]}
+                    value={cvc}
+                    onChangeText={v => { setCvc(v.replace(/\D/g, '').slice(0, 4)); setFieldErrors(p => ({ ...p, cvc: '' })); }}
+                    keyboardType="numeric"
+                    maxLength={4}
+                    secureTextEntry
+                    placeholder="•••"
+                    placeholderTextColor="#C0C0D4"
+                  />
+                </Field>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* ── BNPL info card ── */}
+        {payMethod !== 'card' && (
+          <View style={styles.bnplInfo}>
+            <Ionicons name="information-circle-outline" size={20} color="#5B2C91" style={{ marginTop: 1 }} />
+            <Text style={[styles.bnplInfoText, { fontFamily: font.regular, textAlign: align, flex: 1 }]}>
+              {payMethod === 'tabby'
+                ? (isRTL
+                    ? 'سيتم فتح صفحة تابي لإتمام الدفع على أقساط بدون فوائد.'
+                    : 'A Tabby checkout page will open to pay in interest-free instalments.')
+                : (isRTL
+                    ? 'سيتم فتح صفحة تمارا لإتمام الدفع على 4 أقساط بدون فوائد.'
+                    : 'A Tamara checkout page will open to split into 4 interest-free payments.')}
+            </Text>
+          </View>
+        )}
 
         {/* ── Order summary ── */}
         <View style={styles.orderSummary}>
           <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 14 }]}>
-            {isRTL ? 'ملخص الطلب' : 'Order Summary'}
+            {isRTL ? 'ملخص الطلب' : 'Order summary'}
           </Text>
-          <SummaryRow
-            label={isRTL ? plan.nameAr : plan.nameEn}
-            value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
-            font={font} rowDir={rowDir} bold
-          />
-          <SummaryRow
-            label={isRTL ? 'المدة' : 'Duration'}
-            value={isRTL ? '12 شهراً' : '12 months'}
-            font={font} rowDir={rowDir}
-          />
-          <View style={styles.orderDivider} />
-          <SummaryRow
-            label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT included)'}
-            value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`}
-            font={font} rowDir={rowDir} bold accent
-          />
+          <SummaryRow label={isRTL ? plan.nameAr : plan.nameEn} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold />
+          <SummaryRow label={isRTL ? 'المدة' : 'Duration'} value={isRTL ? '12 شهراً' : '12 months'} font={font} rowDir={rowDir} />
+          <View style={styles.divider} />
+          <SummaryRow label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT incl.)'} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold accent />
         </View>
 
-        {/* ── What's included ── */}
+        {/* ── Features ── */}
         <View style={styles.featuresCard}>
           <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 12 }]}>
             {isRTL ? 'ما يشمله الاشتراك' : "What's included"}
           </Text>
           {features.map((f, i) => (
             <View key={i} style={[styles.featureRow, { flexDirection: rowDir }]}>
-              <View style={styles.featureDot}>
-                <Ionicons name="checkmark" size={12} color="#5B2C91" />
-              </View>
+              <View style={styles.featureDot}><Ionicons name="checkmark" size={12} color="#5B2C91" /></View>
               <Text style={[styles.featureText, { fontFamily: font.regular, textAlign: align }]}>{f}</Text>
             </View>
           ))}
         </View>
 
-        {/* ── Error message ── */}
-        {errorMsg && (
+        {/* ── Error ── */}
+        {!!errorMsg && (
           <View style={[styles.errorBanner, { flexDirection: rowDir }]}>
             <Ionicons name="alert-circle-outline" size={16} color="#E74C3C" />
             <Text style={[styles.errorText, { fontFamily: font.regular }]}>{errorMsg}</Text>
           </View>
         )}
 
-        {/* ── Checkout button ── */}
-        <TouchableOpacity
-          onPress={handleCheckout}
-          disabled={loading}
-          activeOpacity={0.88}
-          style={styles.submitWrap}
-        >
+        {/* ── Submit button ── */}
+        <TouchableOpacity onPress={handleSubmit} disabled={loading} activeOpacity={0.88} style={styles.submitWrap}>
           <LinearGradient
             colors={loading ? ['#9CA3AF', '#9CA3AF'] : plan.gradient}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
@@ -456,186 +534,151 @@ export default function SubscribeScreen() {
               <>
                 <ActivityIndicator color="#FFF" size="small" />
                 <Text style={[styles.submitText, { fontFamily: font.bold }]}>
-                  {isRTL ? 'جاري التحضير…' : 'Preparing checkout…'}
+                  {isRTL ? 'جاري المعالجة…' : 'Processing…'}
                 </Text>
               </>
             ) : (
               <>
                 <Ionicons name="lock-closed" size={20} color="#FFF" />
                 <Text style={[styles.submitText, { fontFamily: font.bold }]}>
-                  {isRTL
-                    ? `ادفع ${plan.price} ريال واشترك`
-                    : `Pay SAR ${plan.price} & Subscribe`}
+                  {payMethod === 'card'
+                    ? (isRTL ? `ادفع ${plan.price} ريال` : `Pay SAR ${plan.price}`)
+                    : payMethod === 'tabby'
+                      ? (isRTL ? 'الدفع عبر تابي' : 'Continue with Tabby')
+                      : (isRTL ? 'الدفع عبر تمارا' : 'Continue with Tamara')}
                 </Text>
               </>
             )}
           </LinearGradient>
         </TouchableOpacity>
 
-        <Text style={[styles.termsNote, { fontFamily: font.regular }]}>
+        <Text style={[styles.termsNote, { fontFamily: font.regular, textAlign: 'center' }]}>
           {isRTL
-            ? 'بالضغط على الزر أعلاه سيتم فتح صفحة دفع آمنة تدعم Apple Pay وGoogle Pay وبطاقات الائتمان. يتجدد الاشتراك تلقائياً سنوياً.'
-            : 'Tapping above opens a secure checkout that supports Apple Pay, Google Pay, and credit cards. Auto-renews annually.'}
+            ? 'الدفع آمن ومشفر. يتجدد الاشتراك تلقائياً سنوياً.'
+            : 'Your payment is encrypted and secure. Subscription auto-renews annually.'}
         </Text>
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 // ─── Helper components ────────────────────────────────────────────────────────
-function FormField({
-  label, error, align, font, children,
-}: {
+function Field({ label, error, align, font, children }: {
   label: string; error?: string; align: 'left' | 'right'; font: string; children: React.ReactNode;
 }) {
   return (
-    <View style={{ marginBottom: 16 }}>
-      <Text style={[fieldStyles.label, { fontFamily: font, textAlign: align }]}>{label}</Text>
+    <View style={{ marginBottom: 14 }}>
+      <Text style={[fStyles.label, { fontFamily: font, textAlign: align }]}>{label}</Text>
       {children}
-      {!!error && <Text style={[fieldStyles.error, { textAlign: align }]}>{error}</Text>}
+      {!!error && <Text style={[fStyles.error, { textAlign: align }]}>{error}</Text>}
     </View>
   );
 }
 
-function SummaryRow({
-  label, value, font, rowDir, bold, accent,
-}: {
-  label: string; value: string;
-  font: { regular: string; semibold: string; bold: string };
-  rowDir: 'row' | 'row-reverse';
-  bold?: boolean; accent?: boolean;
+function SummaryRow({ label, value, font, rowDir, bold, accent }: {
+  label: string; value: string; font: any; rowDir: 'row' | 'row-reverse'; bold?: boolean; accent?: boolean;
 }) {
   return (
-    <View style={[rowStyles.row, { flexDirection: rowDir }]}>
-      <Text style={[rowStyles.label, { fontFamily: bold ? font.semibold : font.regular }]}>{label}</Text>
-      <Text style={[rowStyles.value, { fontFamily: bold ? font.bold : font.semibold, color: accent ? '#C21875' : '#120840' }]}>
+    <View style={[styles.summaryRow, { flexDirection: rowDir }]}>
+      <Text style={[styles.summaryLabel, { fontFamily: bold ? font.semibold : font.regular }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { fontFamily: bold ? font.bold : font.regular, color: accent ? '#5B2C91' : '#1A1A1A' }]}>
         {value}
       </Text>
     </View>
   );
 }
 
-const fieldStyles = StyleSheet.create({
-  label: { fontSize: 13, color: '#6B7280', marginBottom: 6 },
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const fStyles = StyleSheet.create({
+  label: { fontSize: 13, color: '#4B5563', marginBottom: 6 },
   error: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
-});
-const rowStyles = StyleSheet.create({
-  row:   { justifyContent: 'space-between', marginBottom: 10 },
-  label: { fontSize: 14, color: '#6B7280' },
-  value: { fontSize: 14 },
 });
 
 const styles = StyleSheet.create({
-  // Header
-  header: {
-    paddingHorizontal: 20, paddingBottom: 32,
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3, shadowRadius: 18, elevation: 12,
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center', alignItems: 'center',
-    marginBottom: 16,
-  },
-  planSummary: { alignItems: 'center', gap: 4 },
-  planSummaryName:     { fontSize: 22, color: '#FFFFFF' },
-  planSummarySubtitle: { fontSize: 13, color: 'rgba(255,255,255,0.65)' },
-  planSummaryPrice:    { flexDirection: 'row', alignItems: 'baseline', marginTop: 6 },
-  planSummaryPriceNum: { fontSize: 40, color: '#FFFFFF' },
-  planSummaryPriceCur: { fontSize: 15, color: 'rgba(255,255,255,0.8)' },
+  container:   { flex: 1, backgroundColor: '#F5F3FF' },
+  header:      { paddingHorizontal: 20, paddingBottom: 20, flexDirection: 'row', alignItems: 'center' },
+  headerTitle: { fontSize: 18, color: '#FFF' },
+  headerPrice: { fontSize: 14, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  scroll:      { padding: 20 },
+  sectionLabel:{ fontSize: 14, color: '#1A1A1A' },
 
-  // Content
-  scroll: { flex: 1 },
-  content: { padding: 20 },
-  sectionLabel: { fontSize: 16, color: '#120840', marginTop: 4 },
-  sectionHint:  { fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 20 },
-
-  // Payment methods badge
-  methodsBadge: {
-    alignItems: 'center', gap: 8, marginBottom: 20,
-    backgroundColor: '#EDE8F8', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
+  // Payment method tabs
+  methodTabs:  { gap: 8, marginBottom: 4 },
+  methodTab: {
+    flex: 1, paddingVertical: 10, paddingHorizontal: 6,
+    borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB',
+    backgroundColor: '#FFF', alignItems: 'center', gap: 4,
   },
-  methodsText: { fontSize: 13, color: '#5B2C91' },
+  methodTabActive: { borderColor: '#5B2C91', backgroundColor: '#F3EEFF' },
+  methodTabText:   { fontSize: 13 },
 
-  // Input
+  // Buyer / card fields
   input: {
-    backgroundColor: '#FFFFFF', borderRadius: 14,
-    borderWidth: 1.5, borderColor: '#E0DBEF',
-    paddingHorizontal: 16, paddingVertical: 15,
-    fontSize: 16, color: '#120840',
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06, shadowRadius: 6, elevation: 2,
+    backgroundColor: '#FFF', borderRadius: 12,
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+    paddingHorizontal: 14, paddingVertical: 13,
+    fontSize: 15, color: '#1A1A1A',
   },
+
+  // Card section
+  cardSection: { marginTop: 4 },
+  cardLogos:   { gap: 6, marginBottom: 12 },
+  cardLogo: {
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderRadius: 6, borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: '#FFF',
+  },
+  cardLogoText: { fontSize: 11, color: '#374151', fontWeight: '700' },
+
+  // BNPL info
+  bnplInfo: {
+    flexDirection: 'row', gap: 10, alignItems: 'flex-start',
+    backgroundColor: '#EDE8F8', borderRadius: 12, padding: 14, marginTop: 8,
+  },
+  bnplInfoText: { fontSize: 13, color: '#4B5563' },
 
   // Order summary
   orderSummary: {
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 16,
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
+    backgroundColor: '#FFF', borderRadius: 16, padding: 16,
+    marginTop: 20, borderWidth: 1, borderColor: '#EBEBF5',
   },
-  orderDivider: { height: 1, backgroundColor: '#E0DBEF', marginVertical: 10 },
+  summaryRow:   { justifyContent: 'space-between', marginBottom: 10 },
+  summaryLabel: { fontSize: 14, color: '#6B7280' },
+  summaryValue: { fontSize: 14 },
+  divider:      { height: 1, backgroundColor: '#EBEBF5', marginVertical: 10 },
 
-  // Features card
+  // Features
   featuresCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 24,
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08, shadowRadius: 10, elevation: 4,
+    backgroundColor: '#FFF', borderRadius: 16, padding: 16,
+    marginTop: 14, borderWidth: 1, borderColor: '#EBEBF5',
   },
-  featureRow: { alignItems: 'center', gap: 10, marginBottom: 10 },
-  featureDot: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#EDE8F8',
-    justifyContent: 'center', alignItems: 'center',
-    flexShrink: 0,
+  featureRow:  { gap: 10, marginBottom: 8, alignItems: 'center' },
+  featureDot:  {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: '#F3EEFF', alignItems: 'center', justifyContent: 'center',
   },
-  featureText: { flex: 1, fontSize: 14, color: '#374151', lineHeight: 20 },
+  featureText: { flex: 1, fontSize: 14, color: '#374151' },
 
   // Error
   errorBanner: {
-    alignItems: 'center', gap: 8, marginBottom: 16,
-    backgroundColor: '#FEF2F2', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 10,
-    borderWidth: 1, borderColor: '#FECACA',
+    backgroundColor: '#FEE2E2', borderRadius: 10, padding: 12,
+    gap: 8, alignItems: 'center', marginTop: 12,
   },
-  errorText: { flex: 1, fontSize: 13, color: '#E74C3C' },
+  errorText:   { flex: 1, fontSize: 13, color: '#991B1B' },
 
   // Submit
-  submitWrap: {
-    borderRadius: 16, overflow: 'hidden', marginBottom: 16,
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 16, elevation: 10,
-  },
-  submitBtn: {
-    paddingVertical: 18,
-    justifyContent: 'center', alignItems: 'center', gap: 10,
-  },
-  submitText: { color: '#FFFFFF', fontSize: 16 },
-  termsNote: { fontSize: 12, color: '#9CA3AF', textAlign: 'center', lineHeight: 18 },
+  submitWrap:  { marginTop: 20, borderRadius: 16, overflow: 'hidden' },
+  submitBtn:   { height: 58, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  submitText:  { color: '#FFF', fontSize: 17 },
+  termsNote:   { fontSize: 12, color: '#9CA3AF', marginTop: 14, lineHeight: 18 },
 
-  // Success / Pending overlays
-  successRoot: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  successCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 28, padding: 32,
-    alignItems: 'center', gap: 14, width: '100%',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2, shadowRadius: 24, elevation: 16,
-  },
-  successCheck: { marginBottom: 4 },
-  successTitle: { fontSize: 24, color: '#120840', textAlign: 'center' },
-  successSub:   { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 22 },
-  successPoints: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#FFF8E1', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 8, marginTop: 4,
-  },
-  successPointsText: { fontSize: 13, color: '#B8860B' },
-
-  // Pending
+  // Success / pending
+  successIcon: { width: 104, height: 104, borderRadius: 52, alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
+  successTitle:{ fontSize: 24, color: '#1A1A1A', marginBottom: 8, textAlign: 'center' },
+  successSub:  { fontSize: 15, color: '#6B7280', textAlign: 'center' },
   pendingBtn: {
-    marginTop: 8, backgroundColor: '#F4F2FA', borderRadius: 14,
-    paddingHorizontal: 28, paddingVertical: 12,
+    backgroundColor: '#2D1B69', borderRadius: 14,
+    paddingHorizontal: 32, paddingVertical: 14,
   },
-  pendingBtnText: { fontSize: 14, color: '#2D1B69' },
+  pendingBtnText: { color: '#FFF', fontSize: 16 },
 });
