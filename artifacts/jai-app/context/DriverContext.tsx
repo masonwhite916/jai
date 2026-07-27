@@ -102,24 +102,6 @@ function apiJobToJob(j: Record<string, any>): Job {
   };
 }
 
-const FALLBACK_JOBS: Job[] = [
-  {
-    id: 'j1', service: 'battery', urgency: 'urgent', status: 'pending',
-    customerName: 'Mohammed Al-Rashid', customerPhone: '+966 50 123 4567',
-    vehicle: { make: 'Toyota', model: 'Camry', year: '2022', plate: 'ABC 1234', color: 'White' },
-    address: 'King Fahd Rd, Al Olaya, Riyadh',
-    coords: { latitude: 24.7136, longitude: 46.6753 },
-    distanceKm: 2.3, etaMin: 8, payout: 120, createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'j2', service: 'tire', urgency: 'standard', status: 'pending',
-    customerName: 'Fahad Al-Harbi', customerPhone: '+966 55 987 6543',
-    vehicle: { make: 'Hyundai', model: 'Santa Fe', year: '2020', plate: 'XYZ 9012', color: 'Black' },
-    address: 'Anas bin Malik, Al Yasmin, Riyadh',
-    coords: { latitude: 24.7456, longitude: 46.6234 },
-    distanceKm: 5.7, etaMin: 18, payout: 90, createdAt: new Date().toISOString(),
-  },
-];
 
 // ── Location permission request (best-effort) ─────────────────────────────────
 async function requestLocationPermission() {
@@ -275,9 +257,9 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       // De-duplicate by id
       const unique = [...new Map(merged.map((j) => [j.id, j])).values()];
       const mapped = unique.map(apiJobToJob);
-      setJobs(mapped.length ? mapped : FALLBACK_JOBS);
+      setJobs(mapped);
     } catch {
-      setJobs(FALLBACK_JOBS);
+      setJobs([]);
     }
   }
 
