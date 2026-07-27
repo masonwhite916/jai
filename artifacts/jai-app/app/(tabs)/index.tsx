@@ -151,7 +151,7 @@ export default function HomeScreen() {
             <Text style={[styles.locationText, { fontFamily: font.regular }]} numberOfLines={1}>
               {gps.status === 'loading'
                 ? t('locating')
-                : gps.city ?? gps.shortAddress ?? (gps.status === 'ready' ? t('locationCity') : t('tapToLocate'))}
+                : gps.fullAddress ?? gps.city ?? gps.shortAddress ?? (gps.status === 'ready' ? t('locationCity') : t('tapToLocate'))}
             </Text>
             <Ionicons name="refresh" size={12} color="rgba(255,255,255,0.5)" />
           </TouchableOpacity>
