@@ -149,6 +149,19 @@ export const chatMessages = pgTable("chat_messages", {
   created_at:  timestamp("created_at").notNull().defaultNow(),
 });
 
+// ── Job ratings ───────────────────────────────────────────────────────────────
+
+export const jobRatings = pgTable("job_ratings", {
+  id:         serial("id").primaryKey(),
+  job_id:     integer("job_id").notNull().references(() => jobs.id, { onDelete: "cascade" }),
+  rater_id:   integer("rater_id").notNull().references(() => users.id),
+  ratee_id:   integer("ratee_id").notNull().references(() => users.id),
+  rater_role: text("rater_role").notNull(), // 'customer' | 'technician'
+  stars:      integer("stars").notNull(),   // 1–5
+  comment:    text("comment"),
+  created_at: timestamp("created_at").notNull().defaultNow(),
+});
+
 // ── TypeScript types ──────────────────────────────────────────────────────────
 
 export type User           = typeof users.$inferSelect;

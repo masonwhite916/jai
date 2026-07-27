@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, Platform, ActivityIndicator, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -49,6 +49,29 @@ export default function JobDetailScreen() {
   const { jobs, isLoading, acceptJob, updateJobStatus, cancelJob } = useDriver();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
+
+  // ── Rating state (technician rates customer after completion) ───────────────
+  const [ratingStars,     setRatingStars]     = useState(0);
+  const [ratingComment,   setRatingComment]   = useState('');
+  const [ratingSubmitted, setRatingSubmitted] = useState(false);
+  const [ratingBusy,      setRatingBusy]      = useState(false);
+
+  async function submitRating(jobId: string) {
+    if (!ratingStars) return;
+    setRatingBusy(true);
+    try {
+      await apiFetch(`/api/jobs/${jobId}/rate`, {
+        method: 'POST',
+        body: JSON.stringify({ stars: ratingStars, comment: ratingComment.trim() || undefined }),
+      });
+      setRatingSubmitted(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    } catch {
+      setRatingSubmitted(true);
+    } finally {
+      setRatingBusy(false);
+    }
+  }
 
   // Direct-fetch fallback: when the job arrives via notification tap before
   // DriverContext has finished loading, fetch it by ID straight from the API.
@@ -224,13 +247,78 @@ export default function JobDetailScreen() {
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => cancelJob(job.id).then(() => router.back())}
-          style={[styles.cancelBtn, { borderColor: 'rgba(231,76,60,0.4)' }]}
-        >
-          <Text style={[styles.cancelText, { fontFamily: font.semibold, color: colors.destructive }]}>{t('driverCancelJob')}</Text>
-        </TouchableOpacity>
+        {/* ── Rate the customer (shown after job is completed) ─────────── */}
+        {job.status === 'completed' && (
+          <View style={[styles.ratingCard, { backgroundColor: colors.card }]}>
+            {ratingSubmitted ? (
+              <View style={styles.ratingThanks}>
+                <Ionicons name="star" size={22} color="#F39C12" />
+                <Text style={[styles.ratingThanksText, { fontFamily: font.semibold, color: colors.text }]}>
+                  {isRTL ? 'شكراً على تقييمك!' : 'Rating submitted!'}
+                </Text>
+              </View>
+            ) : (
+              <>
+                <Text style={[styles.ratingTitle, { fontFamily: font.semibold, color: colors.text, textAlign: align }]}>
+                  {isRTL ? 'كيف كان العميل؟' : 'How was the customer?'}
+                </Text>
+                <View style={[styles.starsRow, { flexDirection: rowDir }]}>
+                  {[1,2,3,4,5].map((s) => (
+                    <TouchableOpacity
+                      key={s}
+                      onPress={() => { setRatingStars(s); Haptics.selectionAsync(); }}
+                      hitSlop={8}
+                    >
+                      <Ionicons
+                        name={s <= ratingStars ? 'star' : 'star-outline'}
+                        size={32}
+                        color="#F39C12"
+                      />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {ratingStars > 0 && (
+                  <TextInput
+                    style={[styles.ratingInput, {
+                      fontFamily: font.regular,
+                      textAlign: isRTL ? 'right' : 'left',
+                      color: colors.text,
+                      borderColor: colors.border,
+                      backgroundColor: colors.background,
+                    }]}
+                    placeholder={isRTL ? 'أضف تعليقاً (اختياري)' : 'Leave a comment (optional)'}
+                    placeholderTextColor={colors.mutedForeground}
+                    value={ratingComment}
+                    onChangeText={setRatingComment}
+                    multiline
+                    maxLength={200}
+                  />
+                )}
+                <TouchableOpacity
+                  style={[styles.ratingSubmitBtn, { opacity: ratingStars === 0 || ratingBusy ? 0.45 : 1 }]}
+                  onPress={() => submitRating(job.id)}
+                  disabled={ratingStars === 0 || ratingBusy}
+                >
+                  <Text style={[styles.ratingSubmitText, { fontFamily: font.semibold }]}>
+                    {ratingBusy
+                      ? (isRTL ? 'جارٍ الإرسال…' : 'Submitting…')
+                      : (isRTL ? 'إرسال التقييم' : 'Submit Rating')}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
+
+        {job.status !== 'completed' && (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => cancelJob(job.id).then(() => router.back())}
+            style={[styles.cancelBtn, { borderColor: 'rgba(231,76,60,0.4)' }]}
+          >
+            <Text style={[styles.cancelText, { fontFamily: font.semibold, color: colors.destructive }]}>{t('driverCancelJob')}</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -258,4 +346,24 @@ const styles = StyleSheet.create({
   btnText: { color: '#FFFFFF', fontSize: 16 },
   cancelBtn: { marginTop: 12, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5 },
   cancelText: { fontSize: 15 },
+
+  // ── Rating ────────────────────────────────────────────────────────────────
+  ratingCard: {
+    marginTop: 12, borderRadius: 16, padding: 18,
+    alignItems: 'center', borderWidth: 1, borderColor: '#EBEBF5',
+  },
+  ratingTitle: { fontSize: 15, marginBottom: 14 },
+  starsRow:    { gap: 10, marginBottom: 14 },
+  ratingInput: {
+    width: '100%', minHeight: 64, borderWidth: 1,
+    borderRadius: 12, padding: 12, fontSize: 14,
+    marginBottom: 12,
+  },
+  ratingSubmitBtn: {
+    width: '100%', height: 46, borderRadius: 12,
+    backgroundColor: '#2D1B69', alignItems: 'center', justifyContent: 'center',
+  },
+  ratingSubmitText: { color: '#FFFFFF', fontSize: 15 },
+  ratingThanks:     { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
+  ratingThanksText: { fontSize: 15 },
 });
