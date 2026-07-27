@@ -1,18 +1,18 @@
 {
   "expo": {
-    "name": "JAI Roadside Assistance",
+    "name": "JAI",
     "slug": "jai-app",
     "version": "1.0.0",
     "description": "Instant roadside assistance in Riyadh. Request towing, flat tyre help, jump-start, fuel delivery and more — track your technician in real time.",
     "privacy": "https://jaiksa.replit.app/jai-web/privacy",
     "primaryColor": "#2D1B69",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/jai-logo.png",
     "scheme": "jai-app",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/icon.png",
+      "image": "./assets/images/jai-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#2D1B69"
     },
@@ -25,7 +25,7 @@
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/icon.png",
+        "foregroundImage": "./assets/images/jai-logo.png",
         "backgroundColor": "#2D1B69"
       },
       "permissions": [
@@ -52,7 +52,7 @@
       "translucent": false
     },
     "web": {
-      "favicon": "./assets/images/icon.png"
+      "favicon": "./assets/images/jai-logo.png"
     },
     "updates": {
       "url": "https://u.expo.dev/c2f8bd92-6111-4050-a3d4-6a6b86c18291",
@@ -77,7 +77,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/icon.png",
+          "icon": "./assets/images/jai-logo.png",
           "color": "#2D1B69",
           "sounds": [],
           "androidMode": "default",
