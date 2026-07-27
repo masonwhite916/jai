@@ -305,7 +305,7 @@ export default function GameScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   return (
-    <View style={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 8 }]}>
+    <View style={[styles.root, { paddingTop: topPad }]}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <LinearGradient colors={['#2D1B69', '#1a0f3f']} style={styles.header}>
@@ -332,6 +332,9 @@ export default function GameScreen() {
           {isRTL ? `الأعلى: ${state.highScore}` : `Best: ${state.highScore}`}
         </Text>
       </View>
+
+      {/* ── Grid area — flex:1 so D-pad always has space below ─────────── */}
+      <View style={styles.gridArea}>
 
       {/* ── Grid ───────────────────────────────────────────────────────── */}
       <View
@@ -420,8 +423,10 @@ export default function GameScreen() {
         </View>
       )}
 
-      {/* ── D-pad ──────────────────────────────────────────────────────── */}
-      <View style={styles.dpad}>
+      </View>{/* end gridArea */}
+
+      {/* ── D-pad — lives OUTSIDE flex-1 area so it's always reachable ─── */}
+      <View style={[styles.dpad, { paddingBottom: insets.bottom + 8 }]}>
         <TouchableOpacity style={styles.dBtn} onPress={() => dirBtn('UP')}>
           <Ionicons name="chevron-up" size={24} color="#fff" />
         </TouchableOpacity>
@@ -446,6 +451,8 @@ export default function GameScreen() {
 // ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#0D0B1F', alignItems: 'center' },
+  // flex:1 middle area — shrinks to give D-pad guaranteed space at the bottom
+  gridArea: { flex: 1, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', width: '100%' },
 
   header: {
     width: '100%', flexDirection: 'row', alignItems: 'center',
