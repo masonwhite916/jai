@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, Platform, ScrollView, KeyboardAvoidingView, Image,
@@ -30,6 +30,14 @@ export default function Auth() {
 
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
+
+  // Android physical devices often ignore autoFocus — force-focus after step change
+  useEffect(() => {
+    if (step === 'otp') {
+      const t = setTimeout(() => otpInputRef.current?.focus(), 150);
+      return () => clearTimeout(t);
+    }
+  }, [step]);
 
   async function handlePhoneSubmit() {
     if (phone.replace(/\D/g, '').length < 9) { setError(t('phoneError')); return; }
