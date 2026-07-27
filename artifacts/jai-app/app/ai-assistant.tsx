@@ -1,12 +1,13 @@
 /**
  * AI Assistant chat screen.
- * Stateless — history lives only in component state, no server persistence.
+ * History is persisted to AsyncStorage (last 20 messages) so the conversation
+ * survives navigation away and app restarts.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TextInput,
   TouchableOpacity, KeyboardAvoidingView, Platform,
-  ActivityIndicator, Linking,
+  ActivityIndicator, Linking, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -15,6 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '@/context/LanguageContext';
 import { getApiBaseUrl } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const HISTORY_KEY = 'jai_ai_chat_history';
+const MAX_STORED  = 20;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface Msg {
@@ -84,24 +89,61 @@ export default function AiAssistantScreen() {
   const router = useRouter();
   const { isRTL, font, t } = useLanguage();
 
-  const [messages, setMessages] = useState<Msg[]>([]);
-  const [input,    setInput]    = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState<string | null>(null);
+  const [messages,  setMessages]  = useState<Msg[]>([]);
+  const [input,     setInput]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState<string | null>(null);
   const [showChips, setShowChips] = useState(true);
   const listRef = useRef<FlatList>(null);
 
-  // Greeting on mount
+  // ── Greeting helper ────────────────────────────────────────────────────────
+  const makeGreeting = useCallback((rtl: boolean): Msg => ({
+    id: 'greeting',
+    role: 'assistant',
+    content: rtl
+      ? 'مرحباً! أنا مساعد جاي الذكي 👋\nيمكنني مساعدتك في الخدمات والأسعار والعضوية وأي استفسار آخر. كيف أساعدك؟'
+      : 'Hi! I\'m the JAI AI Assistant 👋\nI can help with services, pricing, membership, and more. What can I do for you?',
+  }), []);
+
+  // ── Persist helper ─────────────────────────────────────────────────────────
+  const persistHistory = useCallback(async (msgs: Msg[]) => {
+    try {
+      // Strip the greeting bubble — it is re-generated from locale on mount
+      const toStore = msgs
+        .filter((m) => m.id !== 'greeting')
+        .slice(-MAX_STORED);
+      await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(toStore));
+    } catch {
+      // Storage errors are non-fatal
+    }
+  }, []);
+
+  // ── Load history on mount ──────────────────────────────────────────────────
   useEffect(() => {
-    const greeting: Msg = {
-      id: 'greeting',
-      role: 'assistant',
-      content: isRTL
-        ? 'مرحباً! أنا مساعد جاي الذكي 👋\nيمكنني مساعدتك في الخدمات والأسعار والعضوية وأي استفسار آخر. كيف أساعدك؟'
-        : 'Hi! I\'m the JAI AI Assistant 👋\nI can help with services, pricing, membership, and more. What can I do for you?',
-    };
-    setMessages([greeting]);
-  }, [isRTL]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(HISTORY_KEY);
+        if (cancelled) return;
+        if (raw) {
+          const stored: Msg[] = JSON.parse(raw);
+          if (stored.length > 0) {
+            // Prepend greeting so the UI always starts with the welcome bubble
+            setMessages([makeGreeting(isRTL), ...stored]);
+            setShowChips(false);
+            return;
+          }
+        }
+      } catch {
+        // Ignore parse/read errors — fall through to fresh greeting
+      }
+      if (!cancelled) {
+        setMessages([makeGreeting(isRTL)]);
+      }
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount; isRTL intentionally omitted
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -109,6 +151,29 @@ export default function AiAssistantScreen() {
       setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
     }
   }, [messages.length, loading]);
+
+  // ── Clear chat ────────────────────────────────────────────────────────────
+  const clearChat = useCallback(() => {
+    const title   = isRTL ? 'مسح المحادثة' : 'Clear chat';
+    const message = isRTL
+      ? 'هل تريد مسح سجل المحادثة والبدء من جديد؟'
+      : 'Start a fresh conversation? Your current history will be removed.';
+    const cancel  = isRTL ? 'إلغاء' : 'Cancel';
+    const confirm = isRTL ? 'مسح' : 'Clear';
+
+    Alert.alert(title, message, [
+      { text: cancel,  style: 'cancel' },
+      {
+        text: confirm, style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.removeItem(HISTORY_KEY);
+          setMessages([makeGreeting(isRTL)]);
+          setShowChips(true);
+          setError(null);
+        },
+      },
+    ]);
+  }, [isRTL, makeGreeting]);
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
@@ -121,11 +186,12 @@ export default function AiAssistantScreen() {
     setInput('');
 
     const userMsg: Msg = { id: Date.now().toString(), role: 'user', content: trimmed };
-    setMessages((prev) => [...prev, userMsg]);
+    const nextMessages = [...messages, userMsg];
+    setMessages(nextMessages);
     setLoading(true);
 
     try {
-      const history = [...messages, userMsg]
+      const history = nextMessages
         .filter((m) => m.id !== 'greeting') // don't send UI-only greeting
         .map((m) => ({ role: m.role, content: m.content }));
 
@@ -144,13 +210,16 @@ export default function AiAssistantScreen() {
         role: 'assistant',
         content: reply,
       };
-      setMessages((prev) => [...prev, botMsg]);
+      const withBot = [...nextMessages, botMsg];
+      setMessages(withBot);
+      // Persist after every completed exchange
+      persistHistory(withBot);
     } catch {
       setError(isRTL ? 'حدث خطأ. حاول مجدداً.' : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
-  }, [messages, loading, isRTL]);
+  }, [messages, loading, isRTL, persistHistory]);
 
   const handleSend = () => sendMessage(input);
   const chips = isRTL ? CHIPS_AR : CHIPS_EN;
@@ -181,7 +250,9 @@ export default function AiAssistantScreen() {
             </Text>
           </View>
         </View>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity style={styles.clearBtn} onPress={clearChat} accessibilityLabel={isRTL ? 'مسح المحادثة' : 'Clear chat'}>
+          <Ionicons name="trash-outline" size={18} color="rgba(255,255,255,0.75)" />
+        </TouchableOpacity>
       </LinearGradient>
 
       {/* ── Messages + input ── */}
@@ -277,6 +348,11 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 40, height: 40, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.12)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  clearBtn: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center', alignItems: 'center',
   },
   headerCenter: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
