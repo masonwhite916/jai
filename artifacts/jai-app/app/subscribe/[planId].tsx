@@ -23,14 +23,14 @@ const PLAN_DATA = {
     gradient: ['#5B2C91', '#7B2A9E'] as const,
     featuresEn: [
       '5 roadside assistance calls/year',
-      'Towing up to 50 km',
+      'Unlimited towing within Riyadh',
       'Battery jump-start',
       'Flat tyre change',
       '24/7 phone support',
     ],
     featuresAr: [
       '5 طلبات مساعدة سنوياً',
-      'سحب حتى 50 كم',
+      'بدون حد داخل منطقة الرياض',
       'تشغيل البطارية',
       'تغيير الإطار المثقوب',
       'دعم هاتفي 24/7',
