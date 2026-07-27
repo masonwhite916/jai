@@ -300,7 +300,6 @@ export default function AiAssistantScreen() {
           style={styles.waLink}
           onPress={() => Linking.openURL('https://wa.me/966555616449')}
         >
-          <Ionicons name="logo-whatsapp" size={14} color="#25D366" />
           <Text style={[styles.waText, { fontFamily: font.regular }]}>
             {isRTL ? 'تحدث مع فريق الدعم عبر واتساب' : 'Chat with support on WhatsApp'}
           </Text>
