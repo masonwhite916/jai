@@ -181,6 +181,16 @@ export default function AiAssistantScreen() {
   }, [messages.length, loading]);
 
   // ── Clear chat ────────────────────────────────────────────────────────────
+  const doClear = useCallback(async () => {
+    chatGeneration.current += 1;
+    await AsyncStorage.removeItem(HISTORY_KEY);
+    setMessages([makeGreeting(isRTL)]);
+    setShowChips(true);
+    setError(null);
+    setShowStorageWarn(false);
+    storageWarnShown.current = false;
+  }, [isRTL, makeGreeting]);
+
   const clearChat = useCallback(() => {
     const title   = isRTL ? 'مسح المحادثة' : 'Clear chat';
     const message = isRTL
@@ -189,23 +199,19 @@ export default function AiAssistantScreen() {
     const cancel  = isRTL ? 'إلغاء' : 'Cancel';
     const confirm = isRTL ? 'مسح' : 'Clear';
 
+    if (Platform.OS === 'web') {
+      // Alert.alert is a no-op on web — use the browser's built-in confirm dialog.
+      if (window.confirm(`${title}\n${message}`)) {
+        doClear();
+      }
+      return;
+    }
+
     Alert.alert(title, message, [
       { text: cancel,  style: 'cancel' },
-      {
-        text: confirm, style: 'destructive',
-        onPress: async () => {
-          // Bump the generation so any in-flight sendMessage is discarded.
-          chatGeneration.current += 1;
-          await AsyncStorage.removeItem(HISTORY_KEY);
-          setMessages([makeGreeting(isRTL)]);
-          setShowChips(true);
-          setError(null);
-          setShowStorageWarn(false);
-          storageWarnShown.current = false;
-        },
-      },
+      { text: confirm, style: 'destructive', onPress: doClear },
     ]);
-  }, [isRTL, makeGreeting]);
+  }, [isRTL, doClear]);
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const sendMessage = useCallback(async (text: string) => {
