@@ -96,6 +96,50 @@ router.get("/jobs", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/jobs/:id  — fetch a single job (enriched) by its numeric ID
+router.get("/jobs/:id", requireAuth, async (req, res) => {
+  try {
+    if (!requireTechnician(req, res)) return;
+
+    const id = Number(req.params.id);
+    if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+    const [job] = await db
+      .select()
+      .from(jobs)
+      .where(eq(jobs.id, id))
+      .limit(1);
+
+    if (!job) { res.status(404).json({ error: "Job not found" }); return; }
+
+    // Allow: unassigned pending jobs OR jobs owned by this technician
+    if (job.technician_id !== null && job.technician_id !== req.userId) {
+      res.status(403).json({ error: "Not your job" }); return;
+    }
+
+    const [req_] = await db
+      .select()
+      .from(serviceRequests)
+      .where(eq(serviceRequests.id, job.request_id))
+      .limit(1);
+
+    let customer: { name: string | null; phone: string } | null = null;
+    if (req_) {
+      const [c] = await db
+        .select({ name: users.name, phone: users.phone })
+        .from(users)
+        .where(eq(users.id, req_.customer_id))
+        .limit(1);
+      customer = c ?? null;
+    }
+
+    res.json({ job: { ...job, request: req_ ?? null, customer } });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 // PATCH /api/jobs/:id  — advance a job to the next status
 router.patch("/jobs/:id", requireAuth, async (req, res) => {
   try {

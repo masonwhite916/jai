@@ -261,8 +261,20 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const data = await apiFetch<{ jobs: Record<string, any>[] }>('/api/jobs?status=pending');
-      const mapped = data.jobs.map(apiJobToJob);
+      // Fetch both the open job board (pending, unassigned) and this
+      // technician's own jobs (all statuses) so notification taps always find
+      // the job regardless of its current status.
+      const [pendingRes, myRes] = await Promise.all([
+        apiFetch<{ jobs: Record<string, any>[] }>('/api/jobs?status=pending'),
+        apiFetch<{ jobs: Record<string, any>[] }>('/api/jobs'),
+      ]);
+      const merged = [
+        ...(pendingRes.jobs ?? []),
+        ...(myRes.jobs     ?? []),
+      ];
+      // De-duplicate by id
+      const unique = [...new Map(merged.map((j) => [j.id, j])).values()];
+      const mapped = unique.map(apiJobToJob);
       setJobs(mapped.length ? mapped : FALLBACK_JOBS);
     } catch {
       setJobs(FALLBACK_JOBS);
