@@ -19,10 +19,10 @@ import * as Haptics from 'expo-haptics';
 import { useLanguage } from '@/context/LanguageContext';
 
 // ── Grid constants ─────────────────────────────────────────────────────────────
-const { width: SW } = Dimensions.get('window');
+const { width: SW, height: SH } = Dimensions.get('window');
 const COLS = 15;
 const ROWS = 20;
-const CELL = Math.floor((SW - 32) / COLS);   // square cells, e.g. 24px on 402px screen
+// CELL is computed inside the component from both screen axes — see useCELL()
 const HS_KEY = 'jai_rush_high_score_v1';
 
 // ── JAI service types — these are the "food" items ────────────────────────────
@@ -164,6 +164,11 @@ function reducer(state: GameState, action: Action): GameState {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function GameScreen() {
   const insets  = useSafeAreaInsets();
+  // Fit the grid so the full UI (header + levelbar + foodstrip + dpad) always shows without scrolling
+  const FIXED_UI = 56 + 26 + 5 + 42 + 8 + 162 + 20; // header+levelbar+margin+foodstrip+margin+dpad+bottom
+  const cellFromH = Math.floor((SH - insets.top - insets.bottom - FIXED_UI) / ROWS);
+  const cellFromW = Math.floor((SW - 32) / COLS);
+  const CELL = Math.max(13, Math.min(cellFromH, cellFromW));
   const router  = useRouter();
   const { isRTL, font } = useLanguage();
 
@@ -300,12 +305,7 @@ export default function GameScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   return (
-    <ScrollView
-      style={styles.rootScroll}
-      contentContainerStyle={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 16 }]}
-      showsVerticalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled"
-    >
+    <View style={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 8 }]}>
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <LinearGradient colors={['#2D1B69', '#1a0f3f']} style={styles.header}>
@@ -343,7 +343,7 @@ export default function GameScreen() {
         {/* Ready overlay */}
         {state.phase === 'ready' && (
           <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={doStart}>
-            <View style={styles.overlayCard}>
+            <View style={[styles.overlayCard, { width: CELL * COLS - 32 }]}>
               <Text style={[styles.ovTitle, { fontFamily: font.bold }]}>
                 {isRTL ? '🚛 جاي راش' : '🚛 JAI Rush'}
               </Text>
@@ -367,7 +367,7 @@ export default function GameScreen() {
         {/* Game over overlay */}
         {state.phase === 'over' && (
           <View style={styles.overlay}>
-            <View style={styles.overlayCard}>
+            <View style={[styles.overlayCard, { width: CELL * COLS - 32 }]}>
               <Text style={[styles.ovTitle, { fontFamily: font.bold }]}>
                 {isRTL ? '💥 انتهت اللعبة' : '💥 Game Over'}
               </Text>
@@ -439,14 +439,13 @@ export default function GameScreen() {
         </TouchableOpacity>
       </View>
 
-    </ScrollView>
+    </View>
   );
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  rootScroll: { flex: 1, backgroundColor: '#0D0B1F' },
-  root: { alignItems: 'center' },
+  root: { flex: 1, backgroundColor: '#0D0B1F', alignItems: 'center' },
 
   header: {
     width: '100%', flexDirection: 'row', alignItems: 'center',
@@ -504,7 +503,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(45,27,105,0.92)',
     borderRadius: 18,
     borderWidth: 1, borderColor: 'rgba(194,24,117,0.35)',
-    width: CELL * COLS - 32,
+    // width set inline (CELL is component-scoped)
   },
   ovTitle:  { fontSize: 22, color: '#fff' },
   ovSub:    { fontSize: 13, color: 'rgba(255,255,255,0.68)', textAlign: 'center', lineHeight: 20 },
