@@ -117,7 +117,14 @@ router.post("/ai/chat", aiChatLimiter, async (req, res) => {
     res.json({ reply });
   } catch (err) {
     console.error("[ai/chat] error:", err);
-    res.status(502).json({ error: "AI service unavailable" });
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("insufficient_quota") || msg.includes("exceeded your current quota")) {
+      res.status(503).json({ error: "The AI assistant is temporarily out of credits. Please contact support." });
+    } else if (msg.includes("429") || msg.includes("rate_limit")) {
+      res.status(429).json({ error: "Too many requests. Please wait a moment and try again." });
+    } else {
+      res.status(502).json({ error: "AI service unavailable. Please try again later." });
+    }
   }
 });
 
