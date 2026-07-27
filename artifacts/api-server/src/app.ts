@@ -7,6 +7,11 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust the first proxy hop so req.ip reflects the real client IP via
+// x-forwarded-for, but only the outermost (trusted) entry is used.
+// This makes express-rate-limit key on a reliable, non-spoofable address.
+app.set("trust proxy", 1);
+
 app.use(
   pinoHttp({
     logger,

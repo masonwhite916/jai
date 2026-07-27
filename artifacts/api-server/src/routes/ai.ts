@@ -1,7 +1,19 @@
 import { Router, type IRouter } from "express";
 import OpenAI from "openai";
+import rateLimit from "express-rate-limit";
 
 const router: IRouter = Router();
+
+// ── Rate limiter: 20 AI chat requests per minute per IP ───────────────────────
+// Uses req.ip (set by Express trust-proxy, configured in app.ts) so the key
+// is derived from a trusted proxy chain rather than a client-spoofable header.
+const aiChatLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 20,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests. Please wait a moment before trying again." },
+});
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -63,7 +75,7 @@ Contact support via WhatsApp or the call centre. No penalty for cancellation; re
 `.trim();
 
 // ── POST /api/ai/chat ─────────────────────────────────────────────────────────
-router.post("/ai/chat", async (req, res) => {
+router.post("/ai/chat", aiChatLimiter, async (req, res) => {
   try {
     const rawMessages = req.body?.messages;
     if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
