@@ -183,6 +183,7 @@ export default function ProfileScreen() {
             <MenuItem icon="help-circle-outline" label={t('faq')} onPress={() => goTo('faq')} />
             <MenuItem icon="shield-outline" label={t('safetyTips')} onPress={() => goTo('safety')} />
             <MenuItem icon="chatbubble-outline" label={t('aiAssistant')} onPress={openAiAssistant} />
+            <MenuItem icon="game-controller-outline" label={isRTL ? 'جاي راش 🎮' : 'JAI Rush 🎮'} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/game' as any); }} />
           </View>
         </View>
 

@@ -290,6 +290,32 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* ── JAI Rush Game Card ─────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.gameCard}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/game' as any); }}
+          activeOpacity={0.88}
+        >
+          <LinearGradient
+            colors={['#0D0B1F', '#2D1B69']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={[styles.gameCardInner, { flexDirection: rowDir }]}
+          >
+            <View style={styles.gameCardIcon}>
+              <Text style={{ fontSize: 26 }}>🚛</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.gameCardTitle, { fontFamily: font.bold, textAlign: align }]}>
+                {isRTL ? 'العب بينما تنتظر 🎮' : 'Play while you wait 🎮'}
+              </Text>
+              <Text style={[styles.gameCardSub, { fontFamily: font.regular, textAlign: align }]}>
+                {isRTL ? 'جاي راش — إنقاذ على الطريق' : 'JAI Rush — Road Rescue'}
+              </Text>
+            </View>
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color="rgba(255,255,255,0.45)" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         {/* ── Quick Contact ──────────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>
@@ -597,4 +623,23 @@ const styles = StyleSheet.create({
     width: 80, height: 80, borderRadius: 40,
     backgroundColor: 'rgba(255,255,255,0.06)',
   },
+
+  // JAI Rush game card
+  gameCard: {
+    marginHorizontal: 20, marginTop: 20,
+    borderRadius: 18, overflow: 'hidden',
+    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 7,
+  },
+  gameCardInner: {
+    paddingHorizontal: 16, paddingVertical: 14,
+    alignItems: 'center', gap: 12,
+  },
+  gameCardIcon: {
+    width: 46, height: 46, borderRadius: 13,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  gameCardTitle: { fontSize: 14, color: '#FFFFFF', marginBottom: 3 },
+  gameCardSub:   { fontSize: 12, color: 'rgba(255,255,255,0.58)' },
 });
