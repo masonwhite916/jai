@@ -142,7 +142,10 @@ export function DriverProvider({ children }: { children: ReactNode }) {
         try {
           const parsed = JSON.parse(stored);
           setDriver(parsed.driver ?? null);
-          setActiveJob(parsed.activeJob ?? null);
+          // Only restore activeJob if it has a real numeric DB id (fake seed ids like 'j1' are discarded)
+          const restoredJob = parsed.activeJob ?? null;
+          const isRealId = restoredJob && !isNaN(Number(restoredJob.id));
+          setActiveJob(isRealId ? restoredJob : null);
         } catch { /* ignore */ }
       }
       setIsLoading(false);
