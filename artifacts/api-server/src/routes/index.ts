@@ -11,6 +11,7 @@ import vehiclesRouter      from "./vehicles";
 import chatRouter          from "./chat";
 import uploadsRouter       from "./uploads";
 import ratingsRouter       from "./ratings";
+import aiRouter            from "./ai";
 
 const router: IRouter = Router();
 
@@ -26,5 +27,6 @@ router.use(notificationsRouter);
 router.use(vehiclesRouter);
 router.use(chatRouter);
 router.use(ratingsRouter);
+router.use(aiRouter);
 
 export default router;

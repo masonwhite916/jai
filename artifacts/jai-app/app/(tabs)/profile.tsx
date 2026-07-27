@@ -62,7 +62,7 @@ export default function ProfileScreen() {
 
   function openAiAssistant() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Linking.openURL('https://wa.me/966555616449');
+    router.push('/ai-assistant');
   }
 
   return (
