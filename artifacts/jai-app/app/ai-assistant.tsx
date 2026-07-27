@@ -106,6 +106,13 @@ export default function AiAssistantScreen() {
   const [showStorageWarn,  setShowStorageWarn]  = useState(false);
   /** Ensures the storage-size banner fires at most once per session. */
   const storageWarnShown = useRef(false);
+  /**
+   * Incremented every time the user clears chat.
+   * sendMessage captures the value before its async fetch; if the value has
+   * changed by the time the response arrives the result is silently discarded,
+   * preventing cleared history from growing back.
+   */
+  const chatGeneration = useRef(0);
   const listRef = useRef<FlatList>(null);
 
   // ── Greeting helper ────────────────────────────────────────────────────────
@@ -187,10 +194,14 @@ export default function AiAssistantScreen() {
       {
         text: confirm, style: 'destructive',
         onPress: async () => {
+          // Bump the generation so any in-flight sendMessage is discarded.
+          chatGeneration.current += 1;
           await AsyncStorage.removeItem(HISTORY_KEY);
           setMessages([makeGreeting(isRTL)]);
           setShowChips(true);
           setError(null);
+          setShowStorageWarn(false);
+          storageWarnShown.current = false;
         },
       },
     ]);
@@ -205,6 +216,9 @@ export default function AiAssistantScreen() {
     setError(null);
     setShowChips(false);
     setInput('');
+
+    // Snapshot the generation so we can detect a clear that happens mid-flight.
+    const gen = chatGeneration.current;
 
     const userMsg: Msg = { id: Date.now().toString(), role: 'user', content: trimmed };
     const nextMessages = [...messages, userMsg];
@@ -226,6 +240,10 @@ export default function AiAssistantScreen() {
       const data = await resp.json() as { reply?: string; error?: string };
       const reply = data.reply ?? '';
 
+      // If the user cleared chat while this request was in flight, discard the
+      // response — do not update UI or write the old history back to storage.
+      if (chatGeneration.current !== gen) return;
+
       const botMsg: Msg = {
         id: Date.now().toString() + '_bot',
         role: 'assistant',
@@ -236,8 +254,13 @@ export default function AiAssistantScreen() {
       // Persist after every completed exchange
       persistHistory(withBot);
     } catch {
-      setError(isRTL ? 'حدث خطأ. حاول مجدداً.' : 'Something went wrong. Please try again.');
+      // Only surface the error if the chat hasn't been cleared since this
+      // request started; otherwise silently discard it.
+      if (chatGeneration.current === gen) {
+        setError(isRTL ? 'حدث خطأ. حاول مجدداً.' : 'Something went wrong. Please try again.');
+      }
     } finally {
+      // Always clear the loading indicator so it cannot get stuck.
       setLoading(false);
     }
   }, [messages, loading, isRTL, persistHistory]);
