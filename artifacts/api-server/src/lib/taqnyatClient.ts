@@ -164,6 +164,15 @@ export async function checkVerification(
     return { valid: true, status: "approved" };
   }
 
+  const testPhone = getTestPhone();
+  if (testPhone && e164 === testPhone) {
+    if (activeKey === DEV_OTP) {
+      console.log(`[test-bypass] OTP accepted for test number ${e164}`);
+      return { valid: true, status: "approved" };
+    }
+    return { valid: false, status: "incorrect" };
+  }
+
   const { code, message } = await verifyPost({
     apiKey:    getApiKey(),
     numbers:   [toTaqnyatNumber(e164)],
