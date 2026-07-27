@@ -28,7 +28,7 @@ LANGUAGE RULE: Detect the user's language from their message. If they write in A
 
 == ABOUT JAI ==
 JAI is a premium roadside assistance service operating in Saudi Arabia. Available 24/7.
-Coverage cities: Riyadh, Jeddah, Dammam (more cities launching soon).
+Coverage cities: Riyadh only (more cities launching soon).
 Emergency phone: +966 55 561 6449
 WhatsApp: https://wa.me/966555616449
 Average technician arrival: 8–15 minutes inside city limits.
