@@ -7,7 +7,7 @@ import React, {
   useCallback, useEffect, useMemo, useReducer, useRef,
 } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
+  View, Text, StyleSheet, TouchableOpacity, ScrollView,
   PanResponder, Platform, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -300,7 +300,12 @@ export default function GameScreen() {
   const topPad = insets.top + (Platform.OS === 'web' ? 67 : 0);
 
   return (
-    <View style={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 8 }]}>
+    <ScrollView
+      style={styles.rootScroll}
+      contentContainerStyle={[styles.root, { paddingTop: topPad, paddingBottom: insets.bottom + 16 }]}
+      showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+    >
 
       {/* ── Header ─────────────────────────────────────────────────────── */}
       <LinearGradient colors={['#2D1B69', '#1a0f3f']} style={styles.header}>
@@ -434,13 +439,14 @@ export default function GameScreen() {
         </TouchableOpacity>
       </View>
 
-    </View>
+    </ScrollView>
   );
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#0D0B1F', alignItems: 'center' },
+  rootScroll: { flex: 1, backgroundColor: '#0D0B1F' },
+  root: { alignItems: 'center' },
 
   header: {
     width: '100%', flexDirection: 'row', alignItems: 'center',
