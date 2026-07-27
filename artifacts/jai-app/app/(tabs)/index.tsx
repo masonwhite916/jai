@@ -314,6 +314,32 @@ export default function HomeScreen() {
           </LinearGradient>
         </TouchableOpacity>
 
+        {/* ── Spin & Win Card ────────────────────────────────────────────── */}
+        <TouchableOpacity
+          style={styles.gameCard}
+          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/spin-wheel' as any); }}
+          activeOpacity={0.88}
+        >
+          <LinearGradient
+            colors={['#7B0D4E', '#C21875']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={[styles.gameCardInner, { flexDirection: rowDir }]}
+          >
+            <View style={styles.gameCardIcon}>
+              <Text style={{ fontSize: 26 }}>🎰</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.gameCardTitle, { fontFamily: font.bold, textAlign: align }]}>
+                {isRTL ? 'ادِّر العجلة واربح! 🎁' : 'Spin & Win daily prizes! 🎁'}
+              </Text>
+              <Text style={[styles.gameCardSub, { fontFamily: font.regular, textAlign: align }]}>
+                {isRTL ? 'خصومات وخدمات مجانية كل يوم' : 'Discounts & free services every day'}
+              </Text>
+            </View>
+            <Ionicons name={isRTL ? 'chevron-back' : 'chevron-forward'} size={18} color="rgba(255,255,255,0.45)" />
+          </LinearGradient>
+        </TouchableOpacity>
+
         {/* ── Quick Contact ──────────────────────────────────────────────── */}
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>
