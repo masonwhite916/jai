@@ -98,16 +98,35 @@ const IS_DEV = process.env.NODE_ENV !== "production";
 const DEV_OTP = "000000";
 
 /**
+ * Returns the normalised test phone number if TEST_PHONE_NUMBER is set,
+ * otherwise null. Bypasses Taqnyat on production builds for QA testing.
+ */
+function getTestPhone(): string | null {
+  const raw = process.env.TEST_PHONE_NUMBER;
+  if (!raw) return null;
+  return normalizePhone(raw);
+}
+
+/**
  * Send an OTP via Taqnyat Verify.
  * Returns the normalised E.164 phone number.
  *
  * DEV MODE: when NODE_ENV !== "production", skips Taqnyat entirely.
  * Use OTP 000000 to verify any number.
+ *
+ * TEST BYPASS: when TEST_PHONE_NUMBER env var is set, that specific number
+ * skips Taqnyat and accepts OTP 000000 even in production.
  */
 export async function sendVerification(phone: string): Promise<string> {
   const e164 = normalizePhone(phone);
   if (IS_DEV) {
     console.log(`[dev] OTP skipped for ${e164} — use code ${DEV_OTP} to verify`);
+    return e164;
+  }
+
+  const testPhone = getTestPhone();
+  if (testPhone && e164 === testPhone) {
+    console.log(`[test-bypass] OTP skipped for test number ${e164} — use code ${DEV_OTP}`);
     return e164;
   }
 
@@ -143,6 +162,15 @@ export async function checkVerification(
   if (IS_DEV && activeKey === DEV_OTP) {
     console.log(`[dev] OTP accepted for ${e164} (magic dev code)`);
     return { valid: true, status: "approved" };
+  }
+
+  const testPhone = getTestPhone();
+  if (testPhone && e164 === testPhone) {
+    if (activeKey === DEV_OTP) {
+      console.log(`[test-bypass] OTP accepted for test number ${e164}`);
+      return { valid: true, status: "approved" };
+    }
+    return { valid: false, status: "incorrect" };
   }
 
   const { code, message } = await verifyPost({
