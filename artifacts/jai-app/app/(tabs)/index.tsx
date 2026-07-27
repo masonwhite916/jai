@@ -323,14 +323,16 @@ export default function HomeScreen() {
           </Text>
           <View style={[styles.contactRow, { flexDirection: rowDir }]}>
             <TouchableOpacity
-              style={[styles.contactCard, { backgroundColor: '#1DA851' }]}
+              style={[styles.contactCard, { backgroundColor: '#C21875' }]}
               activeOpacity={0.85}
-              onPress={() => Linking.openURL('https://wa.me/966555616449')}
+              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/ai-assistant' as any); }}
             >
-              <View style={styles.contactIconRing}>
-                <Ionicons name="logo-whatsapp" size={22} color="#1DA851" />
+              <View style={[styles.contactIconRing, { backgroundColor: 'rgba(255,255,255,0.18)' }]}>
+                <Ionicons name="chatbubble-ellipses" size={22} color="#FFFFFF" />
               </View>
-              <Text style={[styles.contactLabel, { fontFamily: font.semibold }]}>{t('whatsapp')}</Text>
+              <Text style={[styles.contactLabel, { fontFamily: font.semibold }]}>
+                {isRTL ? 'المساعد الذكي' : 'AI Chat'}
+              </Text>
               <Ionicons name={isRTL ? 'arrow-back' : 'arrow-forward'} size={14} color="rgba(255,255,255,0.7)" />
             </TouchableOpacity>
             <TouchableOpacity
