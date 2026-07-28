@@ -15,10 +15,18 @@ const aiChatLimiter = rateLimit({
   message: { error: "Too many requests. Please wait a moment before trying again." },
 });
 
-const openai = new OpenAI({
-  apiKey:  process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-});
+let _openai: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    const apiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("No OpenAI API key configured (set OPENAI_API_KEY or AI_INTEGRATIONS_OPENAI_API_KEY)");
+    _openai = new OpenAI({
+      apiKey,
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return _openai;
+}
 
 // ── JAI knowledge system prompt ───────────────────────────────────────────────
 const SYSTEM_PROMPT = `
@@ -107,7 +115,7 @@ router.post("/ai/chat", aiChatLimiter, async (req, res) => {
       return;
     }
 
-    const completion = await openai.chat.completions.create({
+    const completion = await getOpenAI().chat.completions.create({
       model: "gpt-5.6-luna",
       max_completion_tokens: 400,
       messages: [
