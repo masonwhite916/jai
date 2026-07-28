@@ -2,6 +2,7 @@ import { createServer } from "http";
 import app from "./app";
 import { dispatch } from "./lib/dispatch";
 import { logger } from "./lib/logger";
+import { runStartupChecks } from "./lib/startupChecks";
 import { warmTechLocationsFromDb } from "./lib/techLocations";
 import { migrateLegacySettingsFile } from "./lib/siteSettings";
 import { db, userSessions } from "@workspace/db";
@@ -20,6 +21,9 @@ const port = Number(rawPort);
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
+
+// Warn about missing optional service credentials before accepting traffic
+runStartupChecks();
 
 // Create an explicit HTTP server so we can attach the WebSocket dispatch server
 // to the same port without opening a second TCP socket.
