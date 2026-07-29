@@ -13,7 +13,7 @@ import Animated, {
   withRepeat, withTiming, withSequence, Easing, withSpring, runOnJS,
 } from 'react-native-reanimated';
 
-const { height: SCREEN_H } = Dimensions.get('window');
+const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 import { useLanguage } from '@/context/LanguageContext';
 import { useApp } from '@/context/AppContext';
 import { jaiSocket } from '@/lib/socket';
@@ -66,8 +66,9 @@ function IndeterminateBar() {
       -1,
     );
   }, []);
+  // translateX must be a number on Android — percentage strings crash the native thread
   const barStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: `${x.value * 100}%` as any }],
+    transform: [{ translateX: x.value * SCREEN_W }],
   }));
   return (
     <View style={{ height: 4, backgroundColor: '#F0F0F8', borderRadius: 2, overflow: 'hidden' }}>
@@ -121,7 +122,8 @@ function EtaProgress() {
   useEffect(() => {
     progress.value = withTiming(0.75, { duration: 3000, easing: Easing.out(Easing.quad) });
   }, []);
-  const barStyle = useAnimatedStyle(() => ({ width: `${progress.value * 100}%` as any }));
+  // width must be a number on Android — percentage strings crash the native thread
+  const barStyle = useAnimatedStyle(() => ({ width: progress.value * SCREEN_W }));
   return (
     <View style={styles.progressTrack}>
       <Animated.View style={[styles.progressFill, barStyle]} />
