@@ -146,6 +146,14 @@ export default function TrackingScreen() {
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align  = isRTL ? 'right' : 'left';
 
+  // ── Null-guard: redirect home if there is no active request ──────────────────
+  useEffect(() => {
+    if (!activeRequest?.jobId && !activeRequest?.requestId) {
+      router.replace('/(tabs)');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Real-time state
   const [jobStatus, setJobStatus] = useState<string>(activeRequest?.status ?? 'pending');
   const [tech, setTech]           = useState<TechInfo | null>(activeRequest?.tech ?? null);

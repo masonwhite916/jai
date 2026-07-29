@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Platform, Image, ActivityIndicator,
+  TextInput, Platform, Image, ActivityIndicator, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,11 +114,16 @@ export default function ServiceRequest() {
           status:      'pending',
         });
       }
-    } catch {
-      // Best-effort; still navigate to tracking so the UX isn't blocked
-    } finally {
+      // Success — navigate to live tracking
       setSubmitting(false);
       router.replace('/tracking');
+    } catch {
+      setSubmitting(false);
+      Alert.alert(
+        isRTL ? 'تعذّر إنشاء الطلب' : 'Could not create request',
+        isRTL ? 'حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.' : 'Something went wrong. Please try again.',
+        [{ text: isRTL ? 'حسناً' : 'OK' }],
+      );
     }
   }
 
