@@ -152,8 +152,10 @@ export default function TrackingScreen() {
   const align  = isRTL ? 'right' : 'left';
 
   // ── Null-guard: redirect home if there is no active request ──────────────────
+  const hasRequest = !!(activeRequest?.jobId || activeRequest?.requestId);
+
   useEffect(() => {
-    if (!activeRequest?.jobId && !activeRequest?.requestId) {
+    if (!hasRequest) {
       router.replace('/(tabs)');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -298,6 +300,18 @@ export default function TrackingScreen() {
   const initials = tech
     ? tech.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
     : (isRTL ? 'ج' : 'T');
+
+  // ── Guard render: while the redirect is in flight, show a friendly indicator ──
+  if (!hasRequest) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8F7FF' }}>
+        <ActivityIndicator size="large" color="#2D1B69" />
+        <Text style={{ marginTop: 16, fontFamily: font.semibold, fontSize: 16, color: '#2D1B69' }}>
+          {isRTL ? 'جارٍ العودة إلى الرئيسية…' : 'Returning to home…'}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
