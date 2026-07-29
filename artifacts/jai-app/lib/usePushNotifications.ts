@@ -50,17 +50,14 @@ async function registerForPushNotifications(): Promise<string | null> {
   // NotificationPermissionsStatus extends PermissionResponse which uses
   // a string `status` field ('granted' | 'denied' | 'undetermined').
   const existingPerms = await Notifications.getPermissionsAsync();
-  let permStatus: string = (existingPerms as any).status ?? '';
+  let permStatus = existingPerms.status;
 
   if (permStatus !== 'granted') {
     const newPerms = await Notifications.requestPermissionsAsync();
-    permStatus = (newPerms as any).status ?? '';
+    permStatus = newPerms.status;
   }
 
-  if (permStatus !== 'granted') {
-    console.log('[Push] Permission not granted');
-    return null;
-  }
+  if (permStatus !== 'granted') return null;
 
   try {
     const tokenData = await Notifications.getExpoPushTokenAsync({
@@ -68,8 +65,7 @@ async function registerForPushNotifications(): Promise<string | null> {
       // For standalone builds, add: projectId: Constants.expoConfig?.extra?.eas?.projectId
     });
     return tokenData.data;
-  } catch (err) {
-    console.log('[Push] Failed to get push token:', err);
+  } catch {
     return null;
   }
 }
@@ -139,10 +135,8 @@ export function usePushNotifications({ isAuthenticated, onForegroundNotification
           body:   JSON.stringify({ push_token: token }),
         });
         tokenUploadedRef.current = true;
-        console.log('[Push] Token registered:', token.slice(0, 24) + '…');
       } catch {
         // Non-fatal — will retry on next app launch
-        console.log('[Push] Failed to upload token to server');
       }
     })();
   }, [isAuthenticated]);

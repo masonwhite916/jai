@@ -61,10 +61,10 @@ const SERVICES: ServiceDef[] = [
   { id: 'electric', labelKey: 'electric', icon: 'flash',             lib: 'Ion', color: '#C21875', bg: '#FCE8F3' },
 ];
 
-function SvcIcon({ icon, lib, color }: { icon: string; lib: string; color: string }) {
+const SvcIcon = React.memo(function SvcIcon({ icon, lib, color }: { icon: string; lib: string; color: string }) {
   if (lib === 'Ion') return <Ionicons name={icon as any} size={26} color={color} />;
   return <MaterialCommunityIcons name={icon as any} size={26} color={color} />;
-}
+});
 
 function PulsingSOS({ onPress }: { onPress: () => void }) {
   const scale = useSharedValue(1);

@@ -38,8 +38,11 @@ function calcEta(customerLat: number, customerLng: number, techLat: number, tech
   return Math.max(1, Math.round(km * 2));
 }
 
+// ── Shared font-set type (avoids `any` on font props) ─────────────────────────
+interface FontSet { regular: string; medium: string; semibold: string; bold: string }
+
 // ── Spinning wrench animation for "working" state ─────────────────────────────
-function SpinningWrench() {
+const SpinningWrench = React.memo(function SpinningWrench() {
   const rotate = useSharedValue(0);
   useEffect(() => {
     rotate.value = withRepeat(
@@ -55,10 +58,10 @@ function SpinningWrench() {
       <Ionicons name="build" size={36} color="#FFFFFF" />
     </Animated.View>
   );
-}
+});
 
 // ── Indeterminate progress bar (no fixed end-point) ──────────────────────────
-function IndeterminateBar() {
+const IndeterminateBar = React.memo(function IndeterminateBar() {
   const x = useSharedValue(-1);
   useEffect(() => {
     x.value = withRepeat(
@@ -75,11 +78,11 @@ function IndeterminateBar() {
       <Animated.View style={[{ position: 'absolute', left: 0, right: 0, height: '100%', backgroundColor: '#2D1B69', borderRadius: 2, width: '55%' }, barStyle]} />
     </View>
   );
-}
+});
 
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
-function PulsingDot({ color = '#2D1B69' }: { color?: string }) {
+const PulsingDot = React.memo(function PulsingDot({ color = '#2D1B69' }: { color?: string }) {
   const scale   = useSharedValue(1);
   const opacity = useSharedValue(1);
   useEffect(() => {
@@ -96,9 +99,9 @@ function PulsingDot({ color = '#2D1B69' }: { color?: string }) {
       <View style={[styles.coreDot, { backgroundColor: color }]} />
     </View>
   );
-}
+});
 
-function SearchingBadge({ font }: { font: any }) {
+const SearchingBadge = React.memo(function SearchingBadge({ font }: { font: FontSet }) {
   const opacity = useSharedValue(1);
   useEffect(() => {
     opacity.value = withRepeat(withSequence(
@@ -115,9 +118,9 @@ function SearchingBadge({ font }: { font: any }) {
       </Text>
     </Animated.View>
   );
-}
+});
 
-function EtaProgress() {
+const EtaProgress = React.memo(function EtaProgress() {
   const progress = useSharedValue(0.2);
   useEffect(() => {
     progress.value = withTiming(0.75, { duration: 3000, easing: Easing.out(Easing.quad) });
@@ -129,7 +132,7 @@ function EtaProgress() {
       <Animated.View style={[styles.progressFill, barStyle]} />
     </View>
   );
-}
+});
 
 // ── Main screen ────────────────────────────────────────────────────────────────
 
