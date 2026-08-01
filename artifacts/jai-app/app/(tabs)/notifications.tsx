@@ -1,46 +1,89 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import React, { useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity,
+  Platform, RefreshControl, ActivityIndicator,
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
-import { useApp } from '@/context/AppContext';
+import { useRouter } from 'expo-router';
+import { useLanguage } from '@/context/LanguageContext';
+import { useApp, type AppNotification } from '@/context/AppContext';
+
+// ── Relative time helper ───────────────────────────────────────────────────────
+
+function relativeTime(isoString: string, isRTL: boolean): string {
+  const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+  if (diff < 60)   return isRTL ? 'الآن'                : 'Just now';
+  if (diff < 3600) return isRTL ? `منذ ${Math.floor(diff / 60)} د`    : `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return isRTL ? `منذ ${Math.floor(diff / 3600)} س` : `${Math.floor(diff / 3600)}h ago`;
+  const days = Math.floor(diff / 86400);
+  if (days === 1)  return isRTL ? 'أمس'                 : 'Yesterday';
+  if (days < 7)   return isRTL ? `منذ ${days} أيام`     : `${days}d ago`;
+  // Older: show date
+  return new Date(isoString).toLocaleDateString(isRTL ? 'ar-SA' : 'en-US', {
+    month: 'short', day: 'numeric',
+  });
+}
+
+// ── Notification type derivation ───────────────────────────────────────────────
+
+type NotifType = 'service' | 'offer' | 'system';
+
+function notifType(n: AppNotification): NotifType {
+  const t = n.data?.type as string | undefined;
+  if (t === 'job_accepted' || t === 'job_completed' || t === 'new_job') return 'service';
+  return 'system';
+}
+
+const TYPE_CONFIG: Record<NotifType, { icon: string; color: string; bg: string }> = {
+  service: { icon: 'car',                color: '#2D1B69', bg: '#EDE8F8' },
+  offer:   { icon: 'gift',               color: '#C21875', bg: '#FCEEF6' },
+  system:  { icon: 'information-circle', color: '#F39C12', bg: '#FEF6E8' },
+};
+
+// ── Screen ─────────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen() {
-  const insets = useSafeAreaInsets();
-  const { t, isRTL, font } = useLanguage();
-  const { notifReadIds, markNotifRead, markAllNotifsRead } = useApp();
+  const insets  = useSafeAreaInsets();
+  const { isRTL, font } = useLanguage();
+  const router  = useRouter();
+  const {
+    notifications, unreadCount,
+    fetchNotifications, markNotifRead, markAllNotifsRead,
+  } = useApp();
+
   const rowDir = isRTL ? 'row-reverse' : 'row';
-  const align = isRTL ? 'right' : 'left';
+  const align  = isRTL ? 'right' : 'left';
 
-  const NOTIFICATIONS = [
-    { id: 'n1', type: 'service' as const, titleKey: 'notif1Title' as TranslationKeys, bodyKey: 'notif1Body' as TranslationKeys, timeKey: 'notifAgo2' as TranslationKeys, read: false },
-    { id: 'n2', type: 'service' as const, titleKey: 'notif2Title' as TranslationKeys, bodyKey: 'notif2Body' as TranslationKeys, timeKey: 'notifAgo5' as TranslationKeys, read: false },
-    { id: 'n3', type: 'offer' as const, titleKey: 'notif3Title' as TranslationKeys, bodyKey: 'notif3Body' as TranslationKeys, timeKey: 'notifAgo1h' as TranslationKeys, read: true },
-    { id: 'n4', type: 'service' as const, titleKey: 'notif4Title' as TranslationKeys, bodyKey: 'notif4Body' as TranslationKeys, timeKey: 'notifDate15' as TranslationKeys, read: true },
-    { id: 'n5', type: 'system' as const, titleKey: 'notif5Title' as TranslationKeys, bodyKey: 'notif5Body' as TranslationKeys, timeKey: 'notifDate12' as TranslationKeys, read: true },
-    { id: 'n6', type: 'offer' as const, titleKey: 'notif6Title' as TranslationKeys, bodyKey: 'notif6Body' as TranslationKeys, timeKey: 'notifDate10' as TranslationKeys, read: true },
-  ];
+  const [refreshing, setRefreshing] = React.useState(false);
 
-  const TYPE_CONFIG = {
-    service: { icon: 'car', color: '#2D1B69', bg: '#EDE8F8' },
-    offer: { icon: 'gift', color: '#C21875', bg: '#FCEEF6' },
-    system: { icon: 'information-circle', color: '#F39C12', bg: '#FEF6E8' },
-  };
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchNotifications().catch(() => {});
+    setRefreshing(false);
+  }, [fetchNotifications]);
 
-  const isRead = (n: { id: string; read: boolean }) => n.read || notifReadIds.includes(n.id);
-  const unreadCount = NOTIFICATIONS.filter(n => !isRead(n)).length;
-
-  function markRead(id: string) {
+  async function handleMarkRead(n: AppNotification) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    markNotifRead(id);
+    await markNotifRead(n.id);
+
+    // Deep-link into the relevant screen
+    const data = n.data ?? {};
+    if (data.screen === 'tracking' && data.jobId) {
+      router.push({ pathname: '/(tabs)/requests' });
+    } else if (data.screen === 'requests' || data.screen === 'job') {
+      router.push({ pathname: '/(tabs)/requests' });
+    }
   }
 
-  function markAllRead() {
+  async function handleMarkAllRead() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    markAllNotifsRead();
+    await markAllNotifsRead();
   }
+
+  const isEmpty = notifications.length === 0 && !refreshing;
 
   return (
     <View style={{ flex: 1, backgroundColor: '#F8F9FC' }}>
@@ -49,14 +92,20 @@ export default function NotificationsScreen() {
         style={[styles.header, { paddingTop: insets.top + 16 + (Platform.OS === 'web' ? 67 : 0) }]}
       >
         <View style={[styles.headerRow, { flexDirection: rowDir }]}>
-          <Text style={[styles.headerTitle, { fontFamily: font.bold, flex: 1, textAlign: align }]}>{t('notifications')}</Text>
+          <Text style={[styles.headerTitle, { fontFamily: font.bold, flex: 1, textAlign: align }]}>
+            {isRTL ? 'الإشعارات' : 'Notifications'}
+          </Text>
           {unreadCount > 0 && (
             <>
               <View style={styles.unreadBadge}>
-                <Text style={[styles.unreadText, { fontFamily: font.bold }]}>{unreadCount} {t('newNotifs')}</Text>
+                <Text style={[styles.unreadText, { fontFamily: font.bold }]}>
+                  {unreadCount} {isRTL ? 'جديد' : 'new'}
+                </Text>
               </View>
-              <TouchableOpacity onPress={markAllRead} hitSlop={8}>
-                <Text style={[styles.markAllText, { fontFamily: font.semibold }]}>{t('markAllRead')}</Text>
+              <TouchableOpacity onPress={handleMarkAllRead} hitSlop={8}>
+                <Text style={[styles.markAllText, { fontFamily: font.semibold }]}>
+                  {isRTL ? 'قراءة الكل' : 'Mark all read'}
+                </Text>
               </TouchableOpacity>
             </>
           )}
@@ -67,35 +116,74 @@ export default function NotificationsScreen() {
         style={{ flex: 1 }}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ padding: 20, paddingBottom: 100 + (Platform.OS === 'web' ? 34 : 0) }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#2D1B69"
+            colors={['#2D1B69']}
+          />
+        }
       >
-        {NOTIFICATIONS.map((notif) => {
-          const cfg = TYPE_CONFIG[notif.type];
-          const read = isRead(notif);
-          return (
-            <TouchableOpacity
-              key={notif.id}
-              style={[styles.notifCard, !read && styles.notifCardUnread, { flexDirection: rowDir }]}
-              activeOpacity={0.85}
-              onPress={() => markRead(notif.id)}
-            >
-              {!read && <View style={[styles.unreadDot, isRTL ? { left: 16, right: undefined } : { right: 16 }]} />}
-              <View style={[styles.notifIcon, { backgroundColor: cfg.bg }]}>
-                <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
-              </View>
-              <View style={{ flex: 1, gap: 4 }}>
-                <View style={[styles.notifTopRow, { flexDirection: rowDir }]}>
-                  <Text style={[styles.notifTitle, !read && { fontFamily: font.bold }, read && { fontFamily: font.medium }, { textAlign: align, flex: 1 }]} numberOfLines={1}>
-                    {t(notif.titleKey)}
-                  </Text>
-                  <Text style={[styles.notifTime, { fontFamily: font.regular }]}>{t(notif.timeKey)}</Text>
+        {isEmpty ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="notifications-off-outline" size={48} color="#D1D5DB" />
+            <Text style={[styles.emptyTitle, { fontFamily: font.semibold }]}>
+              {isRTL ? 'لا توجد إشعارات' : 'No notifications yet'}
+            </Text>
+            <Text style={[styles.emptyBody, { fontFamily: font.regular }]}>
+              {isRTL
+                ? 'ستظهر هنا إشعارات طلباتك وعروضك'
+                : "Your service updates and alerts will appear here"}
+            </Text>
+          </View>
+        ) : (
+          notifications.map((notif) => {
+            const type = notifType(notif);
+            const cfg  = TYPE_CONFIG[type];
+            return (
+              <TouchableOpacity
+                key={notif.id}
+                style={[styles.notifCard, !notif.read && styles.notifCardUnread, { flexDirection: rowDir }]}
+                activeOpacity={0.85}
+                onPress={() => handleMarkRead(notif)}
+              >
+                {!notif.read && (
+                  <View style={[styles.unreadDot, isRTL ? { left: 16, right: undefined } : { right: 16 }]} />
+                )}
+                <View style={[styles.notifIcon, { backgroundColor: cfg.bg }]}>
+                  <Ionicons name={cfg.icon as any} size={20} color={cfg.color} />
                 </View>
-                <Text style={[styles.notifBody, { fontFamily: font.regular, textAlign: align, writingDirection: isRTL ? 'rtl' : 'ltr' }]} numberOfLines={2}>
-                  {t(notif.bodyKey)}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+                <View style={{ flex: 1, gap: 4 }}>
+                  <View style={[styles.notifTopRow, { flexDirection: rowDir }]}>
+                    <Text
+                      style={[
+                        styles.notifTitle,
+                        !notif.read ? { fontFamily: font.bold } : { fontFamily: font.medium },
+                        { textAlign: align, flex: 1 },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {notif.title}
+                    </Text>
+                    <Text style={[styles.notifTime, { fontFamily: font.regular }]}>
+                      {relativeTime(notif.created_at, isRTL)}
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.notifBody,
+                      { fontFamily: font.regular, textAlign: align, writingDirection: isRTL ? 'rtl' : 'ltr' },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {notif.body}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </View>
   );
@@ -108,6 +196,7 @@ const styles = StyleSheet.create({
   unreadBadge: { backgroundColor: '#C21875', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   unreadText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   markAllText: { fontSize: 12, color: 'rgba(255,255,255,0.85)' },
+
   notifCard: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16,
     alignItems: 'flex-start', gap: 12, marginBottom: 10, position: 'relative',
@@ -123,4 +212,8 @@ const styles = StyleSheet.create({
   notifTitle: { fontSize: 14, color: '#1A1A1A' },
   notifTime: { fontSize: 12, color: '#9CA3AF', flexShrink: 0 },
   notifBody: { fontSize: 13, color: '#6B7280', lineHeight: 18 },
+
+  emptyState: { alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyTitle: { fontSize: 16, color: '#374151', marginTop: 4 },
+  emptyBody:  { fontSize: 13, color: '#9CA3AF', textAlign: 'center', maxWidth: 260 },
 });

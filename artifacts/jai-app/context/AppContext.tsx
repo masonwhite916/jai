@@ -42,6 +42,16 @@ export interface ActiveRequest {
   payout?: number;
 }
 
+export interface AppNotification {
+  id: number;
+  user_id: number;
+  title: string;
+  body: string;
+  data: Record<string, unknown> | null;
+  read: boolean;
+  created_at: string;
+}
+
 interface AppContextType {
   isLoading: boolean;
   hasSeenOnboarding: boolean;
@@ -60,9 +70,13 @@ interface AppContextType {
   activeRequest: ActiveRequest | null;
   setActiveRequest: (r: ActiveRequest | null) => void;
   // Notifications
+  notifications: AppNotification[];
+  unreadCount: number;
+  fetchNotifications: () => Promise<void>;
+  markNotifRead: (id: number) => Promise<void>;
+  markAllNotifsRead: () => Promise<void>;
+  /** @deprecated use notifications array instead */
   notifReadIds: string[];
-  markNotifRead: (id: string) => void;
-  markAllNotifsRead: () => void;
 }
 
 const AppContext = createContext<AppContextType | null>(null);
@@ -104,7 +118,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   const [role, setRoleState] = useState<'customer' | 'technician' | null>(
     preloaded ? initialSession.role : null,
   );
-  const [notifReadIds, setNotifReadIds] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [activeRequest, setActiveRequestState] = useState<ActiveRequest | null>(null);
 
   const isGuestRef = useRef(isGuest);
@@ -144,6 +158,23 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
   }, []);
+
+  // Fetch notifications whenever authenticated state is true and token is set
+  useEffect(() => {
+    if (isAuthenticated && !isGuest && getAuthToken()) {
+      fetchNotifications().catch(() => {});
+    } else {
+      setNotifications([]);
+    }
+  }, [isAuthenticated, isGuest]);
+
+  async function fetchNotifications() {
+    if (!getAuthToken()) return;
+    try {
+      const resp = await apiFetch<{ notifications: AppNotification[] }>('/api/notifications?limit=50');
+      setNotifications(resp.notifications ?? []);
+    } catch { /* silently ignore network errors */ }
+  }
 
   async function loadState() {
     try {
@@ -231,14 +262,25 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setIsAuthenticated(false);
     setIsGuest(false);
     setActiveRequestState(null);
+    setNotifications([]);
   }
 
-  function markNotifRead(id: string) {
-    setNotifReadIds(prev => prev.includes(id) ? prev : [...prev, id]);
+  async function markNotifRead(id: number) {
+    // Optimistic update
+    setNotifications(prev =>
+      prev.map(n => n.id === id ? { ...n, read: true } : n),
+    );
+    try {
+      await apiFetch(`/api/notifications/${id}/read`, { method: 'PATCH' });
+    } catch { /* revert is cosmetic — ignore */ }
   }
 
-  function markAllNotifsRead() {
-    setNotifReadIds(['n1', 'n2', 'n3', 'n4', 'n5', 'n6']);
+  async function markAllNotifsRead() {
+    // Optimistic update
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    try {
+      await apiFetch('/api/notifications/read-all', { method: 'POST' });
+    } catch { /* ignore */ }
   }
 
   async function updateUser(updates: Partial<User>) {
@@ -276,12 +318,18 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     setActiveRequestState(r);
   }
 
+  const unreadCount = notifications.filter(n => !n.read).length;
+
+  // Derived legacy list for any component that still reads notifReadIds
+  const notifReadIds = notifications.filter(n => n.read).map(n => String(n.id));
+
   return (
     <AppContext.Provider value={{
       isLoading, hasSeenOnboarding, isAuthenticated, user, role,
       setRole, markOnboardingDone, login, loginAsGuest, logout, updateUser, refreshUser,
       activeRequest, setActiveRequest,
-      notifReadIds, markNotifRead, markAllNotifsRead,
+      notifications, unreadCount, fetchNotifications, markNotifRead, markAllNotifsRead,
+      notifReadIds,
     }}>
       {children}
     </AppContext.Provider>
