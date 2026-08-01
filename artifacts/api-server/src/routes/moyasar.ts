@@ -16,6 +16,14 @@ import { eq } from "drizzle-orm";
 
 const router: IRouter = Router();
 
+/**
+ * TESTING BYPASS — when PAYMENT_MOCK_MODE=true, card checkout succeeds
+ * instantly without contacting Moyasar (no real charge). Remove the env var
+ * once the Moyasar account is activated for live payments.
+ */
+const MOCK_MODE = process.env.PAYMENT_MOCK_MODE === "true";
+const MOCK_PREFIX = "mock_";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +72,17 @@ router.post("/payment/checkout", async (req, res) => {
       return;
     }
 
+    // TESTING BYPASS: simulate an instantly-paid payment
+    if (MOCK_MODE) {
+      console.warn(`[payment] MOCK MODE — simulating paid payment for plan "${plan}" (no real charge)`);
+      res.json({
+        paymentId:      `${MOCK_PREFIX}${Date.now()}`,
+        status:         "paid",
+        transactionUrl: null,
+      });
+      return;
+    }
+
     // Strip spaces/dashes from card number before sending to Moyasar
     const cleanNumber = cardNumber.replace(/\D/g, "");
 
@@ -104,6 +123,13 @@ router.post("/payment/checkout", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/payment/status/:id", async (req, res) => {
   try {
+    // TESTING BYPASS: mock payments are always "paid"
+    const id = req.params.id as string;
+    if (MOCK_MODE && id.startsWith(MOCK_PREFIX)) {
+      res.json({ paymentId: id, status: "paid", amount: 0, currency: "SAR" });
+      return;
+    }
+
     const payment = (await moyasarFetch(
       "GET",
       `/payments/${req.params.id as string}`,

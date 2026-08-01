@@ -29,6 +29,7 @@ WHOP_PLAN_RENTAL = "plan_ZdaSBn6h2C7tn"
 TAQNYAT_LANG = "ar"
 TAQNYAT_SENDER = "jaiksa"
 TECHNICIAN_INVITE_CODE = "JAI-TECH-2026"
+PAYMENT_MOCK_MODE = "true"
 
 [nix]
 channel = "stable-25_05"
