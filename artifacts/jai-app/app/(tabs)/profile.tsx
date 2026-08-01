@@ -171,7 +171,7 @@ export default function ProfileScreen() {
           <Text style={[styles.sectionTitle, { fontFamily: font.bold, textAlign: align }]}>{t('account')}</Text>
           <View style={styles.menuGroup}>
             <MenuItem icon="location-outline" label={t('savedLocations')} sublabel={gps.city ?? undefined} onPress={() => goTo('saved-locations')} />
-            <MenuItem icon="receipt-outline" label={t('invoices')} onPress={() => goTo('invoices')} />
+            <MenuItem icon="receipt-outline" label={t('invoices')} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/payments' as any); }} />
             <MenuItem icon="gift-outline" label={t('rewards')} sublabel={`${user?.points ?? 0} ${t('pointsLabel')}`} onPress={() => goTo('rewards')} />
             <MenuItem icon="people-outline" label={t('referral')} sublabel={t('referralSub')} onPress={() => goTo('referral')} />
           </View>

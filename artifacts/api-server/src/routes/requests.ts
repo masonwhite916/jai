@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { db, serviceRequests, jobs, users } from "@workspace/db";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
 import { notifyTechniciansNewJob } from "../lib/pushNotifications";
@@ -287,6 +287,67 @@ router.patch("/requests/:id", requireAuth, async (req, res) => {
 
     if (!updated) { res.status(404).json({ error: "Not found" }); return; }
     res.json(updated);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// GET /api/payments — completed-service payment history for the current customer
+router.get("/payments", requireAuth, async (req, res) => {
+  try {
+    // Single query: join the most-recent completed job to get the payout.
+    // Only service_requests with status='completed' are returned so users
+    // never see a receipt before the service is finished.
+    const rows = await db
+      .select({
+        id:             serviceRequests.id,
+        service_type:   serviceRequests.service_type,
+        created_at:     serviceRequests.created_at,
+        payment_id:     serviceRequests.payment_id,
+        payment_method: serviceRequests.payment_method,
+        address:        serviceRequests.address,
+        payout:         jobs.payout,
+      })
+      .from(serviceRequests)
+      .leftJoin(jobs, eq(jobs.request_id, serviceRequests.id))
+      .where(
+        and(
+          eq(serviceRequests.customer_id, req.userId!),
+          eq(serviceRequests.status, "completed"),
+          isNotNull(serviceRequests.payment_method),
+        ),
+      )
+      .orderBy(desc(serviceRequests.created_at));
+
+    const PAYOUTS: Record<string, number> = {
+      battery: 120, fuel: 80, tire: 350, tow: 500, lockout: 200, mechanic: 300, electric: 280,
+    };
+
+    // De-duplicate: a request may have multiple job rows after a left-join;
+    // collapse to one entry per request, preferring the highest payout seen.
+    const seen = new Map<number, (typeof rows)[0]>();
+    for (const row of rows) {
+      const existing = seen.get(row.id);
+      if (!existing || (row.payout ?? 0) > (existing.payout ?? 0)) {
+        seen.set(row.id, row);
+      }
+    }
+
+    const payments = Array.from(seen.values()).map((r) => ({
+      id:             r.id,
+      service_type:   r.service_type,
+      created_at:     r.created_at,
+      payment_id:     r.payment_id,
+      payment_method: r.payment_method,
+      address:        r.address,
+      amount:         r.payout ?? PAYOUTS[r.service_type] ?? 0,
+    }));
+
+    // Maintain descending chronological order after Map de-dup
+    payments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    res.json({ payments });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });
