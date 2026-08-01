@@ -87,7 +87,7 @@ function NotificationBanner({ banner, onDismiss }: { banner: BannerData; onDismi
 
 // ── Push notification setup (must be inside AppProvider) ──────────────────────
 function PushNotificationSetup({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, fetchNotifications } = useApp();
   const [banner, setBanner] = useState<BannerData | null>(null);
 
   const onForegroundNotification = useCallback((notification: Notifications.Notification) => {
@@ -97,7 +97,9 @@ function PushNotificationSetup({ children }: { children: React.ReactNode }) {
       title: content.title ?? 'JAI',
       body:  content.body  ?? '',
     });
-  }, []);
+    // Refresh notification list so the badge count updates immediately
+    fetchNotifications().catch(() => {});
+  }, [fetchNotifications]);
 
   usePushNotifications({ isAuthenticated, onForegroundNotification });
 
