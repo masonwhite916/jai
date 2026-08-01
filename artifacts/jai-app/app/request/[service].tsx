@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, Platform, Image, ActivityIndicator, Alert,
@@ -81,6 +82,44 @@ export default function ServiceRequest() {
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
 
+  // ── Durable idempotency key — persisted in AsyncStorage across app restarts ───
+  //
+  // Lifecycle:
+  //   created  → on first mount for this user+service (no existing key in storage)
+  //   reused   → on every subsequent mount until a TERMINAL outcome is reached
+  //   cleared  → after payment confirmed paid (success) OR confirmed failed
+  //              (definitive decline); NOT cleared on network errors (unknown
+  //              outcome — key must survive so a retry sends the same key and
+  //              Moyasar returns the original result, preventing a second charge)
+  //
+  // A crash between charge and response leaves the key in storage; the next
+  // launch reuses it and Moyasar returns the already-charged payment rather than
+  // creating a new one.
+  const idempotencyKeyRef  = useRef<string>(genRef()); // may be overwritten by effect
+  const idemStorageKey     = `jai_idem_${user?.id ?? 'anon'}_${service ?? 'battery'}`;
+  // Gate card submission until AsyncStorage hydration completes so we never
+  // send an un-persisted in-memory key that won't survive a crash.
+  const [idemKeyReady, setIdemKeyReady] = useState(false);
+
+  useEffect(() => {
+    AsyncStorage.getItem(idemStorageKey)
+      .then(saved => {
+        if (saved) {
+          idempotencyKeyRef.current = saved;
+        } else {
+          AsyncStorage.setItem(idemStorageKey, idempotencyKeyRef.current).catch(() => {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => setIdemKeyReady(true));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Call ONLY on TRUE terminal outcomes (confirmed paid or confirmed declined). */
+  function clearIdempotencyKey() {
+    AsyncStorage.removeItem(idemStorageKey).catch(() => {});
+  }
+
   // ── Card payment fields (shown inline for non-members choosing card) ──────
   const [cardName,   setCardName]   = useState(user?.name ?? '');
   const [cardNumber, setCardNumber] = useState('');
@@ -89,16 +128,22 @@ export default function ServiceRequest() {
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
 
   // ── Poll Moyasar payment status (card checkout with possible 3DS) ──────────
-  async function pollPaymentStatus(paymentId: string, attempts = 8): Promise<boolean> {
+  // Returns a tri-state:
+  //   'paid'    — Moyasar confirmed the charge succeeded
+  //   'failed'  — Moyasar explicitly declined the charge (terminal, clear key)
+  //   'unknown' — network errors / timeout (outcome uncertain, preserve key)
+  async function pollPaymentStatus(paymentId: string, attempts = 8): Promise<'paid' | 'failed' | 'unknown'> {
     for (let i = 0; i < attempts; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, 2000));
       try {
         const data = await apiFetch<{ status: string }>(`/api/payment/status/${paymentId}`);
-        if (data.status === 'paid')   return true;
-        if (data.status === 'failed') return false;
+        if (data.status === 'paid')   return 'paid';
+        if (data.status === 'failed') return 'failed';
+        // status === 'initiated' / 'authorized' — still in flight, keep polling
       } catch { /* network blip — keep polling */ }
     }
-    return false;
+    // All attempts exhausted without a terminal status — outcome is uncertain
+    return 'unknown';
   }
 
   // ── Poll Apple Pay service-ref-lookup ────────────────────────────────────
@@ -202,12 +247,13 @@ export default function ServiceRequest() {
       }>('/api/payment/service-checkout', {
         method: 'POST',
         body: JSON.stringify({
-          service_type: service ?? 'battery',
-          cardName:     cardName.trim(),
-          cardNumber:   cardNumber.replace(/\D/g, ''),
-          month:        mm?.trim(),
-          year:         `20${yy?.trim()}`,
-          cvc:          cvc.trim(),
+          service_type:    service ?? 'battery',
+          cardName:        cardName.trim(),
+          cardNumber:      cardNumber.replace(/\D/g, ''),
+          month:           mm?.trim(),
+          year:            `20${yy?.trim()}`,
+          cvc:             cvc.trim(),
+          idempotencyKey:  idempotencyKeyRef.current,
         }),
       });
 
@@ -221,13 +267,28 @@ export default function ServiceRequest() {
 
       if (data.status === 'paid') return { payment_id: data.paymentId };
 
-      const paid = await pollPaymentStatus(data.paymentId);
-      if (!paid) {
+      const pollResult = await pollPaymentStatus(data.paymentId);
+      if (pollResult === 'paid') {
+        return { payment_id: data.paymentId };
+      }
+      if (pollResult === 'failed') {
+        // Moyasar explicitly declined — rotate key immediately so a corrected
+        // retry on the same screen uses a fresh payment intent, not the cached
+        // failed result that Moyasar would return for the same idempotency key.
+        const freshKey = genRef();
+        idempotencyKeyRef.current = freshKey;
+        AsyncStorage.setItem(idemStorageKey, freshKey).catch(() => {});
         throw new Error(isRTL
           ? 'فشل الدفع. يرجى التحقق من بيانات البطاقة والمحاولة مجدداً.'
           : 'Payment failed. Please check your card details and try again.');
       }
-      return { payment_id: data.paymentId };
+      // pollResult === 'unknown': network errors exhausted polling — outcome uncertain.
+      // Do NOT clear the key; the charge may have gone through. The same key will be
+      // sent on the next attempt so Moyasar returns the original result instead of
+      // creating a second charge.
+      throw new Error(isRTL
+        ? 'تعذّر التحقق من حالة الدفع. يرجى المحاولة مجدداً.'
+        : 'Could not confirm payment status. Please try again.');
     }
 
     return {};
@@ -302,6 +363,7 @@ export default function ServiceRequest() {
         });
       }
       setSubmitting(false);
+      clearIdempotencyKey(); // terminal success — next request gets a fresh key
       router.replace('/tracking');
     } catch (err) {
       setSubmitting(false);
@@ -363,7 +425,14 @@ export default function ServiceRequest() {
     gps.refresh();
   }
 
-  const canProceed = step === 1 ? !!selectedVehicle : true;
+  // On the final step, block card submission until the idempotency key has been
+  // loaded (or freshly persisted) to AsyncStorage — prevents sending an in-memory
+  // key that won't survive a crash mid-payment.
+  const isCardPayment = !isCovered && (paymentIdx === 1 || paymentIdx === 2);
+  const canProceed =
+    step === 1 ? !!selectedVehicle
+    : step === TOTAL_STEPS && isCardPayment ? idemKeyReady
+    : true;
 
   const PAYMENT_OPTIONS: { label: TranslationKeys; iconName: string }[] = [
     { label: 'applePay', iconName: 'logo-apple' },

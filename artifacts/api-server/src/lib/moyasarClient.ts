@@ -17,14 +17,19 @@ export async function moyasarFetch<T = unknown>(
   method: "GET" | "POST",
   path: string,
   body?: unknown,
+  idempotencyKey?: string,
 ): Promise<T> {
+  const headers: Record<string, string> = {
+    Authorization: authHeader(),
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (idempotencyKey) {
+    headers["Moyasar-Idempotency-Key"] = idempotencyKey;
+  }
   const res = await fetch(`${MOYASAR_BASE}${path}`, {
     method,
-    headers: {
-      Authorization: authHeader(),
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 

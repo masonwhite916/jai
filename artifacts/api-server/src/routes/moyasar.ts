@@ -47,6 +47,14 @@ export async function lookupServicePaymentRef(ref: string): Promise<string | nul
 
 const router: IRouter = Router();
 
+/**
+ * TESTING BYPASS — when PAYMENT_MOCK_MODE=true, all card checkout endpoints
+ * succeed instantly without contacting Moyasar (no real charge).
+ * Remove the env var once the Moyasar account is activated for live payments.
+ */
+const MOCK_MODE   = process.env.PAYMENT_MOCK_MODE === "true";
+const MOCK_PREFIX = "mock_";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared price tables
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +127,12 @@ router.post("/payment/checkout", async (req, res) => {
       return;
     }
 
+    if (MOCK_MODE) {
+      console.warn(`[payment] MOCK MODE — simulating paid subscription for plan "${plan}" (no real charge)`);
+      res.json({ paymentId: `${MOCK_PREFIX}${Date.now()}`, status: "paid", transactionUrl: null });
+      return;
+    }
+
     const cleanNumber = cardNumber.replace(/\D/g, "");
 
     const payment = (await moyasarFetch("POST", "/payments", {
@@ -158,6 +172,11 @@ router.post("/payment/checkout", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/payment/status/:id", async (req, res) => {
   try {
+    const id = req.params.id as string;
+    if (MOCK_MODE && id.startsWith(MOCK_PREFIX)) {
+      res.json({ paymentId: id, status: "paid", amount: 0, currency: "SAR" });
+      return;
+    }
     const payment = (await moyasarFetch(
       "GET",
       `/payments/${req.params.id as string}`,
@@ -191,6 +210,7 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
       year,
       cvc,
       callbackUrl,
+      idempotencyKey,
     } = req.body as {
       service_type: string;
       cardName: string;
@@ -199,11 +219,18 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
       year: string;
       cvc: string;
       callbackUrl?: string;
+      idempotencyKey?: string;
     };
 
     const amount = SERVICE_AMOUNTS[service_type];
     if (!amount) {
       res.status(400).json({ error: `Unknown service_type: ${service_type}` });
+      return;
+    }
+
+    if (MOCK_MODE) {
+      console.warn(`[payment] MOCK MODE — simulating paid service for "${service_type}" (no real charge)`);
+      res.json({ paymentId: `${MOCK_PREFIX}${Date.now()}`, status: "paid", transactionUrl: null });
       return;
     }
 
@@ -228,7 +255,7 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
         service_type: service_type,
         user_id:      String(req.userId),
       },
-    })) as {
+    }, idempotencyKey)) as {
       id: string;
       status: string;
       source: { transaction_url?: string };
