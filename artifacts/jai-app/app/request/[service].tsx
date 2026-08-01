@@ -8,22 +8,42 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
 import { useJaiLocation } from '@/context/LocationContext';
 import { apiFetch, getAuthToken, getApiBaseUrl } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
+// ── Card helpers ──────────────────────────────────────────────────────────────
+function formatCardNumber(raw: string) {
+  return raw.replace(/\D/g, '').slice(0, 16).replace(/(.{4})/g, '$1 ').trim();
+}
+function formatExpiry(raw: string) {
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+}
+
+/** Simple UUID v4-like token for Apple Pay refs. */
+function genRef(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
 
+// NOTE: basePrice values MUST stay in sync with PAYOUTS in artifacts/api-server/src/routes/requests.ts
+// and SERVICE_AMOUNTS in artifacts/api-server/src/routes/moyasar.ts
 const SERVICE_INFO: Record<string, ServiceDef> = {
   battery: { labelKey: 'serviceBattery', icon: 'battery-charging', lib: 'Ionicons', basePrice: 120 },
-  fuel: { labelKey: 'serviceFuel', icon: 'gas-station', lib: 'MCIcons', basePrice: 100 },
-  tire: { labelKey: 'serviceTire', icon: 'tire', lib: 'MCIcons', basePrice: 120 },
-  tow: { labelKey: 'serviceTow', icon: 'tow-truck', lib: 'MCIcons', basePrice: 250 },
-  lockout: { labelKey: 'serviceLockout', icon: 'key', lib: 'Ionicons', basePrice: 200 },
-  mechanic: { labelKey: 'serviceMechanic', icon: 'wrench', lib: 'MCIcons', basePrice: 200 },
-  electric: { labelKey: 'serviceElectric', icon: 'flash', lib: 'Ionicons', basePrice: 200 },
+  fuel:    { labelKey: 'serviceFuel',    icon: 'gas-station',       lib: 'MCIcons',  basePrice: 80  },
+  tire:    { labelKey: 'serviceTire',    icon: 'tire',              lib: 'MCIcons',  basePrice: 350 },
+  tow:     { labelKey: 'serviceTow',     icon: 'tow-truck',         lib: 'MCIcons',  basePrice: 500 },
+  lockout: { labelKey: 'serviceLockout', icon: 'key',               lib: 'Ionicons', basePrice: 200 },
+  mechanic:{ labelKey: 'serviceMechanic',icon: 'wrench',            lib: 'MCIcons',  basePrice: 300 },
+  electric:{ labelKey: 'serviceElectric',icon: 'flash',             lib: 'Ionicons', basePrice: 280 },
 };
 
 /** Services covered (free) under each subscription plan. */
@@ -61,17 +81,186 @@ export default function ServiceRequest() {
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
 
+  // ── Card payment fields (shown inline for non-members choosing card) ──────
+  const [cardName,   setCardName]   = useState(user?.name ?? '');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiry,     setExpiry]     = useState('');
+  const [cvc,        setCvc]        = useState('');
+  const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
+
+  // ── Poll Moyasar payment status (card checkout with possible 3DS) ──────────
+  async function pollPaymentStatus(paymentId: string, attempts = 8): Promise<boolean> {
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 2000));
+      try {
+        const data = await apiFetch<{ status: string }>(`/api/payment/status/${paymentId}`);
+        if (data.status === 'paid')   return true;
+        if (data.status === 'failed') return false;
+      } catch { /* network blip — keep polling */ }
+    }
+    return false;
+  }
+
+  // ── Poll Apple Pay service-ref-lookup ────────────────────────────────────
+  async function pollApplePayRef(ref: string, attempts = 10): Promise<string | null> {
+    for (let i = 0; i < attempts; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 2000));
+      try {
+        const data = await apiFetch<{ paymentId?: string; pending?: boolean }>(
+          `/api/payment/service-ref-lookup?ref=${encodeURIComponent(ref)}`,
+        );
+        if (data.paymentId) return data.paymentId;
+      } catch { /* keep polling */ }
+    }
+    return null;
+  }
+
+  // ── Resolve payment_id based on selected method ──────────────────────────
+  /** Returns { payment_id, cash_intent } or throws on error. */
+  async function resolvePayment(): Promise<{ payment_id?: string; cash_intent?: boolean }> {
+    const isCardMethod = paymentIdx === 0 || paymentIdx === 1 || paymentIdx === 2;
+    const isCashMethod = paymentIdx === 3;
+
+    if (isCashMethod) {
+      // Confirm cash on delivery
+      return new Promise((resolve, reject) => {
+        Alert.alert(
+          isRTL ? 'الدفع عند الوصول' : 'Cash on Delivery',
+          isRTL
+            ? `المبلغ المستحق: ${info.basePrice} ريال\nسيتم تحصيل المبلغ عند وصول الفني.`
+            : `Amount due: ${info.basePrice} SAR\nPayment will be collected when the technician arrives.`,
+          [
+            { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel', onPress: () => reject(new Error('cancelled')) },
+            { text: isRTL ? 'تأكيد' : 'Confirm', onPress: () => resolve({ cash_intent: true }) },
+          ],
+          { cancelable: true, onDismiss: () => reject(new Error('cancelled')) },
+        );
+      });
+    }
+
+    if (isCardMethod) {
+      // Validate card fields
+      const errs: Record<string, string> = {};
+      if (!cardName.trim())
+        errs.cardName = isRTL ? 'مطلوب' : 'Required';
+      if (cardNumber.replace(/\D/g, '').length < 16)
+        errs.cardNumber = isRTL ? 'رقم البطاقة غير صحيح' : 'Invalid card number';
+      if (expiry.length < 5)
+        errs.expiry = isRTL ? 'تاريخ انتهاء غير صحيح' : 'Invalid expiry';
+      if (cvc.length < 3)
+        errs.cvc = isRTL ? 'رمز CVV غير صحيح' : 'Invalid CVV';
+
+      // Apple Pay: obtain a server-issued session token (binds user_id server-side),
+      // then open the form in a browser using that token.
+      if (paymentIdx === 0) {
+        const base = getApiBaseUrl();
+        const ref  = genRef();
+
+        // Auth-protected: server stamps user_id into the session from the JWT
+        const sessionData = await apiFetch<{ token: string }>(
+          '/api/payment/service-applepay-session',
+          {
+            method: 'POST',
+            body:   JSON.stringify({ service_type: service ?? 'battery', ref }),
+          },
+        );
+        if (!sessionData.token) {
+          throw new Error(isRTL ? 'فشل إنشاء جلسة الدفع.' : 'Failed to create payment session.');
+        }
+
+        const formUrl = `${base}/api/payment/service-applepay-form`
+          + `?token=${encodeURIComponent(sessionData.token)}`
+          + `&name=${encodeURIComponent(user?.name ?? '')}`;
+
+        await WebBrowser.openBrowserAsync(formUrl, {
+          dismissButtonStyle: 'done',
+          presentationStyle:  WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+        });
+
+        // Poll for payment confirmation
+        const paymentId = await pollApplePayRef(ref);
+        if (!paymentId) {
+          throw new Error(isRTL
+            ? 'لم يتم التحقق من الدفع. يرجى المحاولة مجدداً.'
+            : 'Payment not confirmed. Please try again.');
+        }
+        return { payment_id: paymentId };
+      }
+
+      // Mada / Visa/MC card form
+      if (Object.keys(errs).length > 0) {
+        setCardErrors(errs);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        throw new Error('validation');
+      }
+
+      const [mm, yy] = expiry.split('/');
+      const data = await apiFetch<{
+        paymentId: string;
+        status: string;
+        transactionUrl: string | null;
+      }>('/api/payment/service-checkout', {
+        method: 'POST',
+        body: JSON.stringify({
+          service_type: service ?? 'battery',
+          cardName:     cardName.trim(),
+          cardNumber:   cardNumber.replace(/\D/g, ''),
+          month:        mm?.trim(),
+          year:         `20${yy?.trim()}`,
+          cvc:          cvc.trim(),
+        }),
+      });
+
+      // 3DS redirect
+      if (data.transactionUrl) {
+        await WebBrowser.openBrowserAsync(data.transactionUrl, {
+          dismissButtonStyle: 'done',
+          presentationStyle:  WebBrowser.WebBrowserPresentationStyle.FORM_SHEET,
+        });
+      }
+
+      if (data.status === 'paid') return { payment_id: data.paymentId };
+
+      const paid = await pollPaymentStatus(data.paymentId);
+      if (!paid) {
+        throw new Error(isRTL
+          ? 'فشل الدفع. يرجى التحقق من بيانات البطاقة والمحاولة مجدداً.'
+          : 'Payment failed. Please check your card details and try again.');
+      }
+      return { payment_id: data.paymentId };
+    }
+
+    return {};
+  }
+
   async function handleNext() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step < TOTAL_STEPS) {
       setStep(step + 1);
       return;
     }
-    // Final step — submit the service request
+    // Final step — resolve payment then submit
     setSubmitting(true);
     try {
+      let paymentPayload: { payment_id?: string; cash_intent?: boolean } = {};
+
+      if (getAuthToken() && !isCovered) {
+        try {
+          paymentPayload = await resolvePayment();
+        } catch (err) {
+          setSubmitting(false);
+          const msg = err instanceof Error ? err.message : '';
+          if (msg === 'cancelled' || msg === 'validation') return;
+          Alert.alert(
+            isRTL ? 'خطأ في الدفع' : 'Payment Error',
+            msg || (isRTL ? 'حدث خطأ أثناء معالجة الدفع.' : 'Payment could not be processed.'),
+            [{ text: isRTL ? 'حسناً' : 'OK' }],
+          );
+          return;
+        }
+      }
+
       if (getAuthToken()) {
-        // Build request body from collected form state
         const uploadedUrls = await uploadPhotos();
         const body: Record<string, unknown> = {
           service_type: service ?? 'battery',
@@ -80,8 +269,8 @@ export default function ServiceRequest() {
           location_lng: gps.coords?.longitude ?? null,
           address:      gps.fullAddress       ?? null,
           photo_urls:   uploadedUrls.length ? JSON.stringify(uploadedUrls) : null,
+          ...paymentPayload,
         };
-        // Attach vehicle snapshot if one was selected
         if (selectedVehicleData) {
           body.vehicle_make  = selectedVehicleData.make;
           body.vehicle_model = selectedVehicleData.model;
@@ -93,7 +282,6 @@ export default function ServiceRequest() {
           method: 'POST',
           body:   JSON.stringify(body),
         });
-        // Store active request for real-time tracking screen
         setActiveRequest({
           requestId:   String(result.request?.id ?? ''),
           jobId:       String(result.job?.id ?? ''),
@@ -106,7 +294,6 @@ export default function ServiceRequest() {
       } else {
         // Guest / offline — simulate delay
         await new Promise(r => setTimeout(r, 800));
-        // Placeholder so tracking screen has something to show
         setActiveRequest({
           requestId:   'guest',
           jobId:       'guest',
@@ -114,14 +301,14 @@ export default function ServiceRequest() {
           status:      'pending',
         });
       }
-      // Success — navigate to live tracking
       setSubmitting(false);
       router.replace('/tracking');
-    } catch {
+    } catch (err) {
       setSubmitting(false);
+      const msg = err instanceof Error ? err.message : '';
       Alert.alert(
         isRTL ? 'تعذّر إنشاء الطلب' : 'Could not create request',
-        isRTL ? 'حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.' : 'Something went wrong. Please try again.',
+        msg || (isRTL ? 'حدث خطأ أثناء الإرسال. يرجى المحاولة مرة أخرى.' : 'Something went wrong. Please try again.'),
         [{ text: isRTL ? 'حسناً' : 'OK' }],
       );
     }
@@ -370,7 +557,11 @@ export default function ServiceRequest() {
                   <TouchableOpacity
                     key={opt.label}
                     style={[styles.paymentOption, i === paymentIdx && styles.paymentOptionSelected, { flexDirection: rowDir }]}
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setPaymentIdx(i); }}
+                    onPress={() => {
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      setPaymentIdx(i);
+                      setCardErrors({});
+                    }}
                     activeOpacity={0.85}
                   >
                     <Ionicons name={opt.iconName as any} size={20} color={i === paymentIdx ? '#2D1B69' : '#6B7280'} />
@@ -378,6 +569,108 @@ export default function ServiceRequest() {
                     {i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
                   </TouchableOpacity>
                 ))}
+
+                {/* ── Inline card form (Mada / Visa) ── */}
+                {(paymentIdx === 1 || paymentIdx === 2) && (
+                  <View style={styles.cardFormBox}>
+                    <Text style={[styles.cardFormTitle, { fontFamily: font.bold, textAlign: align }]}>
+                      {isRTL ? 'تفاصيل البطاقة' : 'Card details'}
+                    </Text>
+
+                    {/* Cardholder name */}
+                    <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>
+                      {isRTL ? 'اسم حامل البطاقة' : 'Cardholder name'}
+                    </Text>
+                    <TextInput
+                      style={[styles.cardInput, { fontFamily: font.regular, textAlign: align }, cardErrors.cardName ? styles.cardInputError : null]}
+                      value={cardName}
+                      onChangeText={v => { setCardName(v); setCardErrors(p => ({ ...p, cardName: '' })); }}
+                      autoCapitalize="words"
+                      placeholder={isRTL ? 'محمد العمري' : 'John Smith'}
+                      placeholderTextColor="#C0C0D4"
+                    />
+                    {!!cardErrors.cardName && (
+                      <Text style={[styles.fieldError, { fontFamily: font.regular }]}>{cardErrors.cardName}</Text>
+                    )}
+
+                    {/* Card number */}
+                    <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>
+                      {isRTL ? 'رقم البطاقة' : 'Card number'}
+                    </Text>
+                    <TextInput
+                      style={[styles.cardInput, { fontFamily: font.regular, letterSpacing: 1.5 }, cardErrors.cardNumber ? styles.cardInputError : null]}
+                      value={cardNumber}
+                      onChangeText={v => { setCardNumber(formatCardNumber(v)); setCardErrors(p => ({ ...p, cardNumber: '' })); }}
+                      keyboardType="numeric"
+                      maxLength={19}
+                      placeholder="XXXX XXXX XXXX XXXX"
+                      placeholderTextColor="#C0C0D4"
+                    />
+                    {!!cardErrors.cardNumber && (
+                      <Text style={[styles.fieldError, { fontFamily: font.regular }]}>{cardErrors.cardNumber}</Text>
+                    )}
+
+                    <View style={[{ flexDirection: rowDir, gap: 12 }]}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>
+                          {isRTL ? 'تاريخ الانتهاء' : 'Expiry (MM/YY)'}
+                        </Text>
+                        <TextInput
+                          style={[styles.cardInput, { fontFamily: font.regular, textAlign: 'center' }, cardErrors.expiry ? styles.cardInputError : null]}
+                          value={expiry}
+                          onChangeText={v => { setExpiry(formatExpiry(v)); setCardErrors(p => ({ ...p, expiry: '' })); }}
+                          keyboardType="numeric"
+                          maxLength={5}
+                          placeholder="MM/YY"
+                          placeholderTextColor="#C0C0D4"
+                        />
+                        {!!cardErrors.expiry && (
+                          <Text style={[styles.fieldError, { fontFamily: font.regular }]}>{cardErrors.expiry}</Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.fieldLabel, { fontFamily: font.medium, textAlign: align }]}>CVV</Text>
+                        <TextInput
+                          style={[styles.cardInput, { fontFamily: font.regular, textAlign: 'center' }, cardErrors.cvc ? styles.cardInputError : null]}
+                          value={cvc}
+                          onChangeText={v => { setCvc(v.replace(/\D/g, '').slice(0, 4)); setCardErrors(p => ({ ...p, cvc: '' })); }}
+                          keyboardType="numeric"
+                          maxLength={4}
+                          secureTextEntry
+                          placeholder="•••"
+                          placeholderTextColor="#C0C0D4"
+                        />
+                        {!!cardErrors.cvc && (
+                          <Text style={[styles.fieldError, { fontFamily: font.regular }]}>{cardErrors.cvc}</Text>
+                        )}
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                {/* ── Apple Pay note ── */}
+                {paymentIdx === 0 && (
+                  <View style={[styles.applePayNote, { flexDirection: rowDir }]}>
+                    <Ionicons name="logo-apple" size={18} color="#1A1A1A" />
+                    <Text style={[styles.applePayNoteText, { fontFamily: font.regular, textAlign: align }]}>
+                      {isRTL
+                        ? 'ستُفتح صفحة Apple Pay عند التأكيد'
+                        : 'Apple Pay sheet will open on confirm'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* ── Cash note ── */}
+                {paymentIdx === 3 && (
+                  <View style={[styles.cashNote, { flexDirection: rowDir }]}>
+                    <Ionicons name="cash-outline" size={18} color="#2ECC71" />
+                    <Text style={[styles.cashNoteText, { fontFamily: font.regular, textAlign: align }]}>
+                      {isRTL
+                        ? `المبلغ المستحق عند الوصول: ${info.basePrice} ريال`
+                        : `Amount due on arrival: ${info.basePrice} SAR`}
+                    </Text>
+                  </View>
+                )}
               </>
             )}
           </View>
@@ -499,6 +792,29 @@ const styles = StyleSheet.create({
   },
   paymentOptionSelected: { borderColor: '#2D1B69', backgroundColor: '#F8F7FF' },
   paymentLabel: { fontSize: 15, color: '#1A1A1A' },
+  cardFormBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginTop: 12,
+    borderWidth: 1.5, borderColor: '#EDE8F8',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  cardFormTitle: { fontSize: 15, color: '#1A1A1A', marginBottom: 12 },
+  fieldLabel: { fontSize: 13, color: '#6B7280', marginBottom: 6, marginTop: 10 },
+  cardInput: {
+    backgroundColor: '#F8F7FF', borderRadius: 10, padding: 12, fontSize: 15,
+    color: '#1A1A1A', borderWidth: 1.5, borderColor: '#EBEBF5',
+  },
+  cardInputError: { borderColor: '#E74C3C' },
+  fieldError: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
+  applePayNote: {
+    backgroundColor: '#F5F5F5', borderRadius: 12, padding: 12, marginTop: 12,
+    alignItems: 'center', gap: 8,
+  },
+  applePayNoteText: { fontSize: 13, color: '#6B7280', flex: 1 },
+  cashNote: {
+    backgroundColor: 'rgba(46,204,113,0.08)', borderRadius: 12, padding: 12, marginTop: 12,
+    alignItems: 'center', gap: 8, borderWidth: 1, borderColor: 'rgba(46,204,113,0.2)',
+  },
+  cashNoteText: { fontSize: 13, color: '#27AE60', flex: 1 },
   bottomBar: { backgroundColor: '#FFFFFF', padding: 16, borderTopWidth: 1, borderTopColor: '#F0F0F8' },
   nextBtn: { borderRadius: 16, overflow: 'hidden' },
   nextBtnDisabled: { opacity: 0.6 },

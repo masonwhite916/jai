@@ -4,8 +4,17 @@ import { eq, desc, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
 import { notifyTechniciansNewJob } from "../lib/pushNotifications";
+import { moyasarFetch } from "../lib/moyasarClient";
 
 const router: IRouter = Router();
+
+/** Services covered (free) under each subscription plan — mirrors the app. */
+const PLAN_COVERED: Record<string, string[]> = {
+  basic:     ["battery", "fuel", "tire", "tow", "mechanic", "electric"],
+  accidents: ["battery", "fuel", "tire", "tow", "mechanic", "electric"],
+  rental:    ["battery", "fuel", "tire", "tow", "mechanic", "electric"],
+  premium:   ["battery", "fuel", "tire", "tow", "mechanic", "electric", "lockout"],
+};
 
 // POST /api/requests  — create a new service request
 router.post("/requests", requireAuth, async (req, res) => {
@@ -13,12 +22,15 @@ router.post("/requests", requireAuth, async (req, res) => {
     const {
       service_type, vehicle_make, vehicle_model, vehicle_year,
       vehicle_plate, vehicle_color, location_lat, location_lng, address, notes, photo_urls,
+      payment_id, cash_intent,
     } = req.body as {
       service_type: string;
       vehicle_make?: string; vehicle_model?: string; vehicle_year?: string;
       vehicle_plate?: string; vehicle_color?: string;
       location_lat?: number; location_lng?: number;
       address?: string; notes?: string; photo_urls?: string;
+      payment_id?: string;
+      cash_intent?: boolean;
     };
 
     if (!service_type) {
@@ -31,18 +43,107 @@ router.post("/requests", requireAuth, async (req, res) => {
       mechanic: 300, electric: 280,
     };
 
-    // Create the service request
-    const [req_] = await db
-      .insert(serviceRequests)
-      .values({
-        customer_id:   req.userId!,
-        service_type:  service_type as any,
-        vehicle_make, vehicle_model, vehicle_year,
-        vehicle_plate, vehicle_color,
-        location_lat, location_lng, address, notes,
-        photo_urls,
-      })
-      .returning();
+    // ── Payment validation for non-members ────────────────────────────────────
+    const [userRow] = await db
+      .select({ membership: users.membership })
+      .from(users)
+      .where(eq(users.id, req.userId!))
+      .limit(1);
+
+    const membership = userRow?.membership ?? "none";
+    const coveredServices = PLAN_COVERED[membership] ?? [];
+    const isCovered = membership !== "none" && coveredServices.includes(service_type);
+
+    let resolvedPaymentMethod: string;
+
+    if (isCovered) {
+      // Member — no payment needed
+      resolvedPaymentMethod = "covered";
+    } else if (cash_intent === true) {
+      // Cash on delivery — accepted as-is
+      resolvedPaymentMethod = "cash";
+    } else if (payment_id) {
+      // Verify the Moyasar payment is actually paid, bound to this user, and covers this service
+      try {
+        const payment = (await moyasarFetch("GET", `/payments/${payment_id}`)) as {
+          status: string;
+          amount: number;
+          metadata?: { type?: string; service_type?: string; user_id?: string };
+        };
+
+        if (payment.status !== "paid") {
+          res.status(402).json({
+            error: `Payment not completed (status: ${payment.status}). Please retry.`,
+          });
+          return;
+        }
+
+        // MANDATORY: payment must be a service payment (not a subscription or other flow)
+        if (payment.metadata?.type !== "service") {
+          res.status(403).json({ error: "Invalid payment type for service requests." });
+          return;
+        }
+
+        // MANDATORY: payment must be bound to this authenticated user
+        if (!payment.metadata.user_id || payment.metadata.user_id !== String(req.userId)) {
+          res.status(403).json({ error: "Payment does not belong to this account." });
+          return;
+        }
+
+        // MANDATORY: payment must be for exactly this service type
+        if (!payment.metadata.service_type || payment.metadata.service_type !== service_type) {
+          res.status(402).json({
+            error: `Payment was for '${payment.metadata.service_type ?? "unknown"}', not '${service_type}'.`,
+          });
+          return;
+        }
+
+        // Amount sanity-check: payment must cover the full service cost in halalas (SAR × 100)
+        const expectedHalalas = (PAYOUTS[service_type] ?? 0) * 100;
+        if (payment.amount < expectedHalalas) {
+          res.status(402).json({ error: "Payment amount is less than the service cost." });
+          return;
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Payment verification failed";
+        res.status(402).json({ error: `Could not verify payment: ${msg}` });
+        return;
+      }
+      resolvedPaymentMethod = "card";
+    } else {
+      // Non-member with no payment — reject
+      res.status(402).json({
+        error: "Payment required. Please complete payment before requesting service.",
+      });
+      return;
+    }
+
+    // Create the service request (payment_id has a UNIQUE constraint — prevents replay attacks)
+    let req_: (typeof serviceRequests.$inferSelect);
+    try {
+      const rows = await db
+        .insert(serviceRequests)
+        .values({
+          customer_id:    req.userId!,
+          service_type:   service_type as any,
+          vehicle_make, vehicle_model, vehicle_year,
+          vehicle_plate, vehicle_color,
+          location_lat, location_lng, address, notes,
+          photo_urls,
+          payment_id:     payment_id ?? null,
+          payment_method: resolvedPaymentMethod,
+        })
+        .returning();
+      req_ = rows[0];
+    } catch (err: unknown) {
+      // Unique constraint violation — payment_id already used for another request
+      const msg = err instanceof Error ? err.message : "";
+      if (msg.includes("unique") || msg.includes("duplicate")) {
+        res.status(409).json({ error: "This payment has already been used for another request." });
+        return;
+      }
+      throw err; // re-throw unexpected errors
+    }
 
     // Create a corresponding job (unassigned) so technicians can see it
     const [job] = await db

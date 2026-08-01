@@ -5,6 +5,7 @@ import { logger } from "./lib/logger";
 import { runStartupChecks } from "./lib/startupChecks";
 import { warmTechLocationsFromDb } from "./lib/techLocations";
 import { migrateLegacySettingsFile } from "./lib/siteSettings";
+import { migratePaymentSchema } from "./lib/migratePaymentSchema";
 import { db, userSessions } from "@workspace/db";
 import { lt, or, isNotNull, and } from "drizzle-orm";
 
@@ -24,6 +25,10 @@ if (Number.isNaN(port) || port <= 0) {
 
 // Warn about missing optional service credentials before accepting traffic
 runStartupChecks();
+
+// Apply idempotent payment-schema migration before accepting traffic.
+// Safe to run on every start — CREATE IF NOT EXISTS / ADD COLUMN IF NOT EXISTS.
+await migratePaymentSchema();
 
 // Create an explicit HTTP server so we can attach the WebSocket dispatch server
 // to the same port without opening a second TCP socket.

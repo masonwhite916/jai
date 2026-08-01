@@ -1,34 +1,57 @@
 /**
  * Payment routes — Moyasar (card / Mada / Apple Pay) + Tabby + Tamara
  *
- * POST /api/payment/checkout          — card payment via Moyasar
- * GET  /api/payment/status/:id        — poll a Moyasar payment
- * POST /api/payment/checkout/tabby    — open Tabby BNPL checkout
- * POST /api/payment/checkout/tamara   — open Tamara BNPL checkout
- * POST /api/payment/webhook           — Moyasar server-to-server callback
+ * POST /api/payment/checkout                — card payment via Moyasar (subscriptions)
+ * GET  /api/payment/status/:id              — poll a Moyasar payment
+ * POST /api/payment/service-checkout        — card payment for a one-off service request (auth required)
+ * GET  /api/payment/service-applepay-form   — Apple Pay HTML page for a service
+ * GET  /api/payment/service-ref-lookup      — poll Apple Pay result by ref token
+ * POST /api/payment/checkout/tabby          — open Tabby BNPL checkout
+ * POST /api/payment/checkout/tamara         — open Tamara BNPL checkout
+ * POST /api/payment/webhook                 — Moyasar server-to-server callback
  */
 
 import { Router, type IRouter } from "express";
+import { randomUUID } from "crypto";
 import { moyasarFetch } from "../lib/moyasarClient";
 import { db } from "@workspace/db";
-import { users } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { users, servicePaymentRefs, applePaySessions } from "@workspace/db/schema";
+import { and, eq, gt } from "drizzle-orm";
+import { requireAuth } from "../middlewares/requireAuth";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DB-backed Apple Pay service payment refs (10-min TTL)
+// Shared across all server instances/restarts — safe for autoscaled deploys.
+// Webhook deposits the completed payment_id; app polls until it appears.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function registerServicePaymentRef(ref: string, paymentId: string): Promise<void> {
+  const expiresAt = new Date(Date.now() + 10 * 60_000);
+  await db
+    .insert(servicePaymentRefs)
+    .values({ ref, payment_id: paymentId, expires_at: expiresAt })
+    .onConflictDoUpdate({ target: servicePaymentRefs.ref, set: { payment_id: paymentId, expires_at: expiresAt } });
+}
+
+export async function lookupServicePaymentRef(ref: string): Promise<string | null> {
+  const now = new Date();
+  const rows = await db
+    .select({ payment_id: servicePaymentRefs.payment_id })
+    .from(servicePaymentRefs)
+    .where(and(
+      eq(servicePaymentRefs.ref, ref),
+      gt(servicePaymentRefs.expires_at, now),
+    ));
+  return rows.length ? rows[0].payment_id : null;
+}
 
 const router: IRouter = Router();
 
-/**
- * TESTING BYPASS — when PAYMENT_MOCK_MODE=true, card checkout succeeds
- * instantly without contacting Moyasar (no real charge). Remove the env var
- * once the Moyasar account is activated for live payments.
- */
-const MOCK_MODE = process.env.PAYMENT_MOCK_MODE === "true";
-const MOCK_PREFIX = "mock_";
-
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Shared price tables
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Price per plan in halalas (SAR × 100) */
+/** Subscription plan prices in halalas (SAR × 100) */
 const PLAN_AMOUNTS: Record<string, number> = {
   basic:     19900,   // SAR 199
   accidents: 29900,   // SAR 299
@@ -41,10 +64,34 @@ const PLAN_NAMES: Record<string, string> = {
   rental:    "Rental Package — JAI",
 };
 
+/**
+ * Service prices in halalas (SAR × 100).
+ * MUST stay in sync with PAYOUTS in requests.ts and SERVICE_INFO.basePrice in [service].tsx.
+ */
+const SERVICE_AMOUNTS: Record<string, number> = {
+  battery:  12000,  // SAR 120
+  fuel:      8000,  // SAR 80
+  tire:     35000,  // SAR 350
+  tow:      50000,  // SAR 500
+  lockout:  20000,  // SAR 200
+  mechanic: 30000,  // SAR 300
+  electric: 28000,  // SAR 280
+};
+
+const SERVICE_NAMES: Record<string, string> = {
+  battery:  "Battery Jump-start — JAI",
+  fuel:     "Fuel Delivery — JAI",
+  tire:     "Tyre Change — JAI",
+  tow:      "Towing Service — JAI",
+  lockout:  "Lockout Assistance — JAI",
+  mechanic: "Mobile Mechanic — JAI",
+  electric: "Electrical Repair — JAI",
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/checkout
-// Charge a card (Mada / Visa / Mastercard) through Moyasar.
-// Body: { plan, cardName, cardNumber, month, year, cvc, callbackUrl }
+// Charge a card (Mada / Visa / Mastercard) for a subscription plan.
+// Body: { plan, cardName, cardNumber, month, year, cvc, callbackUrl? }
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/checkout", async (req, res) => {
   try {
@@ -72,18 +119,6 @@ router.post("/payment/checkout", async (req, res) => {
       return;
     }
 
-    // TESTING BYPASS: simulate an instantly-paid payment
-    if (MOCK_MODE) {
-      console.warn(`[payment] MOCK MODE — simulating paid payment for plan "${plan}" (no real charge)`);
-      res.json({
-        paymentId:      `${MOCK_PREFIX}${Date.now()}`,
-        status:         "paid",
-        transactionUrl: null,
-      });
-      return;
-    }
-
-    // Strip spaces/dashes from card number before sending to Moyasar
     const cleanNumber = cardNumber.replace(/\D/g, "");
 
     const payment = (await moyasarFetch("POST", "/payments", {
@@ -107,8 +142,8 @@ router.post("/payment/checkout", async (req, res) => {
 
     res.json({
       paymentId:       payment.id,
-      status:          payment.status,             // "initiated" | "paid" | "failed"
-      transactionUrl:  payment.source?.transaction_url ?? null, // 3DS redirect, if any
+      status:          payment.status,
+      transactionUrl:  payment.source?.transaction_url ?? null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Payment error";
@@ -123,13 +158,6 @@ router.post("/payment/checkout", async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/payment/status/:id", async (req, res) => {
   try {
-    // TESTING BYPASS: mock payments are always "paid"
-    const id = req.params.id as string;
-    if (MOCK_MODE && id.startsWith(MOCK_PREFIX)) {
-      res.json({ paymentId: id, status: "paid", amount: 0, currency: "SAR" });
-      return;
-    }
-
     const payment = (await moyasarFetch(
       "GET",
       `/payments/${req.params.id as string}`,
@@ -144,6 +172,237 @@ router.get("/payment/status/:id", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Status check failed";
     res.status(500).json({ error: message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/service-checkout  (requires auth)
+// Charge a card for a one-off service request.
+// Body: { service_type, cardName, cardNumber, month, year, cvc, callbackUrl? }
+// Embeds user_id + service_type in Moyasar metadata for server-side verification.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/service-checkout", requireAuth, async (req, res) => {
+  try {
+    const {
+      service_type,
+      cardName,
+      cardNumber,
+      month,
+      year,
+      cvc,
+      callbackUrl,
+    } = req.body as {
+      service_type: string;
+      cardName: string;
+      cardNumber: string;
+      month: string;
+      year: string;
+      cvc: string;
+      callbackUrl?: string;
+    };
+
+    const amount = SERVICE_AMOUNTS[service_type];
+    if (!amount) {
+      res.status(400).json({ error: `Unknown service_type: ${service_type}` });
+      return;
+    }
+
+    const cleanNumber = cardNumber.replace(/\D/g, "");
+
+    const payment = (await moyasarFetch("POST", "/payments", {
+      amount,
+      currency:     "SAR",
+      description:  SERVICE_NAMES[service_type] ?? service_type,
+      callback_url: callbackUrl ?? process.env.MOYASAR_CALLBACK_URL ?? "",
+      source: {
+        type:   "creditcard",
+        name:   cardName,
+        number: cleanNumber,
+        month,
+        year,
+        cvm:    cvc,
+      },
+      // Bind payment to this authenticated user and service for server-side verification
+      metadata: {
+        type:         "service",
+        service_type: service_type,
+        user_id:      String(req.userId),
+      },
+    })) as {
+      id: string;
+      status: string;
+      source: { transaction_url?: string };
+    };
+
+    res.json({
+      paymentId:      payment.id,
+      status:         payment.status,
+      transactionUrl: payment.source?.transaction_url ?? null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Payment error";
+    console.error("[payment] service-checkout error:", err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/service-applepay-session  (requires auth)
+// Creates a short-lived single-use session token that the app embeds in the
+// Apple Pay form URL.  This prevents user_id spoofing via open query params.
+// Body: { service_type: string; ref: string }
+// Returns: { token: string }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/service-applepay-session", requireAuth, async (req, res) => {
+  try {
+    const { service_type, ref } = req.body as { service_type: string; ref: string };
+    if (!service_type || !ref) {
+      res.status(400).json({ error: "service_type and ref are required" });
+      return;
+    }
+    if (!SERVICE_AMOUNTS[service_type]) {
+      res.status(400).json({ error: `Unknown service_type: ${service_type}` });
+      return;
+    }
+
+    const token      = randomUUID();
+    const expires_at = new Date(Date.now() + 10 * 60_000); // 10 min
+
+    await db.insert(applePaySessions).values({
+      token,
+      user_id:      req.userId!,
+      service_type: service_type,
+      ref,
+      expires_at,
+    });
+
+    res.json({ token });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Session creation failed";
+    console.error("[payment] service-applepay-session error:", err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/payment/service-applepay-form?token=UUID
+// Returns an HTML page with Moyasar.js for Apple Pay (service payment).
+// The token was issued by /service-applepay-session (auth-protected), so
+// user_id and service_type are read from the DB — never from query params.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/payment/service-applepay-form", async (req, res) => {
+  const { token, name, email } = req.query as {
+    token?: string; name?: string; email?: string;
+  };
+
+  if (!token) {
+    res.status(400).send("<p>Missing session token</p>");
+    return;
+  }
+
+  // Look up session (validates it exists and hasn't expired)
+  const now = new Date();
+  const sessions = await db
+    .select()
+    .from(applePaySessions)
+    .where(and(
+      eq(applePaySessions.token, token),
+      gt(applePaySessions.expires_at, now),
+    ))
+    .limit(1);
+
+  if (!sessions.length) {
+    res.status(403).send("<p>Session expired or invalid. Please return to the app and try again.</p>");
+    return;
+  }
+
+  const session = sessions[0];
+  // Consume token (single-use) — delete it so replay is impossible
+  await db.delete(applePaySessions).where(eq(applePaySessions.token, token));
+
+  const { service_type, ref, user_id } = session;
+  const amount      = SERVICE_AMOUNTS[service_type] ?? 12000;
+  const description = SERVICE_NAMES[service_type]   ?? "JAI Service";
+  const pubKey      = process.env.MOYASAR_PUBLISHABLE_KEY ?? "";
+  const callbackUrl = process.env.MOYASAR_CALLBACK_URL    ?? "";
+  const baseUrl     = process.env.API_BASE_URL ?? "https://jaiksa.replit.app";
+  // Embed server-controlled user_id — not taken from request
+  const safeRef     = ref.replace(/'/g, "\\'");
+  const safeUserId  = String(user_id).replace(/'/g, "\\'");
+  const safeService = service_type.replace(/'/g, "\\'");
+  const safeName    = (name  ?? "").replace(/'/g, "\\'");
+  const safeEmail   = (email ?? "").replace(/'/g, "\\'");
+
+  const html = `<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <title>JAI — Apple Pay</title>
+  <link rel="stylesheet" href="https://cdn.moyasar.com/mpf/1.14.0/moyasar.css">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,sans-serif;background:#F5F3FF;
+         min-height:100vh;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;padding:32px 24px}
+    h1{font-size:20px;color:#2D1B69;margin-bottom:6px;text-align:center}
+    p{font-size:14px;color:#6B7280;text-align:center;margin-bottom:8px}
+    .amt{font-size:30px;font-weight:700;color:#5B2C91;
+         text-align:center;margin-bottom:28px}
+    #moyasar-form{width:100%;max-width:380px}
+  </style>
+</head>
+<body>
+  <h1>JAI Roadside Assistance</h1>
+  <p>${description}</p>
+  <div class="amt">${(amount / 100).toFixed(0)} ريال</div>
+  <div id="moyasar-form"></div>
+  <script src="https://cdn.moyasar.com/mpf/1.14.0/moyasar.js"></script>
+  <script>
+    Moyasar.init({
+      element: '#moyasar-form',
+      amount: ${amount},
+      currency: 'SAR',
+      description: '${description}',
+      publishable_api_key: '${pubKey}',
+      callback_url: '${callbackUrl}',
+      methods: ['applepay'],
+      apple_pay: {
+        country: 'SA',
+        label: 'JAI Roadside Assistance',
+        validate_merchant_url: '${baseUrl}/api/payment/applepay-validate',
+      },
+      metadata: { type: 'service', service_type: '${safeService}', ref: '${safeRef}', user_id: '${safeUserId}', name: '${safeName}', email: '${safeEmail}' },
+    });
+  </script>
+</body>
+</html>`;
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/payment/service-ref-lookup?ref=UUID
+// Poll whether an Apple Pay service payment completed (registered via webhook).
+// Returns { paymentId } on success, or { pending: true } while waiting.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/payment/service-ref-lookup", async (req, res) => {
+  const { ref } = req.query as { ref?: string };
+  if (!ref) {
+    res.status(400).json({ error: "ref is required" });
+    return;
+  }
+  try {
+    const paymentId = await lookupServicePaymentRef(ref);
+    if (paymentId) {
+      res.json({ paymentId });
+    } else {
+      res.json({ pending: true });
+    }
+  } catch (err) {
+    console.error("[payment] service-ref-lookup error:", err);
+    res.status(500).json({ error: "Lookup failed" });
   }
 });
 
@@ -294,9 +553,9 @@ router.post("/payment/checkout/tamara", async (req, res) => {
             quantity:     1,
           }],
           merchant_url: {
-            success:     process.env.PAYMENT_SUCCESS_URL ?? "https://example.com/payment-success",
-            failure:     process.env.PAYMENT_CANCEL_URL  ?? "https://example.com/payment-cancel",
-            cancel:      process.env.PAYMENT_CANCEL_URL  ?? "https://example.com/payment-cancel",
+            success:      process.env.PAYMENT_SUCCESS_URL    ?? "https://example.com/payment-success",
+            failure:      process.env.PAYMENT_CANCEL_URL     ?? "https://example.com/payment-cancel",
+            cancel:       process.env.PAYMENT_CANCEL_URL     ?? "https://example.com/payment-cancel",
             notification: process.env.TAMARA_NOTIFICATION_URL ?? "",
           },
           locale: "ar_SA",
@@ -320,12 +579,8 @@ router.post("/payment/checkout/tamara", async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/payment/applepay-form
-// Returns an HTML page with Moyasar.js initialised for Apple Pay.
-// Open this URL in expo-web-browser on iOS — Safari handles the native
-// Apple Pay sheet and Moyasar.js sends the token to Moyasar's servers.
-//
-// Requires in Moyasar dashboard: Apple Pay enabled + Merchant ID registered.
-// Requires env var: APPLE_PAY_MERCHANT_ID  (from Apple Developer portal)
+// Returns an HTML page with Moyasar.js initialised for Apple Pay (subscriptions).
+// Open this URL in expo-web-browser on iOS.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get("/payment/applepay-form", (req, res) => {
   const { plan, name, email } = req.query as {
@@ -393,10 +648,6 @@ router.get("/payment/applepay-form", (req, res) => {
 // POST /api/payment/applepay-validate
 // Proxies Apple Pay merchant session validation to Apple's servers.
 // Called automatically by Moyasar.js inside the Safari payment sheet.
-//
-// To activate: add APPLE_PAY_MERCHANT_ID, APPLE_PAY_CERT_PEM, APPLE_PAY_KEY_PEM
-// as secrets (from Apple Developer → Certificates, Identifiers & Profiles).
-// See: https://developer.apple.com/documentation/apple_pay_on_the_web/providing_merchant_validation
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/applepay-validate", async (req, res) => {
   const merchantId = process.env.APPLE_PAY_MERCHANT_ID;
@@ -416,8 +667,6 @@ router.post("/payment/applepay-validate", async (req, res) => {
       return;
     }
 
-    // Mutual TLS with Apple using your merchant certificate + private key
-    // (stored as PEM strings in APPLE_PAY_CERT_PEM / APPLE_PAY_KEY_PEM secrets)
     const https = await import("https");
     const cert  = process.env.APPLE_PAY_CERT_PEM ?? "";
     const key   = process.env.APPLE_PAY_KEY_PEM  ?? "";
@@ -462,11 +711,10 @@ router.post("/payment/applepay-validate", async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/webhook
-// Moyasar server-to-server callback — marks subscription active on paid status.
-// Moyasar sends the secret token in the Authorization header as a Bearer token.
+// Moyasar server-to-server callback.
+// Handles both subscription activations and service Apple Pay ref registration.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/webhook", async (req, res) => {
-  // Verify the request is genuinely from Moyasar
   const expectedSecret = process.env.MOYASAR_WEBHOOK_SECRET;
   if (expectedSecret) {
     const authHeader = (req.headers["authorization"] ?? "").toString();
@@ -482,16 +730,25 @@ router.post("/payment/webhook", async (req, res) => {
     const { id, status, metadata } = req.body as {
       id: string;
       status: string;
-      metadata?: { userId?: string; plan?: string };
+      metadata?: { userId?: string; plan?: string; type?: string; ref?: string };
     };
 
     console.log(`[payment/webhook] payment ${id} → ${status}`);
 
-    if (status === "paid" && metadata?.userId && metadata?.plan) {
-      await db
-        .update(users)
-        .set({ membership: metadata.plan as any, updated_at: new Date() })
-        .where(eq(users.id, Number(metadata.userId)));
+    if (status === "paid") {
+      // ── Subscription payment ──────────────────────────────────────────────
+      if (metadata?.userId && metadata?.plan && metadata?.type !== "service") {
+        await db
+          .update(users)
+          .set({ membership: metadata.plan as any, updated_at: new Date() })
+          .where(eq(users.id, Number(metadata.userId)));
+      }
+
+      // ── Service Apple Pay payment — register ref for polling (DB-backed) ─
+      if (metadata?.type === "service" && metadata?.ref) {
+        await registerServicePaymentRef(metadata.ref, id);
+        console.log(`[payment/webhook] registered service ref ${metadata.ref} → ${id}`);
+      }
     }
 
     res.json({ received: true });

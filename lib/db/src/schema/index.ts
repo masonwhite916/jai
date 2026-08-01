@@ -52,6 +52,8 @@ export const serviceRequests = pgTable("service_requests", {
   address:       text("address"),
   notes:         text("notes"),
   photo_urls:    text("photo_urls"),   // JSON array of upload paths
+  payment_id:    text("payment_id").unique(), // Moyasar payment ID — unique to prevent replay (null = covered/cash)
+  payment_method: text("payment_method"),          // 'card' | 'cash' | 'covered'
   created_at:    timestamp("created_at").notNull().defaultNow(),
   updated_at:    timestamp("updated_at").notNull().defaultNow(),
 });
@@ -161,6 +163,35 @@ export const jobRatings = pgTable("job_ratings", {
   comment:    text("comment"),
   created_at: timestamp("created_at").notNull().defaultNow(),
 });
+
+// ── Apple Pay service sessions (auth → browser bridge, DB-backed) ─────────────
+// Created by POST /api/payment/service-applepay-session (requireAuth).
+// Consumed once by GET /api/payment/service-applepay-form?token=...
+// Prevents user_id spoofing via open query params.
+
+export const applePaySessions = pgTable("applepay_sessions", {
+  token:        text("token").primaryKey(),
+  user_id:      integer("user_id").notNull().references(() => users.id),
+  service_type: text("service_type").notNull(),
+  ref:          text("ref").notNull(),
+  expires_at:   timestamp("expires_at", { withTimezone: true }).notNull(),
+  created_at:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ApplePaySession = typeof applePaySessions.$inferSelect;
+
+// ── Apple Pay service payment refs (webhook → poll bridge, DB-backed) ─────────
+// A webhook deposits the completed payment_id keyed by the app's ref UUID.
+// The app polls service-ref-lookup until the ref appears or TTL expires.
+
+export const servicePaymentRefs = pgTable("service_payment_refs", {
+  ref:        text("ref").primaryKey(),
+  payment_id: text("payment_id").notNull(),
+  expires_at: timestamp("expires_at", { withTimezone: true }).notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ServicePaymentRef = typeof servicePaymentRefs.$inferSelect;
 
 // ── TypeScript types ──────────────────────────────────────────────────────────
 
