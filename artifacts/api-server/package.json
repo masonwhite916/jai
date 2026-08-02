@@ -8,7 +8,7 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --import tsx/esm --import ./src/test/hooks.mjs --test ./src/test/dispatch.integration.test.mjs && node --import tsx/esm --import ./src/test/payment-hooks.mjs --test ./src/test/payment-gate.test.mjs",
+    "test": "node --import tsx/esm --import ./src/test/hooks.mjs --test ./src/test/dispatch.integration.test.mjs && node --import tsx/esm --import ./src/test/payment-hooks.mjs --test ./src/test/payment-gate.test.mjs && node --import tsx/esm --import ./src/test/push-hooks.mjs --test ./src/test/push-notifications.test.mjs && node --import tsx/esm --import ./src/test/jobs-hooks.mjs --test ./src/test/jobs-completion.test.mjs",
     "test:payment": "node --import tsx/esm --import ./src/test/payment-hooks.mjs --test ./src/test/payment-gate.test.mjs"
   },
   "dependencies": {

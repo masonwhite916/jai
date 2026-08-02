@@ -86,7 +86,7 @@ test("location_update relayed to admin room as tech_location_admin", async () =>
   resetQueue();
 
   // Step 1: Admin connects and authenticates with a real in-memory session token.
-  const adminSession = createAdminSession();
+  const adminSession = await createAdminSession();
   const adminWs = await connect(port);
 
   const adminAuthReply = await sendAndReceive(adminWs, {
@@ -112,8 +112,9 @@ test("location_update relayed to admin room as tech_location_admin", async () =>
 
   // Step 3: Technician sends location_update.
   // Queue the DB row the assignment-check handler will look up (jobs table).
+  // status must be in ACTIVE_JOB_STATUSES so the location relay is not dropped.
   const JOB_ID = 42;
-  queueResult([{ id: JOB_ID }]); // non-empty → technician is assigned to this job
+  queueResult([{ id: JOB_ID, status: "en_route" }]); // non-empty + active status → technician is assigned
 
   const LAT = 25.7617;
   const LNG = -80.1918;
@@ -166,7 +167,7 @@ test("location_update for unassigned job is silently dropped — admin room gets
   resetQueue();
 
   // Admin connects and authenticates.
-  const adminSession = createAdminSession();
+  const adminSession = await createAdminSession();
   const adminWs = await connect(port);
   const adminAuthReply = await sendAndReceive(adminWs, {
     type: "auth",
@@ -211,7 +212,7 @@ test("location_update with invalid (NaN) jobId is silently dropped — no crash,
   resetQueue();
 
   // Admin connects and authenticates.
-  const adminSession = createAdminSession();
+  const adminSession = await createAdminSession();
   const adminWs = await connect(port);
   const adminAuthReply = await sendAndReceive(adminWs, {
     type: "auth",
@@ -264,7 +265,7 @@ test("concurrent location_updates from two technicians both reach admin room wit
   resetQueue();
 
   // Admin connects and authenticates.
-  const adminSession = createAdminSession();
+  const adminSession = await createAdminSession();
   const adminWs = await connect(port);
   const adminAuthReply = await sendAndReceive(adminWs, {
     type: "auth",
@@ -299,8 +300,8 @@ test("concurrent location_updates from two technicians both reach admin room wit
   // Queue assignment-check results for both technicians (A then B).
   const JOB_A_ID = 101;
   const JOB_B_ID = 102;
-  queueResult([{ id: JOB_A_ID }]); // tech A is assigned to job A
-  queueResult([{ id: JOB_B_ID }]); // tech B is assigned to job B
+  queueResult([{ id: JOB_A_ID, status: "accepted" }]); // tech A is assigned to job A (active status)
+  queueResult([{ id: JOB_B_ID, status: "working"  }]); // tech B is assigned to job B (active status)
 
   const LAT_A = 25.7617;
   const LNG_A = -80.1918;
