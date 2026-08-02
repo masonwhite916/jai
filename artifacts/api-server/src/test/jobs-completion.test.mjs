@@ -194,3 +194,144 @@ test("PATCH /jobs/:id rejects an invalid transition (working → pending) with 4
     "notifyCustomerJobCompleted must NOT be called for a rejected transition",
   );
 });
+
+// ── Accepted-transition tests ──────────────────────────────────────────────────
+
+test("PATCH /jobs/:id status=accepted fires notifyCustomerJobAccepted with correct args", async () => {
+  setup();
+
+  const JOB_ID      = 60;
+  const REQUEST_ID  = 20;
+  const CUSTOMER_ID = 7;
+  const TECH_ID     = 2;
+  const TECH_NAME   = "Ali Hassan";
+  const SERVICE     = "tire";
+
+  // 1. Fetch existing job — must be pending and unassigned
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "pending",
+    technician_id: null,
+    request_id:    REQUEST_ID,
+    payout:        150,
+  }]);
+
+  // 2. Atomic update returning → the newly-accepted job row
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "accepted",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        150,
+  }]);
+
+  // 3. Fetch technician info (name, phone, rating)
+  queueSelect([{
+    name:   TECH_NAME,
+    phone:  "+966500000001",
+    rating: 4.8,
+  }]);
+
+  // 4. Fetch service request for notification (customer_id + service_type)
+  queueSelect([{
+    customer_id:  CUSTOMER_ID,
+    service_type: SERVICE,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "accepted" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid pending→accepted transition");
+  assert.equal(body.status, "accepted", "Response body should contain the updated job row");
+
+  // notifyCustomerJobAccepted is called with `void` (fire-and-forget); flush microtasks.
+  await new Promise((r) => setTimeout(r, 20));
+
+  const calls = getNotifCalls();
+
+  assert.equal(
+    calls.notifyCustomerJobAccepted.length,
+    1,
+    "notifyCustomerJobAccepted should be called exactly once",
+  );
+
+  const args = calls.notifyCustomerJobAccepted[0];
+  assert.equal(args.customerId,  CUSTOMER_ID, "customerId should come from the service request row");
+  assert.equal(args.techName,    TECH_NAME,   "techName should come from the technician user row");
+  assert.equal(args.serviceType, SERVICE,     "serviceType should come from the service request row");
+  assert.equal(args.jobId,       JOB_ID,      "jobId should match the patched job");
+  assert.equal(args.requestId,   REQUEST_ID,  "requestId should match the job's request_id");
+});
+
+test("PATCH /jobs/:id status=accepted does NOT fire notifyCustomerJobAccepted when service request is missing", async () => {
+  setup();
+
+  const JOB_ID  = 61;
+  const TECH_ID = 2;
+
+  // 1. Existing job — pending, unassigned
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "pending",
+    technician_id: null,
+    request_id:    21,
+    payout:        90,
+  }]);
+
+  // 2. Atomic update returning → accepted row
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "accepted",
+    technician_id: TECH_ID,
+    request_id:    21,
+    payout:        90,
+  }]);
+
+  // 3. Technician info
+  queueSelect([{ name: "Omar", phone: "+966500000002", rating: 4.5 }]);
+
+  // 4. Service request not found
+  queueSelect([]);
+
+  const { status } = await patchJob(JOB_ID, { status: "accepted" }, TECH_ID);
+  assert.equal(status, 200, "Route should still respond 200 when service request is missing");
+
+  await new Promise((r) => setTimeout(r, 20));
+
+  const calls = getNotifCalls();
+  assert.equal(
+    calls.notifyCustomerJobAccepted.length,
+    0,
+    "notifyCustomerJobAccepted must NOT be called when sreq is undefined",
+  );
+});
+
+test("PATCH /jobs/:id status=accepted responds 409 when job is already taken", async () => {
+  setup();
+
+  const JOB_ID  = 62;
+  const TECH_ID = 2;
+
+  // 1. Existing job is pending (passes the ownership guard for accept)
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "pending",
+    technician_id: null,
+    request_id:    22,
+    payout:        100,
+  }]);
+
+  // 2. Atomic update returns empty (another technician beat us to it)
+  queueReturning([]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "accepted" }, TECH_ID);
+  assert.equal(status, 409, "Race-condition acceptance should return 409");
+  assert.ok(body.error, "Error message should be present");
+
+  await new Promise((r) => setTimeout(r, 10));
+
+  const calls = getNotifCalls();
+  assert.equal(
+    calls.notifyCustomerJobAccepted.length,
+    0,
+    "notifyCustomerJobAccepted must NOT be called when acceptance lost the race",
+  );
+});
