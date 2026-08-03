@@ -26,8 +26,14 @@ module.exports = () => {
   // REPLIT_DEV_DOMAIN / EXPO_PUBLIC_DOMAIN are set by the Expo workflow command.
   config.extra = {
     ...(config.extra ?? {}),
+    // Resolution order:
+    //   1. REPLIT_DEV_DOMAIN — set automatically by the Expo workflow in Replit dev
+    //   2. EXPO_PUBLIC_DOMAIN — legacy Replit alias
+    //   3. EXPO_PUBLIC_API_HOST — injected by eas.json "env" for preview/production builds
+    //   4. localhost — last-resort fallback (only works in an emulator)
     apiHost: process.env.REPLIT_DEV_DOMAIN
       ?? process.env.EXPO_PUBLIC_DOMAIN
+      ?? process.env.EXPO_PUBLIC_API_HOST
       ?? 'localhost',
   };
 
