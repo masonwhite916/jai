@@ -16,7 +16,7 @@ export async function requireAdmin(
     return;
   }
   const token = auth.slice(7);
-  if (!validateAdminToken(token)) {
+  if (!await validateAdminToken(token)) {
     res.status(401).json({ error: "Invalid or expired admin token" });
     return;
   }
