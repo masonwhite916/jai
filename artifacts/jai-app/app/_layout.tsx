@@ -28,6 +28,12 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import { usePushNotifications } from '@/lib/usePushNotifications';
+import { installDevPerfReporter, perfMark, perfMeasure } from '@/lib/perf';
+
+// Mark as early as possible in the JS bundle so we can measure how long it
+// takes from here to the first interactive frame.
+perfMark('appStart');
+installDevPerfReporter();
 
 SplashScreen.preventAutoHideAsync();
 
@@ -217,6 +223,9 @@ export default function RootLayout() {
   useEffect(() => {
     if ((fontsLoaded || fontError) && bootstrapReady) {
       SplashScreen.hideAsync();
+      // Mark the first interactive frame: fonts loaded, session restored, splash gone.
+      perfMark('appInteractive');
+      perfMeasure('launch_to_interactive', 'appStart', 'appInteractive');
     }
   }, [fontsLoaded, fontError, bootstrapReady]);
 

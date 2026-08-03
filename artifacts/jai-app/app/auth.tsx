@@ -11,6 +11,7 @@ import { useLanguage } from '@/context/LanguageContext';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { getApiBaseUrl } from '@/lib/api';
+import { perfMark, perfMeasure } from '@/lib/perf';
 
 const API_BASE = getApiBaseUrl();
 
@@ -100,6 +101,9 @@ export default function Auth() {
         vehicles:   apiUser.vehicles   ?? [],
       };
       await login(mergedUser, data.token);
+      // Record how long the full auth flow took (OTP entry → verified → session ready).
+      perfMark('authComplete');
+      perfMeasure('app_to_auth', 'appInteractive', 'authComplete');
       // Brand-new users (no name yet) complete their profile first
       if (data.user?.profile_complete) {
         router.replace('/(tabs)');

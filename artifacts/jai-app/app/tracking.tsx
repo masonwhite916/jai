@@ -20,6 +20,7 @@ import { jaiSocket } from '@/lib/socket';
 import { getAuthToken, apiFetch } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 import TrackingMap from '@/components/TrackingMap';
+import { perfMark, perfMeasure } from '@/lib/perf';
 
 // ── Haversine distance (km) between two GPS points ────────────────────────────
 function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -184,6 +185,9 @@ export default function TrackingScreen() {
     // Join this job's room to receive technician updates.
     // Room key is the job ID (matches dispatch.ts and driver location relay).
     jaiSocket.joinRoom(`job:${jobId}`);
+    // Record that the tracking screen is live — WebSocket joined and job state is known.
+    perfMark('trackingReady');
+    perfMeasure('launch_to_tracking', 'appStart', 'trackingReady');
 
     const offAccepted = jaiSocket.on('job_accepted', (payload) => {
       const { techName, techPhone, techId, techRating } = payload as {
