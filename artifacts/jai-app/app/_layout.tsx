@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AppProvider, type User, useApp } from '@/context/AppContext';
+import { AppProvider, type User, type ActiveRequest, useApp } from '@/context/AppContext';
 import { DriverProvider } from '@/context/DriverContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
 import { LocationProvider } from '@/context/LocationContext';
@@ -38,6 +38,7 @@ interface PreloadedSession {
   hasSeenOnboarding: boolean;
   role: 'customer' | 'technician' | null;
   token?: string | null;
+  activeRequest?: ActiveRequest | null;
 }
 
 // ── In-app notification banner (foreground) ───────────────────────────────────
@@ -186,7 +187,8 @@ export default function RootLayout() {
       AsyncStorage.getItem('jai_onboarding'),
       AsyncStorage.getItem('jai_role'),
       AsyncStorage.getItem('jai_token'),
-    ]).then(([storedLang, storedUser, storedOnboarding, storedRole, storedToken]) => {
+      AsyncStorage.getItem('jai_active_request'),
+    ]).then(([storedLang, storedUser, storedOnboarding, storedRole, storedToken, storedActiveRequest]) => {
       const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
@@ -195,12 +197,17 @@ export default function RootLayout() {
       if (storedUser) {
         try { parsedUser = JSON.parse(storedUser); } catch { /* ignore */ }
       }
+      let parsedActiveRequest: ActiveRequest | null = null;
+      if (storedActiveRequest) {
+        try { parsedActiveRequest = JSON.parse(storedActiveRequest); } catch { /* ignore */ }
+      }
       const role = storedRole === 'customer' || storedRole === 'technician' ? storedRole : null;
       setPreloadedSession({
         user: parsedUser,
         hasSeenOnboarding: storedOnboarding === 'true',
         role,
         token: storedToken ?? null,
+        activeRequest: parsedActiveRequest,
       });
 
       setBootstrapReady(true);

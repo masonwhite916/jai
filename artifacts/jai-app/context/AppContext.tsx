@@ -98,6 +98,7 @@ interface AppProviderProps {
     hasSeenOnboarding: boolean;
     role: 'customer' | 'technician' | null;
     token?: string | null;
+    activeRequest?: ActiveRequest | null;
   } | null;
 }
 
@@ -119,7 +120,9 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     preloaded ? initialSession.role : null,
   );
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
-  const [activeRequest, setActiveRequestState] = useState<ActiveRequest | null>(null);
+  const [activeRequest, setActiveRequestState] = useState<ActiveRequest | null>(
+    preloaded ? (initialSession?.activeRequest ?? null) : null,
+  );
 
   const isGuestRef = useRef(isGuest);
   useEffect(() => { isGuestRef.current = isGuest; }, [isGuest]);
@@ -168,6 +171,27 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     }
   }, [isAuthenticated, isGuest]);
 
+  // Verify persisted active request against the server after auth is confirmed.
+  // Terminal statuses (completed/cancelled) or a 404 means the job is over —
+  // clear the persisted state so the app doesn't redirect to tracking on every launch.
+  // Network errors are ignored (fail-open) — better to show stale tracking than drop
+  // a customer mid-job because of a brief connectivity issue.
+  useEffect(() => {
+    const req = activeRequest;
+    if (!req?.requestId || !isAuthenticated || isGuest || !getAuthToken()) return;
+    if (req.requestId === 'guest') return; // guest requests are never server-side
+
+    apiFetch<{ status: string }>(`/api/requests/${req.requestId}`)
+      .then((data) => {
+        if (data.status === 'completed' || data.status === 'cancelled') {
+          setActiveRequest(null);
+        }
+      })
+      .catch(() => { /* network error — leave the persisted request in place */ });
+  // Intentionally run only once after auth is confirmed (on mount / auth change).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isGuest]);
+
   async function fetchNotifications() {
     if (!getAuthToken()) return;
     try {
@@ -178,12 +202,20 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
 
   async function loadState() {
     try {
-      const [onboarding, userData, storedRole, token] = await Promise.all([
+      const [onboarding, userData, storedRole, token, storedActiveRequest] = await Promise.all([
         AsyncStorage.getItem('jai_onboarding'),
         AsyncStorage.getItem('jai_user'),
         AsyncStorage.getItem('jai_role'),
         AsyncStorage.getItem('jai_token'),
+        AsyncStorage.getItem('jai_active_request'),
       ]);
+
+      if (storedActiveRequest) {
+        try {
+          const parsed: ActiveRequest = JSON.parse(storedActiveRequest);
+          setActiveRequestState(parsed); // tentative — server-verify effect will correct if stale
+        } catch { /* ignore corrupt value */ }
+      }
 
       setHasSeenOnboarding(onboarding === 'true');
       if (storedRole === 'customer' || storedRole === 'technician') {
@@ -257,6 +289,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     await Promise.all([
       AsyncStorage.removeItem('jai_user'),
       AsyncStorage.removeItem('jai_token'),
+      AsyncStorage.removeItem('jai_active_request'),
     ]);
     setUser(null);
     setIsAuthenticated(false);
@@ -316,6 +349,11 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
 
   function setActiveRequest(r: ActiveRequest | null) {
     setActiveRequestState(r);
+    if (r) {
+      AsyncStorage.setItem('jai_active_request', JSON.stringify(r)).catch(() => {});
+    } else {
+      AsyncStorage.removeItem('jai_active_request').catch(() => {});
+    }
   }
 
   const unreadCount = notifications.filter(n => !n.read).length;
