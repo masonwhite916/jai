@@ -4,7 +4,7 @@ import { useDriverColors } from '@/hooks/useDriverColors';
 import { Feather } from '@expo/vector-icons';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { SymbolView } from 'expo-symbols';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '@/context/LanguageContext';
@@ -17,20 +17,20 @@ function NativeTabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.Trigger name="index">
-        <Icon sf={{ default: 'list.bullet', selected: 'list.bullet' }} />
-        <Label>{t('driverTabRequests')}</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'list.bullet', selected: 'list.bullet' }} />
+        <NativeTabs.Trigger.Label>{t('driverTabRequests')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="active">
-        <Icon sf={{ default: 'bolt.badge.a', selected: 'bolt.badge.a.fill' }} />
-        <Label>{t('driverTabActive')}</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'bolt.badge.a', selected: 'bolt.badge.a.fill' }} />
+        <NativeTabs.Trigger.Label>{t('driverTabActive')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="earnings">
-        <Icon sf={{ default: 'creditcard', selected: 'creditcard.fill' }} />
-        <Label>{t('driverTabEarnings')}</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'creditcard', selected: 'creditcard.fill' }} />
+        <NativeTabs.Trigger.Label>{t('driverTabEarnings')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="profile">
-        <Icon sf={{ default: 'person', selected: 'person.fill' }} />
-        <Label>{t('driverTabProfile')}</Label>
+        <NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} />
+        <NativeTabs.Trigger.Label>{t('driverTabProfile')}</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
     </NativeTabs>
   );

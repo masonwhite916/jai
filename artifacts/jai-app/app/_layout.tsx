@@ -29,6 +29,7 @@ import * as Updates from 'expo-updates';
 import * as Notifications from 'expo-notifications';
 import { usePushNotifications } from '@/lib/usePushNotifications';
 import { installDevPerfReporter, perfMark, perfMeasure } from '@/lib/perf';
+import { ObserveRoot, useObserve } from 'expo-observe';
 
 // Mark as early as possible in the JS bundle so we can measure how long it
 // takes from here to the first interactive frame.
@@ -158,7 +159,8 @@ function RootLayoutNav() {
 }
 
 // ── Root layout ───────────────────────────────────────────────────────────────
-export default function RootLayout() {
+function RootLayout() {
+  const { markInteractive } = useObserve();
   const [initialLang, setInitialLang] = useState<Lang>('en');
   const [preloadedSession, setPreloadedSession] = useState<PreloadedSession | null>(null);
   const [bootstrapReady, setBootstrapReady] = useState(false);
@@ -223,11 +225,13 @@ export default function RootLayout() {
   useEffect(() => {
     if ((fontsLoaded || fontError) && bootstrapReady) {
       SplashScreen.hideAsync();
-      // Mark the first interactive frame: fonts loaded, session restored, splash gone.
+      // Tell EAS Observe the app is interactive (recorded in the EAS dashboard).
+      markInteractive();
+      // Also emit the DIY dev-console mark so Metro logs show timing locally.
       perfMark('appInteractive');
       perfMeasure('launch_to_interactive', 'appStart', 'appInteractive');
     }
-  }, [fontsLoaded, fontError, bootstrapReady]);
+  }, [fontsLoaded, fontError, bootstrapReady, markInteractive]);
 
   if ((!fontsLoaded && !fontError) || !bootstrapReady) return null;
 
@@ -288,3 +292,7 @@ const styles = StyleSheet.create({
   bannerTitle:     { fontSize: 14, fontWeight: '700', color: '#FFFFFF', marginBottom: 3 },
   bannerBody:      { fontSize: 13, color: 'rgba(255,255,255,0.75)', lineHeight: 18 },
 });
+
+// Wrap with ObserveRoot so expo-observe can record TTR/TTI metrics in the
+// EAS Observe production dashboard.
+export default ObserveRoot.wrap(RootLayout);

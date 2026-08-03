@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { isLiquidGlassAvailable } from 'expo-glass-effect';
 import { Tabs } from 'expo-router';
-import { Icon, Label, NativeTabs } from 'expo-router/unstable-native-tabs';
+import { NativeTabs } from 'expo-router/unstable-native-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLanguage } from '@/context/LanguageContext';
 import { useApp } from '@/context/AppContext';
@@ -14,11 +14,11 @@ import * as Haptics from 'expo-haptics';
 function NativeTabLayout() {
   return (
     <NativeTabs>
-      <NativeTabs.Trigger name="index"><Icon sf={{ default: 'house', selected: 'house.fill' }} /><Label>Home</Label></NativeTabs.Trigger>
-      <NativeTabs.Trigger name="requests"><Icon sf={{ default: 'list.bullet', selected: 'list.bullet' }} /><Label>Requests</Label></NativeTabs.Trigger>
-      <NativeTabs.Trigger name="membership"><Icon sf={{ default: 'star', selected: 'star.fill' }} /><Label>VIP</Label></NativeTabs.Trigger>
-      <NativeTabs.Trigger name="notifications"><Icon sf={{ default: 'bell', selected: 'bell.fill' }} /><Label>Alerts</Label></NativeTabs.Trigger>
-      <NativeTabs.Trigger name="profile"><Icon sf={{ default: 'person', selected: 'person.fill' }} /><Label>Profile</Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="index"><NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} /><NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="requests"><NativeTabs.Trigger.Icon sf={{ default: 'list.bullet', selected: 'list.bullet' }} /><NativeTabs.Trigger.Label>Requests</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="membership"><NativeTabs.Trigger.Icon sf={{ default: 'star', selected: 'star.fill' }} /><NativeTabs.Trigger.Label>VIP</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="notifications"><NativeTabs.Trigger.Icon sf={{ default: 'bell', selected: 'bell.fill' }} /><NativeTabs.Trigger.Label>Alerts</NativeTabs.Trigger.Label></NativeTabs.Trigger>
+      <NativeTabs.Trigger name="profile"><NativeTabs.Trigger.Icon sf={{ default: 'person', selected: 'person.fill' }} /><NativeTabs.Trigger.Label>Profile</NativeTabs.Trigger.Label></NativeTabs.Trigger>
     </NativeTabs>
   );
 }
