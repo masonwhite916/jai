@@ -11,13 +11,18 @@
 
 const _selectQueue    = [];
 const _returningQueue = [];
+const _updateSetCalls = [];
 
 export function queueSelect(rows)    { _selectQueue.push(rows); }
 export function queueReturning(rows) { _returningQueue.push(rows); }
 
+/** Returns a copy of all objects passed to update().set() since the last resetDb(). */
+export function getUpdateSetCalls() { return [..._updateSetCalls]; }
+
 export function resetDb() {
   _selectQueue.length    = 0;
   _returningQueue.length = 0;
+  _updateSetCalls.length = 0;
 }
 
 // ── Select builder ────────────────────────────────────────────────────────────
@@ -39,7 +44,7 @@ function makeSelectBuilder() {
 
 function makeUpdateBuilder() {
   const self = {
-    set:       () => self,
+    set:       (obj) => { _updateSetCalls.push(obj); return self; },
     where:     () => self,
     returning: ()  => Promise.resolve(_returningQueue.shift() ?? []),
     // Allow await without .returning() — resolves to undefined (no rows).

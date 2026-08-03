@@ -1,8 +1,17 @@
 /**
- * No-op dispatch stub for route integration tests.
- * broadcastToRoom is a no-op so tests don't need a real WebSocket server.
+ * Spy dispatch stub for route integration tests.
+ * broadcastToRoom records every call so tests can assert broadcast payloads.
  */
+
+const _broadcastCalls = [];
+
 export const dispatch = {
-  broadcastToRoom: () => {},
+  broadcastToRoom: (room, payload) => { _broadcastCalls.push({ room, payload }); },
   attach:          () => {},
 };
+
+/** Returns a copy of all broadcastToRoom calls since the last reset. */
+export function getBroadcastCalls() { return [..._broadcastCalls]; }
+
+/** Clears the recorded calls. */
+export function resetBroadcastCalls() { _broadcastCalls.length = 0; }

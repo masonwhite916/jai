@@ -19,8 +19,9 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
-import { queueSelect, queueReturning, resetDb } from "./mock-jobs-db.mjs";
-import { getNotifCalls, resetNotifCalls }        from "./mock-push-notif.mjs";
+import { queueSelect, queueReturning, resetDb, getUpdateSetCalls } from "./mock-jobs-db.mjs";
+import { getNotifCalls, resetNotifCalls }                          from "./mock-push-notif.mjs";
+import { getBroadcastCalls, resetBroadcastCalls }                  from "./mock-dispatch.mjs";
 
 // ── Import router under test (dynamic — after hooks have wired the mocks) ──────
 
@@ -71,6 +72,7 @@ async function patchJob(jobId, body, userId = 1) {
 function setup() {
   resetDb();
   resetNotifCalls();
+  resetBroadcastCalls();
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────────
@@ -334,4 +336,138 @@ test("PATCH /jobs/:id status=accepted responds 409 when job is already taken", a
     0,
     "notifyCustomerJobAccepted must NOT be called when acceptance lost the race",
   );
+});
+
+// ── Intermediate-transition tests (en_route, arrived, working) ─────────────────
+
+test("PATCH /jobs/:id status=en_route responds 200 and broadcasts job_status", async () => {
+  setup();
+
+  const JOB_ID     = 70;
+  const REQUEST_ID = 30;
+  const TECH_ID    = 3;
+
+  // DB: fetch existing job — must be 'accepted', owned by TECH_ID
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "accepted",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  // DB: update jobs returning → updated row
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "en_route",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "en_route" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid accepted→en_route transition");
+  assert.equal(body.status, "en_route", "Response body should reflect the new status");
+
+  // Assert that broadcastToRoom was called with the correct room and payload
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 1, "broadcastToRoom should be called exactly once");
+  assert.equal(broadcasts[0].room, `job:${JOB_ID}`, "Broadcast room should be job:<id>");
+  assert.deepEqual(broadcasts[0].payload, {
+    type:      "job_status",
+    jobId:     JOB_ID,
+    requestId: REQUEST_ID,
+    status:    "en_route",
+  }, "Broadcast payload should match job_status shape");
+});
+
+test("PATCH /jobs/:id status=arrived responds 200 and broadcasts job_status", async () => {
+  setup();
+
+  const JOB_ID     = 71;
+  const REQUEST_ID = 31;
+  const TECH_ID    = 3;
+
+  // DB: fetch existing job — must be 'en_route', owned by TECH_ID
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "en_route",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  // DB: update jobs returning → updated row
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "arrived",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "arrived" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid en_route→arrived transition");
+  assert.equal(body.status, "arrived", "Response body should reflect the new status");
+
+  // Assert that broadcastToRoom was called with the correct room and payload
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 1, "broadcastToRoom should be called exactly once");
+  assert.equal(broadcasts[0].room, `job:${JOB_ID}`, "Broadcast room should be job:<id>");
+  assert.deepEqual(broadcasts[0].payload, {
+    type:      "job_status",
+    jobId:     JOB_ID,
+    requestId: REQUEST_ID,
+    status:    "arrived",
+  }, "Broadcast payload should match job_status shape");
+});
+
+test("PATCH /jobs/:id status=working responds 200, updates serviceRequests to in_progress, and broadcasts job_status", async () => {
+  setup();
+
+  const JOB_ID     = 72;
+  const REQUEST_ID = 32;
+  const TECH_ID    = 3;
+
+  // DB: fetch existing job — must be 'arrived', owned by TECH_ID
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "arrived",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  // DB: update jobs returning → updated row
+  // (the serviceRequests update has no .returning() so no queue entry needed)
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "working",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        100,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "working" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid arrived→working transition");
+  assert.equal(body.status, "working", "Response body should reflect the new status");
+
+  // Assert that the serviceRequests table was updated with status: "in_progress"
+  const setCalls = getUpdateSetCalls();
+  const inProgressCall = setCalls.find((c) => c.status === "in_progress");
+  assert.ok(
+    inProgressCall,
+    "db.update(serviceRequests).set({ status: 'in_progress', ... }) should have been called",
+  );
+
+  // Assert that broadcastToRoom was called with the correct room and payload
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 1, "broadcastToRoom should be called exactly once");
+  assert.equal(broadcasts[0].room, `job:${JOB_ID}`, "Broadcast room should be job:<id>");
+  assert.deepEqual(broadcasts[0].payload, {
+    type:      "job_status",
+    jobId:     JOB_ID,
+    requestId: REQUEST_ID,
+    status:    "working",
+  }, "Broadcast payload should match job_status shape");
 });
