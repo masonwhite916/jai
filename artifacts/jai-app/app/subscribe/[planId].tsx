@@ -90,7 +90,7 @@ export default function SubscribeScreen() {
   const insets  = useSafeAreaInsets();
   const router  = useRouter();
   const { planId } = useLocalSearchParams<{ planId: string }>();
-  const { user, updateUser } = useApp();
+  const { user, refreshUser, updateUser } = useApp();
   const { isRTL, font } = useLanguage();
 
   const plan     = PLAN_DATA[planId as PlanId] ?? PLAN_DATA.basic;
@@ -205,19 +205,29 @@ export default function SubscribeScreen() {
         });
       }
 
-      // If already paid (no 3DS), or after 3DS close — poll for confirmation
-      if (data.status === 'paid') {
-        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
-        animateSuccess();
-        return;
-      }
+      // If already paid (no 3DS), or after 3DS close — confirm server-side
+      const paymentPaid = data.status === 'paid' || await (async () => {
+        setLoading(true);
+        const result = await pollStatus(data.paymentId);
+        setLoading(false);
+        return result;
+      })();
 
-      setLoading(true);
-      const paid = await pollStatus(data.paymentId);
-      setLoading(false);
-
-      if (paid) {
-        await updateUser({ membership: (planId ?? 'basic') as any, points: (user?.points ?? 0) + 100 });
+      if (paymentPaid) {
+        // Ask the server to verify the payment independently and activate membership.
+        // The server fetches the payment from Moyasar, checks amount + ownership,
+        // then sets the membership tier — the client never self-grants a tier.
+        setLoading(true);
+        try {
+          await apiFetch('/api/payment/subscription/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ paymentId: data.paymentId, plan: planId ?? 'basic' }),
+          });
+          await refreshUser(); // sync fresh membership into app state
+        } finally {
+          setLoading(false);
+        }
         animateSuccess();
       } else {
         setPending(true);

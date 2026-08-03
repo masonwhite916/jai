@@ -15,9 +15,20 @@ import { Router, type IRouter } from "express";
 import { randomUUID } from "crypto";
 import { moyasarFetch } from "../lib/moyasarClient";
 import { db } from "@workspace/db";
-import { users, servicePaymentRefs, applePaySessions } from "@workspace/db/schema";
+import { users, vehicles, servicePaymentRefs, applePaySessions } from "@workspace/db/schema";
 import { and, eq, gt } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
+import { toVehicleDto } from "../lib/vehicleDto";
+
+// Warn loudly at startup if the webhook secret is not configured —
+// without it every POST to /api/payment/webhook is accepted unauthenticated.
+if (!process.env.MOYASAR_WEBHOOK_SECRET) {
+  console.error(
+    "[payment] WARNING: MOYASAR_WEBHOOK_SECRET is not set. " +
+    "The webhook endpoint accepts unauthenticated requests. " +
+    "Set this env var before going live."
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DB-backed Apple Pay service payment refs (10-min TTL)
@@ -97,11 +108,13 @@ const SERVICE_NAMES: Record<string, string> = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/payment/checkout
+// POST /api/payment/checkout  (requires auth)
 // Charge a card (Mada / Visa / Mastercard) for a subscription plan.
 // Body: { plan, cardName, cardNumber, month, year, cvc, callbackUrl? }
+// Embeds userId + plan in Moyasar metadata so the webhook can activate the
+// correct membership tier server-side without trusting the client.
 // ─────────────────────────────────────────────────────────────────────────────
-router.post("/payment/checkout", async (req, res) => {
+router.post("/payment/checkout", requireAuth, async (req, res) => {
   try {
     const {
       plan,
@@ -137,8 +150,8 @@ router.post("/payment/checkout", async (req, res) => {
 
     const payment = (await moyasarFetch("POST", "/payments", {
       amount,
-      currency: "SAR",
-      description: PLAN_NAMES[plan] ?? plan,
+      currency:     "SAR",
+      description:  PLAN_NAMES[plan] ?? plan,
       callback_url: callbackUrl ?? process.env.MOYASAR_CALLBACK_URL ?? "",
       source: {
         type:   "creditcard",
@@ -147,6 +160,13 @@ router.post("/payment/checkout", async (req, res) => {
         month,
         year,
         cvm:    cvc,      // Moyasar uses "cvm" not "cvc"
+      },
+      // Bind payment to the authenticated user and plan so the webhook and
+      // /subscription/confirm can activate membership without trusting the client.
+      metadata: {
+        type:   "subscription",
+        userId: String(req.userId),
+        plan,
       },
     })) as {
       id: string;
@@ -162,6 +182,94 @@ router.post("/payment/checkout", async (req, res) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Payment error";
     console.error("[payment] checkout error:", err);
+    res.status(500).json({ error: message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/subscription/confirm  (requires auth)
+// Called by the app after /payment/status/:id reports "paid".
+// Fetches the payment from Moyasar directly, verifies amount and ownership,
+// then activates the membership tier — the client never sets its own tier.
+// Body: { paymentId: string; plan: string }
+// Returns: { membership: string; user: UserDto }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/subscription/confirm", requireAuth, async (req, res) => {
+  try {
+    const { paymentId, plan } = req.body as { paymentId?: string; plan?: string };
+
+    if (!paymentId || !plan) {
+      res.status(400).json({ error: "paymentId and plan are required" });
+      return;
+    }
+
+    const expectedAmount = PLAN_AMOUNTS[plan];
+    if (!expectedAmount) {
+      res.status(400).json({ error: `Unknown plan: ${plan}` });
+      return;
+    }
+
+    if (MOCK_MODE && paymentId.startsWith(MOCK_PREFIX)) {
+      // Testing bypass — no real Moyasar payment to verify
+      console.warn(`[payment] MOCK MODE — confirming subscription for plan "${plan}"`);
+    } else {
+      // Fetch the payment from Moyasar and verify it independently
+      const payment = (await moyasarFetch("GET", `/payments/${paymentId}`)) as {
+        id: string;
+        status: string;
+        amount: number;
+        metadata?: { userId?: string; plan?: string; type?: string };
+      };
+
+      if (payment.status !== "paid") {
+        res.status(402).json({ error: "Payment has not been confirmed as paid yet" });
+        return;
+      }
+
+      if (payment.amount !== expectedAmount) {
+        console.error(`[payment] amount mismatch for ${paymentId}: got ${payment.amount}, expected ${expectedAmount}`);
+        res.status(400).json({ error: "Payment amount does not match plan price" });
+        return;
+      }
+
+      // Verify the payment belongs to the authenticated user
+      if (String(payment.metadata?.userId) !== String(req.userId)) {
+        console.error(`[payment] ownership mismatch for ${paymentId}: metadata.userId=${payment.metadata?.userId}, req.userId=${req.userId}`);
+        res.status(403).json({ error: "Payment does not belong to this account" });
+        return;
+      }
+    }
+
+    // Activate membership server-side
+    await db
+      .update(users)
+      .set({ membership: plan as any, updated_at: new Date() })
+      .where(eq(users.id, req.userId!));
+
+    // Return a fresh user snapshot so the client can update state immediately
+    const [[u], userVehicles] = await Promise.all([
+      db.select().from(users).where(eq(users.id, req.userId!)).limit(1),
+      db.select().from(vehicles).where(eq(vehicles.user_id, req.userId!)),
+    ]);
+
+    res.json({
+      membership: plan,
+      user: {
+        id:            String(u.id),
+        phone:         u.phone,
+        name:          u.name ?? "Guest",
+        role:          u.role,
+        membership:    u.membership,
+        points:        u.points,
+        rating:        u.rating,
+        jobsCompleted: u.jobs_completed,
+        earningsTotal: u.earnings_total,
+        vehicles:      userVehicles.map(toVehicleDto),
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Confirmation error";
+    console.error("[payment] subscription/confirm error:", err);
     res.status(500).json({ error: message });
   }
 });
@@ -765,10 +873,17 @@ router.post("/payment/webhook", async (req, res) => {
     if (status === "paid") {
       // ── Subscription payment ──────────────────────────────────────────────
       if (metadata?.userId && metadata?.plan && metadata?.type !== "service") {
-        await db
-          .update(users)
-          .set({ membership: metadata.plan as any, updated_at: new Date() })
-          .where(eq(users.id, Number(metadata.userId)));
+        // Verify the payment amount matches the expected plan price before activating
+        const expectedAmount = PLAN_AMOUNTS[metadata.plan];
+        const paymentAmount  = (req.body as { amount?: number }).amount;
+        if (expectedAmount && paymentAmount && paymentAmount !== expectedAmount) {
+          console.error(`[payment/webhook] amount mismatch for ${id}: got ${paymentAmount}, expected ${expectedAmount} — skipping activation`);
+        } else {
+          await db
+            .update(users)
+            .set({ membership: metadata.plan as any, updated_at: new Date() })
+            .where(eq(users.id, Number(metadata.userId)));
+        }
       }
 
       // ── Service Apple Pay payment — register ref for polling (DB-backed) ─
