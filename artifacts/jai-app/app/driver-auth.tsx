@@ -82,11 +82,14 @@ export default function DriverAuth() {
       const apiUser = data.user ?? {};
 
       // Gate on server-returned role — if the invite code was invalid the server
-      // will have created a 'customer' account and this flow should block entry.
+      // will have created/kept a 'customer' account. Send the user back to step 1
+      // so they can correct the invite code immediately without re-entering the OTP.
       if (apiUser.role !== 'technician') {
+        setStep('info');
+        setOtp('');
         setError(isAR
           ? 'رمز الدعوة غير صحيح. تواصل مع المشرف للحصول على رمز صالح.'
-          : 'Invalid invite code. Please contact your dispatcher for a valid code.');
+          : 'Invalid invite code. Please check it and try again.');
         setLoading(false);
         return;
       }
