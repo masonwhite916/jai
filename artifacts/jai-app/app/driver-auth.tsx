@@ -43,10 +43,14 @@ export default function DriverAuth() {
       const resp = await fetch(`${API_BASE}/api/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, invite_code: inviteCode.trim() }),
       });
-      const data = await resp.json() as { ok?: boolean; error?: string };
-      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Failed to send OTP');
+      const data = await resp.json() as { ok?: boolean; error?: string; field?: string };
+      if (!resp.ok || !data.ok) {
+        // If the server flags this as an invite_code error show it immediately
+        // on step 1 — the OTP step is never reached and no SMS credit is spent.
+        throw new Error(data.error ?? 'Failed to send OTP');
+      }
       setStep('otp');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send code. Try again.');

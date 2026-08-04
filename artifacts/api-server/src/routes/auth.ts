@@ -23,14 +23,31 @@ const router: IRouter = Router();
 const TECH_INVITE_CODE: string | undefined = process.env.TECHNICIAN_INVITE_CODE;
 
 // ── POST /api/auth/send-otp ───────────────────────────────────────────────────
-// Body: { phone: string }
+// Body: { phone: string, invite_code?: string }
+// When invite_code is supplied it is validated BEFORE the SMS is sent so that
+// a wrong code never burns a verification credit.
 router.post("/auth/send-otp", otpLimiter, async (req, res) => {
   try {
-    const { phone } = req.body as { phone?: string };
+    const { phone, invite_code } = req.body as { phone?: string; invite_code?: string };
     if (!phone || phone.replace(/\D/g, "").length < 9) {
       res.status(400).json({ error: "Invalid phone number" });
       return;
     }
+
+    // If an invite_code was provided, validate it now — before spending an SMS credit.
+    if (invite_code !== undefined && invite_code !== "") {
+      const isValidCode =
+        TECH_INVITE_CODE !== undefined &&
+        TECH_INVITE_CODE.length > 0 &&
+        typeof invite_code === "string" &&
+        invite_code.trim() === TECH_INVITE_CODE;
+
+      if (!isValidCode) {
+        res.status(400).json({ error: "Invalid invite code. Please check it and try again.", field: "invite_code" });
+        return;
+      }
+    }
+
     const normalised = await sendVerification(phone);
     res.json({ ok: true, phone: normalised });
   } catch (err) {
