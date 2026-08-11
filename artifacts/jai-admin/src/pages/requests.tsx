@@ -261,19 +261,17 @@ export default function Requests() {
   });
 
   return (
-    <div className="p-8 space-y-6 h-full flex flex-col">
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Service Requests</h1>
-          <p className="text-sm text-muted-foreground">Manage and track all active and historical jobs.</p>
-        </div>
+    <div className="p-4 md:p-8 space-y-4 md:space-y-6 h-full flex flex-col">
+      <div className="flex-shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">Service Requests</h1>
+        <p className="text-sm text-muted-foreground">Manage and track all active and historical jobs.</p>
       </div>
 
-      <div className="flex items-center gap-4 flex-shrink-0 bg-card p-4 rounded-xl border border-border/50 shadow-sm">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-wrap items-center gap-3 flex-shrink-0 bg-card p-3 md:p-4 rounded-xl border border-border/50 shadow-sm">
+        <div className="relative flex-1 min-w-[180px]">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by ID, customer name, or phone..."
+            placeholder="Search by ID, name, or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 bg-background"
@@ -281,7 +279,7 @@ export default function Requests() {
         </div>
 
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px] bg-background">
+          <SelectTrigger className="w-[150px] bg-background flex-shrink-0">
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-muted-foreground" />
               <span><SelectValue placeholder="Status" /></span>
@@ -298,10 +296,10 @@ export default function Requests() {
         </Select>
 
         <Select value={serviceFilter} onValueChange={setServiceFilter}>
-          <SelectTrigger className="w-[180px] bg-background">
+          <SelectTrigger className="w-[160px] bg-background flex-shrink-0">
             <div className="flex items-center gap-2">
               <Car className="w-4 h-4 text-muted-foreground" />
-              <span><SelectValue placeholder="Service Type" /></span>
+              <span><SelectValue placeholder="Service" /></span>
             </div>
           </SelectTrigger>
           <SelectContent>
@@ -325,8 +323,8 @@ export default function Requests() {
               <TableHead>Status</TableHead>
               <TableHead>Customer</TableHead>
               <TableHead>Service</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Technician</TableHead>
+              <TableHead className="hidden md:table-cell">Location</TableHead>
+              <TableHead className="hidden md:table-cell">Technician</TableHead>
               <TableHead>Created</TableHead>
               <TableHead className="w-[60px] text-right">Actions</TableHead>
             </TableRow>
@@ -389,13 +387,13 @@ export default function Requests() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       <div className="flex items-center gap-1.5 max-w-[200px]">
                         <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
                         <span className="text-sm truncate" title={req.address || ''}>{req.address || 'Coordinates only'}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="hidden md:table-cell">
                       {req.job?.technician_name ? (
                         <div className="flex items-center gap-1.5">
                           <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">
@@ -481,7 +479,7 @@ const RequestDetailDrawer = forwardRef<HTMLDivElement, {
   return (
     <div
       ref={ref}
-      className="fixed right-0 top-0 bottom-0 w-[480px] bg-background border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300"
+      className="fixed right-0 top-0 bottom-0 w-full md:w-[480px] bg-background border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300"
     >
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">

@@ -12,7 +12,7 @@ export default function Technicians() {
   const { data, isLoading, isError } = useAdminListTechnicians({
     query: {
       queryKey: getAdminListTechniciansQueryKey(),
-      refetchInterval: 30000 // Poll every 30s
+      refetchInterval: 30000
     }
   });
 
@@ -27,14 +27,15 @@ export default function Technicians() {
   const formatCurrency = (val: number) => new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
 
   return (
-    <div className="p-8 space-y-6 h-full flex flex-col">
-      <div className="flex items-center justify-between flex-shrink-0">
+    <div className="p-4 md:p-8 space-y-6 h-full flex flex-col">
+      {/* Header — stacks vertically on small screens */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Technician Roster</h1>
           <p className="text-sm text-muted-foreground">Monitor fleet performance, status, and earnings.</p>
         </div>
         
-        <div className="relative w-72">
+        <div className="relative w-full sm:w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input 
             placeholder="Find technician..." 
@@ -55,6 +56,10 @@ export default function Technicians() {
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-destructive">Failed to load roster.</div>
         </div>
+      ) : filteredTechs.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          No technicians found.
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 overflow-auto content-start pb-8">
           {filteredTechs.map(tech => (
@@ -62,15 +67,15 @@ export default function Technicians() {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-lg font-bold text-secondary-foreground border border-border/50">
+                    <div className="w-12 h-12 rounded-full bg-secondary flex items-center justify-center text-lg font-bold text-secondary-foreground border border-border/50 flex-shrink-0">
                       {tech.name ? tech.name.charAt(0).toUpperCase() : 'T'}
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-base leading-tight">{tech.name || 'Unnamed Tech'}</h3>
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-base leading-tight truncate">{tech.name || 'Unnamed Tech'}</h3>
                       <p className="text-xs text-muted-foreground">{tech.phone}</p>
                     </div>
                   </div>
-                  <Badge variant={tech.active_jobs > 0 ? 'default' : 'secondary'} className="text-[10px] uppercase tracking-wider font-semibold">
+                  <Badge variant={tech.active_jobs > 0 ? 'default' : 'secondary'} className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0">
                     {tech.active_jobs > 0 ? 'On Job' : 'Available'}
                   </Badge>
                 </div>

@@ -384,7 +384,7 @@ export default function MapView() {
       )}
 
       {/* Overlay control panel */}
-      <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl p-4 w-72 flex flex-col gap-4 pointer-events-auto">
+      <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl p-3 md:p-4 w-[calc(100vw-2rem)] max-w-[18rem] flex flex-col gap-3 md:gap-4 pointer-events-auto overflow-y-auto max-h-[calc(100vh-6rem)]">
         <div>
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-bold text-sm tracking-tight">Live Ops Map</h2>
