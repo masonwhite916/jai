@@ -240,8 +240,8 @@ export default function AiAssistantScreen() {
         body: JSON.stringify({ messages: history }),
       });
 
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json() as { reply?: string; error?: string };
+      if (!resp.ok) throw new Error(data.error ?? 'HTTP ' + resp.status);
       const reply = data.reply ?? '';
 
       // If the user cleared chat while this request was in flight, discard the

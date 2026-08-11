@@ -116,7 +116,7 @@ router.post("/ai/chat", aiChatLimiter, async (req, res) => {
     }
 
     const completion = await getOpenAI().chat.completions.create({
-      model: "gpt-5.6-luna",
+      model: "gpt-4o-mini",
       max_completion_tokens: 400,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
