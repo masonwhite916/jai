@@ -251,6 +251,9 @@ router.get("/requests", requireAuth, async (req, res) => {
 });
 
 // GET /api/requests/:id
+// Returns the service request plus its most-recent job (status, eta, payout)
+// and technician info (name, phone, rating) so the client can catch up after
+// being offline without waiting for a WebSocket event.
 router.get("/requests/:id", requireAuth, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -263,7 +266,47 @@ router.get("/requests/:id", requireAuth, async (req, res) => {
       .limit(1);
 
     if (!rows.length) { res.status(404).json({ error: "Not found" }); return; }
-    res.json(rows[0]);
+
+    const request = rows[0];
+
+    // Fetch the most-recent job associated with this request
+    const jobRows = await db
+      .select({
+        id:            jobs.id,
+        status:        jobs.status,
+        payout:        jobs.payout,
+        distance_km:   jobs.distance_km,
+        eta_min:       jobs.eta_min,
+        technician_id: jobs.technician_id,
+        accepted_at:   jobs.accepted_at,
+        completed_at:  jobs.completed_at,
+      })
+      .from(jobs)
+      .where(eq(jobs.request_id, id))
+      .orderBy(desc(jobs.created_at))
+      .limit(1);
+
+    const job = jobRows[0] ?? null;
+
+    // Fetch technician info if the job has been assigned
+    let tech: { id: number; name: string; phone: string; rating: number } | null = null;
+    if (job?.technician_id) {
+      const techRows = await db
+        .select({ id: users.id, name: users.name, phone: users.phone, rating: users.rating })
+        .from(users)
+        .where(eq(users.id, job.technician_id))
+        .limit(1);
+      if (techRows[0]) {
+        tech = {
+          id:     techRows[0].id,
+          name:   techRows[0].name   ?? "Technician",
+          phone:  techRows[0].phone  ?? "",
+          rating: Number(techRows[0].rating ?? 4.5),
+        };
+      }
+    }
+
+    res.json({ ...request, job, tech });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: message });

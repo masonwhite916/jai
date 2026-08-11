@@ -15,7 +15,7 @@ import Animated, {
 
 const { height: SCREEN_H, width: SCREEN_W } = Dimensions.get('window');
 import { useLanguage } from '@/context/LanguageContext';
-import { useApp } from '@/context/AppContext';
+import { useApp, type ActiveRequest } from '@/context/AppContext';
 import { jaiSocket } from '@/lib/socket';
 import { getAuthToken, apiFetch } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
@@ -174,6 +174,76 @@ export default function TrackingScreen() {
   const jobId     = activeRequest?.jobId;
   const requestId = activeRequest?.requestId;
 
+  // ── Snapshot fetch: catch up on missed transitions ──────────────────────────
+  // Called on mount and on every WebSocket reconnect (auth_ok) to apply any
+  // status changes that happened while the customer was offline or backgrounded.
+  const activeRequestRef = useRef(activeRequest);
+  useEffect(() => { activeRequestRef.current = activeRequest; }, [activeRequest]);
+
+  const fetchJobSnapshot = useRef(async () => {
+    const reqId = activeRequestRef.current?.requestId;
+    if (!reqId || !getAuthToken()) return;
+    try {
+      const data = await apiFetch<{
+        status: string;
+        job: { status: string; eta_min: number | null; payout: number } | null;
+        tech: { id: number; name: string; phone: string; rating: number } | null;
+      }>(`/api/requests/${reqId}`);
+
+      const serverJobStatus = data.job?.status ?? data.status ?? null;
+      if (serverJobStatus) {
+        setJobStatus(serverJobStatus);
+      }
+
+      // Update tech info if the server now knows about an assigned technician
+      // and the local state doesn't have them yet.
+      if (data.tech) {
+        const techInfo: TechInfo = {
+          id:     data.tech.id,
+          name:   data.tech.name   ?? 'Technician',
+          phone:  data.tech.phone  ?? '',
+          rating: data.tech.rating ?? 4.5,
+        };
+        setTech(techInfo);
+
+        const cur = activeRequestRef.current;
+        if (cur) {
+          // Map job status to the service-request status stored in activeRequest
+          const srStatus: ActiveRequest['status'] =
+            serverJobStatus === 'completed' ? 'completed' :
+            serverJobStatus === 'cancelled' ? 'cancelled' :
+            serverJobStatus === 'pending'   ? 'pending'   : 'assigned';
+          setActiveRequest({ ...cur, status: srStatus, tech: techInfo });
+        }
+      } else if (serverJobStatus) {
+        const cur = activeRequestRef.current;
+        if (cur) {
+          const srStatus: ActiveRequest['status'] =
+            serverJobStatus === 'completed' ? 'completed' :
+            serverJobStatus === 'cancelled' ? 'cancelled' :
+            serverJobStatus === 'pending'   ? 'pending'   : 'assigned';
+          if (cur.status !== srStatus) {
+            setActiveRequest({ ...cur, status: srStatus });
+          }
+        }
+      }
+
+      if (data.job?.eta_min != null) {
+        setEtaMin(data.job.eta_min);
+      }
+    } catch {
+      // Network error — keep whatever state we already have
+    }
+  }).current;
+
+  // On mount: one-shot fetch to apply any transitions missed while offline
+  useEffect(() => {
+    if (hasRequest) {
+      void fetchJobSnapshot();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // ── WebSocket subscription ──────────────────────────────────────────────────
   useEffect(() => {
     const token = getAuthToken();
@@ -189,6 +259,13 @@ export default function TrackingScreen() {
     perfMark('trackingReady');
     perfMeasure('launch_to_tracking', 'appStart', 'trackingReady');
 
+    // On reconnect (auth_ok fires after every successful re-auth), re-fetch
+    // the latest job state so any transitions missed during the offline window
+    // are applied immediately without waiting for the next WebSocket event.
+    const offReconnect = jaiSocket.on('auth_ok', () => {
+      void fetchJobSnapshot();
+    });
+
     const offAccepted = jaiSocket.on('job_accepted', (payload) => {
       const { techName, techPhone, techId, techRating } = payload as {
         techName: string; techPhone: string; techId: number; techRating: number;
@@ -201,14 +278,14 @@ export default function TrackingScreen() {
       };
       setTech(techInfo);
       setJobStatus('accepted');
-      setActiveRequest(activeRequest ? { ...activeRequest, status: 'assigned', tech: techInfo } : null);
+      setActiveRequest(activeRequestRef.current ? { ...activeRequestRef.current, status: 'assigned', tech: techInfo } : null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     });
 
     const offStatus = jaiSocket.on('job_status', (payload) => {
       const { status } = payload as { status: string };
       setJobStatus(status);
-      setActiveRequest(activeRequest ? { ...activeRequest, status: status as any } : null);
+      setActiveRequest(activeRequestRef.current ? { ...activeRequestRef.current, status: status as any } : null);
     });
 
     const offLocation = jaiSocket.on('tech_location', (payload) => {
@@ -221,6 +298,7 @@ export default function TrackingScreen() {
     });
 
     return () => {
+      offReconnect();
       offAccepted();
       offStatus();
       offLocation();
