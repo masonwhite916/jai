@@ -315,7 +315,109 @@ export default function Requests() {
         </Select>
       </div>
 
-      <div className="flex-1 overflow-auto border border-border/50 rounded-xl bg-card shadow-sm relative">
+      {/* ── Mobile card list (< md) ──────────────────────────────────────────── */}
+      <div className="md:hidden flex-1 overflow-auto space-y-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 text-muted-foreground py-12">
+            <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            Loading requests...
+          </div>
+        ) : filteredRequests.length === 0 ? (
+          <div className="flex flex-col items-center text-muted-foreground py-16">
+            <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+            <p>No requests found matching your filters.</p>
+          </div>
+        ) : (
+          filteredRequests.map((req) => {
+            const isNew = newIds.has(req.id);
+            const isSelected = selectedRequest?.id === req.id;
+            return (
+              <div
+                key={req.id}
+                onClick={() => setSelectedRequest(req)}
+                className={[
+                  'rounded-xl border bg-card shadow-sm p-4 cursor-pointer transition-colors active:scale-[0.99]',
+                  isNew ? 'border-amber-300 bg-amber-50 dark:bg-amber-950/30' : 'border-border/50',
+                  isSelected ? 'ring-2 ring-primary/40' : '',
+                ].join(' ')}
+              >
+                {/* Top row: status badge + service + actions */}
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant={STATUS_VARIANTS[req.status] || "secondary"} className="capitalize text-[10px] uppercase tracking-wider font-semibold">
+                      {req.status.replace(/_/g, ' ')}
+                    </Badge>
+                    {isNew && (
+                      <span className="inline-flex items-center text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 rounded px-1.5 py-0.5">New</span>
+                    )}
+                  </div>
+                  {/* Actions button — stops propagation so the card click doesn't fire */}
+                  <div onClick={(e) => e.stopPropagation()} className="flex-shrink-0">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 w-8 p-0 -mr-1 -mt-1">
+                          <span className="sr-only">Open menu</span>
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} isPending={req.status === 'pending'} />
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          onClick={() => handleCancel(req.id)}
+                          disabled={req.status === 'cancelled' || req.status === 'completed'}
+                        >
+                          Cancel Request
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+
+                {/* Service + ID */}
+                <div className="flex items-baseline gap-2 mb-2">
+                  <p className="text-base font-semibold capitalize leading-tight">
+                    {req.service_type.replace(/_/g, ' ')}
+                  </p>
+                  <span className="text-xs text-muted-foreground font-mono">#{req.id}</span>
+                </div>
+
+                {/* Customer */}
+                <div className="flex items-center gap-1.5 mb-1">
+                  <User className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm font-medium">{req.customer.name || 'Unknown'}</span>
+                  <span className="text-xs text-muted-foreground">{req.customer.phone}</span>
+                </div>
+
+                {/* Bottom row: technician + time */}
+                <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/40">
+                  {req.job?.technician_name ? (
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold flex-shrink-0">
+                        {req.job.technician_name.charAt(0).toUpperCase()}
+                      </div>
+                      <span className="text-xs font-medium">{req.job.technician_name}</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic flex items-center gap-1">
+                      <Wrench className="w-3 h-3" /> Unassigned
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground flex items-center gap-1" title={format(new Date(req.created_at), 'PPpp')}>
+                    <Clock className="w-3 h-3" />
+                    {formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* ── Desktop table (≥ md) ─────────────────────────────────────────────── */}
+      <div className="hidden md:block flex-1 overflow-auto border border-border/50 rounded-xl bg-card shadow-sm relative">
         <Table>
           <TableHeader className="bg-muted/50 sticky top-0 z-10">
             <TableRow>
