@@ -162,6 +162,15 @@ router.post("/requests", requireAuth, async (req, res) => {
       .where(eq(users.id, req.userId!))
       .limit(1);
 
+    // Broadcast to the admin room so dispatchers see it immediately
+    dispatch.broadcastToRoom("admin", {
+      type: "new_request",
+      request_id: req_.id,
+      service_type: service_type,
+      address: address ?? null,
+      customer_name: customer?.name ?? null,
+    });
+
     // Broadcast to all online technicians so the job appears instantly in their queue
     dispatch.broadcastToRoom("technicians", {
       type: "new_job",

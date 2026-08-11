@@ -1,7 +1,7 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAdminListRequests, getAdminListRequestsQueryKey, useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminReassignJob, useAdminCancelRequest } from '@workspace/api-client-react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Search, Filter, MoreVertical, MapPin, User, Car, AlertCircle } from 'lucide-react';
+import { Search, Filter, MoreVertical, MapPin, Car, AlertCircle, Bell } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -44,11 +44,97 @@ const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | 
   cancelled: "destructive"
 };
 
+/** Hook: connects to the admin WS room and calls `onNewRequest` on each new_request event. */
+function useAdminWs(onNewRequest: (requestId: number, serviceType: string, customerName: string | null) => void) {
+  const wsRef = useRef<WebSocket | null>(null);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const authErrorRef = useRef(false);
+  const onNewRequestRef = useRef(onNewRequest);
+  onNewRequestRef.current = onNewRequest;
+
+  const connect = useCallback(() => {
+    if (reconnectTimer.current) { clearTimeout(reconnectTimer.current); reconnectTimer.current = null; }
+    if (document.visibilityState === 'hidden') return;
+
+    const token = localStorage.getItem('jai_admin_token');
+    if (!token) return;
+
+    const existing = wsRef.current;
+    if (existing && (existing.readyState === WebSocket.OPEN || existing.readyState === WebSocket.CONNECTING)) {
+      existing.onclose = null;
+      existing.close();
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    wsRef.current = ws;
+
+    ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
+
+    ws.onmessage = (event) => {
+      let msg: Record<string, unknown>;
+      try { msg = JSON.parse(event.data as string) as Record<string, unknown>; }
+      catch { return; }
+
+      switch (msg.type) {
+        case 'auth_ok':
+          ws.send(JSON.stringify({ type: 'join', room: 'admin' }));
+          break;
+        case 'auth_error':
+          authErrorRef.current = true;
+          ws.close();
+          break;
+        case 'new_request':
+          onNewRequestRef.current(
+            Number(msg.request_id),
+            typeof msg.service_type === 'string' ? msg.service_type : 'service',
+            typeof msg.customer_name === 'string' ? msg.customer_name : null,
+          );
+          break;
+        default:
+          break;
+      }
+    };
+
+    ws.onclose = () => {
+      if (authErrorRef.current) return;
+      if (document.visibilityState !== 'hidden') {
+        reconnectTimer.current = setTimeout(connect, 5000);
+      }
+    };
+
+    ws.onerror = () => ws.close();
+  }, []);
+
+  useEffect(() => {
+    authErrorRef.current = false;
+    connect();
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const ws = wsRef.current;
+        const dead = !ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING;
+        if (dead && !authErrorRef.current) connect();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      const ws = wsRef.current;
+      if (ws) { ws.onclose = null; ws.close(); }
+    };
+  }, [connect]);
+}
+
 export default function Requests() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
-  
+  // IDs of requests that just arrived via WS — gets a highlight class briefly
+  const [newIds, setNewIds] = useState<Set<number>>(new Set());
+
   const queryClient = useQueryClient();
 
   const queryParams = {
@@ -59,9 +145,45 @@ export default function Requests() {
   const { data, isLoading } = useAdminListRequests(queryParams, {
     query: {
       queryKey: getAdminListRequestsQueryKey(queryParams),
-      refetchInterval: 15000 // Poll every 15s
+      refetchInterval: 15000 // Poll every 15s as fallback
     }
   });
+
+  // Real-time: handle incoming new_request from WS
+  const handleNewRequest = useCallback((requestId: number, serviceType: string, customerName: string | null) => {
+    // Refresh the list immediately (bypasses 304 cache)
+    queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
+
+    // Toast notification
+    const label = serviceType.replace(/_/g, ' ');
+    const who = customerName ? ` from ${customerName}` : '';
+    toast(`New ${label} request${who}`, {
+      icon: <Bell className="w-4 h-4 text-amber-500" />,
+      description: `Request #${requestId} is waiting for a technician.`,
+      duration: 8000,
+      action: {
+        label: 'View',
+        onClick: () => {
+          // Clear filters so the new row is visible
+          setStatusFilter('all');
+          setServiceFilter('all');
+          setSearch('');
+        },
+      },
+    });
+
+    // Highlight the new row for 4 seconds
+    setNewIds(prev => new Set(prev).add(requestId));
+    setTimeout(() => {
+      setNewIds(prev => {
+        const next = new Set(prev);
+        next.delete(requestId);
+        return next;
+      });
+    }, 4000);
+  }, [queryClient]);
+
+  useAdminWs(handleNewRequest);
 
   const requests = data?.requests || [];
   
@@ -143,12 +265,13 @@ export default function Requests() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Services</SelectItem>
+            <SelectItem value="battery">Battery</SelectItem>
             <SelectItem value="tow">Tow</SelectItem>
-            <SelectItem value="jump_start">Jump Start</SelectItem>
-            <SelectItem value="tire_change">Tire Change</SelectItem>
+            <SelectItem value="tire">Tire</SelectItem>
             <SelectItem value="lockout">Lockout</SelectItem>
-            <SelectItem value="fuel_delivery">Fuel Delivery</SelectItem>
-            <SelectItem value="winch_out">Winch Out</SelectItem>
+            <SelectItem value="fuel">Fuel</SelectItem>
+            <SelectItem value="mechanic">Mechanic</SelectItem>
+            <SelectItem value="electric">Electric</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -187,79 +310,88 @@ export default function Requests() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredRequests.map((req) => (
-                <TableRow key={req.id}>
-                  <TableCell className="font-medium text-xs">#{req.id}</TableCell>
-                  <TableCell>
-                    <Badge variant={STATUS_VARIANTS[req.status] || "secondary"} className="capitalize text-[10px] uppercase tracking-wider font-semibold">
-                      {req.status.replace('_', ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-medium text-sm">{req.customer.name || 'Unknown'}</span>
-                      <span className="text-xs text-muted-foreground">{req.customer.phone}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="capitalize text-sm font-medium">{req.service_type.replace('_', ' ')}</span>
-                      {req.vehicle_make && (
-                        <span className="text-xs text-muted-foreground truncate max-w-[120px]">
-                          {req.vehicle_make} {req.vehicle_model}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5 max-w-[200px]">
-                      <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-                      <span className="text-sm truncate" title={req.address || ''}>
-                        {req.address || 'Coordinates only'}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {req.job?.technician_name ? (
-                      <div className="flex items-center gap-1.5">
-                        <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">
-                          {req.job.technician_name.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="text-sm">{req.job.technician_name}</span>
+              filteredRequests.map((req) => {
+                const isNew = newIds.has(req.id);
+                return (
+                  <TableRow
+                    key={req.id}
+                    className={`transition-colors duration-[3000ms] ${isNew ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                  >
+                    <TableCell className="font-medium text-xs">
+                      #{req.id}
+                      {isNew && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 rounded px-1 py-0.5">New</span>}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANTS[req.status] || "secondary"} className="capitalize text-[10px] uppercase tracking-wider font-semibold">
+                        {req.status.replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{req.customer.name || 'Unknown'}</span>
+                        <span className="text-xs text-muted-foreground">{req.customer.phone}</span>
                       </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground italic">Unassigned</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col" title={format(new Date(req.created_at), 'PPpp')}>
-                      <span className="text-sm">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} isPending={req.status === 'pending'} />
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                          onClick={() => handleCancel(req.id)}
-                          disabled={req.status === 'cancelled' || req.status === 'completed'}
-                        >
-                          Cancel Request
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="capitalize text-sm font-medium">{req.service_type.replace(/_/g, ' ')}</span>
+                        {req.vehicle_make && (
+                          <span className="text-xs text-muted-foreground truncate max-w-[120px]">
+                            {req.vehicle_make} {req.vehicle_model}
+                          </span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5 max-w-[200px]">
+                        <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+                        <span className="text-sm truncate" title={req.address || ''}>
+                          {req.address || 'Coordinates only'}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      {req.job?.technician_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-bold">
+                            {req.job.technician_name.charAt(0).toUpperCase()}
+                          </div>
+                          <span className="text-sm">{req.job.technician_name}</span>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col" title={format(new Date(req.created_at), 'PPpp')}>
+                        <span className="text-sm">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} isPending={req.status === 'pending'} />
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                            onClick={() => handleCancel(req.id)}
+                            disabled={req.status === 'cancelled' || req.status === 'completed'}
+                          >
+                            Cancel Request
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>
