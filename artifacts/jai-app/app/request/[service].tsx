@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Platform, Image, ActivityIndicator, Alert,
+  TextInput, Platform, Image, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -82,6 +82,13 @@ export default function ServiceRequest() {
   const [paymentIdx, setPaymentIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
+
+  // ── Payment confirmation interstitial ─────────────────────────────────────
+  const [payConfirm, setPayConfirm] = useState<{
+    paymentId: string;
+    method: string;
+    amount: number;
+  } | null>(null);
 
   // ── Durable idempotency key — persisted in AsyncStorage across app restarts ───
   //
@@ -365,7 +372,23 @@ export default function ServiceRequest() {
       }
       setSubmitting(false);
       clearIdempotencyKey(); // terminal success — next request gets a fresh key
-      router.replace('/tracking');
+
+      // Show payment confirmation interstitial for card / Apple Pay payments.
+      // Cash and covered-membership flows skip straight to tracking.
+      if (paymentPayload.payment_id) {
+        const methodLabels: Record<number, string> = {
+          0: t('applePay'),
+          1: t('madaCard'),
+          2: t('visaMaster'),
+        };
+        setPayConfirm({
+          paymentId: paymentPayload.payment_id,
+          method:    methodLabels[paymentIdx] ?? 'Card',
+          amount:    info.basePrice,
+        });
+      } else {
+        router.replace('/tracking');
+      }
     } catch (err) {
       setSubmitting(false);
       const msg = err instanceof Error ? err.message : '';
@@ -766,6 +789,94 @@ export default function ServiceRequest() {
           </LinearGradient>
         </TouchableOpacity>
       </View>
+
+      {/* ── Payment confirmation interstitial ──────────────────────────────── */}
+      <Modal
+        visible={!!payConfirm}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {/* prevent back-dismiss — user must tap the button */}}
+      >
+        <View style={styles.confirmOverlay}>
+          <View style={[styles.confirmSheet, { paddingBottom: insets.bottom + 24 }]}>
+            {/* Success icon */}
+            <LinearGradient
+              colors={['#2D1B69', '#5B2C91']}
+              style={styles.confirmIconWrap}
+            >
+              <Ionicons name="checkmark" size={38} color="#FFFFFF" />
+            </LinearGradient>
+
+            <Text style={[styles.confirmTitle, { fontFamily: font.bold }]}>
+              {isRTL ? 'تم الدفع بنجاح' : 'Payment confirmed'}
+            </Text>
+            <Text style={[styles.confirmSubtitle, { fontFamily: font.regular }]}>
+              {isRTL
+                ? 'تمت معالجة دفعتك بنجاح. سيتوجه فني إليك قريباً.'
+                : 'Your payment was processed successfully. A technician is on the way.'}
+            </Text>
+
+            {/* Detail rows */}
+            <View style={styles.confirmCard}>
+              {[
+                {
+                  label: isRTL ? 'الخدمة' : 'Service',
+                  value: t(info.labelKey),
+                },
+                {
+                  label: isRTL ? 'المبلغ' : 'Amount',
+                  value: `${payConfirm?.amount ?? info.basePrice} SAR`,
+                  highlight: true,
+                },
+                {
+                  label: isRTL ? 'طريقة الدفع' : 'Payment method',
+                  value: payConfirm?.method ?? '',
+                },
+                {
+                  label: isRTL ? 'رقم الإيصال' : 'Receipt ID',
+                  value: payConfirm
+                    ? `…${payConfirm.paymentId.slice(-8)}`
+                    : '',
+                },
+              ].map(({ label, value, highlight }) => (
+                <View key={label} style={[styles.confirmRow, { flexDirection: rowDir }]}>
+                  <Text style={[styles.confirmRowLabel, { fontFamily: font.regular }]}>{label}</Text>
+                  <Text style={[
+                    styles.confirmRowValue,
+                    { fontFamily: highlight ? font.bold : font.medium },
+                    highlight && { color: '#2D1B69', fontSize: 18 },
+                  ]}>
+                    {value}
+                  </Text>
+                </View>
+              ))}
+            </View>
+
+            {/* CTA */}
+            <TouchableOpacity
+              style={styles.confirmBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                setPayConfirm(null);
+                router.replace('/tracking');
+              }}
+            >
+              <LinearGradient
+                colors={['#2D1B69', '#5B2C91']}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                style={[styles.confirmBtnGradient, { flexDirection: rowDir }]}
+              >
+                <Ionicons name="navigate" size={18} color="#FFFFFF" />
+                <Text style={[styles.confirmBtnText, { fontFamily: font.bold }]}>
+                  {isRTL ? 'تتبّع الفني' : 'Track my technician'}
+                </Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -890,4 +1001,50 @@ const styles = StyleSheet.create({
   nextBtnDisabled: { opacity: 0.6 },
   nextBtnGradient: { paddingVertical: 18, justifyContent: 'center', alignItems: 'center', gap: 10 },
   nextBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+
+  // ── Payment confirmation modal ────────────────────────────────────────────
+  confirmOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  confirmSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingTop: 32, paddingHorizontal: 24,
+    alignItems: 'center',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.12, shadowRadius: 20, elevation: 20,
+  },
+  confirmIconWrap: {
+    width: 72, height: 72, borderRadius: 36,
+    justifyContent: 'center', alignItems: 'center',
+    marginBottom: 20,
+  },
+  confirmTitle: {
+    fontSize: 22, fontWeight: '700', color: '#1A1A1A',
+    marginBottom: 8, textAlign: 'center',
+  },
+  confirmSubtitle: {
+    fontSize: 14, color: '#6B7280', textAlign: 'center',
+    lineHeight: 21, marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  confirmCard: {
+    width: '100%', backgroundColor: '#F8F7FF',
+    borderRadius: 16, padding: 16, marginBottom: 24,
+    borderWidth: 1.5, borderColor: '#EDE8F8',
+  },
+  confirmRow: {
+    justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: '#EBEBF5',
+  },
+  confirmRowLabel: { fontSize: 14, color: '#6B7280' },
+  confirmRowValue: { fontSize: 14, color: '#1A1A1A', textAlign: 'right', maxWidth: '60%' },
+  confirmBtn: { width: '100%', borderRadius: 16, overflow: 'hidden', marginBottom: 8 },
+  confirmBtnGradient: {
+    paddingVertical: 18, justifyContent: 'center',
+    alignItems: 'center', gap: 10,
+  },
+  confirmBtnText: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
 });
