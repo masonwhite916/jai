@@ -501,7 +501,6 @@ export default function AdminPanelScreen() {
               onPress={() => doSave(() => updateContact(localContact), 'Contact info updated.')} />
           </>
         )}
-      </ScrollView>
 
         {/* ═══ PACKAGES ════════════════════════════════════════════════════ */}
         {tab === 'packages' && (
