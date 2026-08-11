@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAdminListRequests, getAdminListRequestsQueryKey, useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminReassignJob, useAdminCancelRequest } from '@workspace/api-client-react';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Search, Filter, MoreVertical, MapPin, Car, AlertCircle, Bell } from 'lucide-react';
+import { Search, Filter, MoreVertical, MapPin, Car, AlertCircle, Bell, X, User, FileText, Clock, Phone, Wrench, ChevronRight } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { MapContainer, TileLayer, Marker } from 'react-leaflet';
+import { divIcon } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -35,16 +39,55 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-// Service-request statuses: pending → assigned → in_progress → completed/cancelled
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type AdminRequest = {
+  id: number;
+  status: string;
+  service_type: string;
+  address?: string | null;
+  location_lat?: number | null;
+  location_lng?: number | null;
+  vehicle_make?: string | null;
+  vehicle_model?: string | null;
+  vehicle_plate?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at: string;
+  customer: { id: number; name?: string | null; phone: string };
+  job?: {
+    id?: number | null;
+    status?: string | null;
+    payout?: number | null;
+    technician_id?: number | null;
+    technician_name?: string | null;
+    technician_phone?: string | null;
+    accepted_at?: string | null;
+    completed_at?: string | null;
+  } | null;
+};
+
+// ── Status colours ─────────────────────────────────────────────────────────────
+
 const STATUS_VARIANTS: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   pending: "secondary",
   assigned: "default",
   in_progress: "default",
   completed: "outline",
-  cancelled: "destructive"
+  cancelled: "destructive",
 };
 
-/** Hook: connects to the admin WS room and calls `onNewRequest` on each new_request event. */
+// ── Mini-map pin ───────────────────────────────────────────────────────────────
+
+const pinIcon = divIcon({
+  className: '',
+  html: `<div style="width:20px;height:20px;border-radius:50%;background:#f59e0b;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,0.35);"></div>`,
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
+
+// ── Admin WS hook ──────────────────────────────────────────────────────────────
+
 function useAdminWs(onNewRequest: (requestId: number, serviceType: string, customerName: string | null) => void) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,9 +116,7 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
 
     ws.onmessage = (event) => {
       let msg: Record<string, unknown>;
-      try { msg = JSON.parse(event.data as string) as Record<string, unknown>; }
-      catch { return; }
-
+      try { msg = JSON.parse(event.data as string) as Record<string, unknown>; } catch { return; }
       switch (msg.type) {
         case 'auth_ok':
           ws.send(JSON.stringify({ type: 'join', room: 'admin' }));
@@ -90,8 +131,6 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
             typeof msg.service_type === 'string' ? msg.service_type : 'service',
             typeof msg.customer_name === 'string' ? msg.customer_name : null,
           );
-          break;
-        default:
           break;
       }
     };
@@ -109,7 +148,6 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
   useEffect(() => {
     authErrorRef.current = false;
     connect();
-
     const onVisibility = () => {
       if (document.visibilityState === 'visible') {
         const ws = wsRef.current;
@@ -118,7 +156,6 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
       }
     };
     document.addEventListener('visibilitychange', onVisibility);
-
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
@@ -128,33 +165,50 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
   }, [connect]);
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────────
+
 export default function Requests() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [serviceFilter, setServiceFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
-  // IDs of requests that just arrived via WS — gets a highlight class briefly
   const [newIds, setNewIds] = useState<Set<number>>(new Set());
+  const [selectedRequest, setSelectedRequest] = useState<AdminRequest | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   const queryClient = useQueryClient();
 
+  // Close drawer on Escape
+  useEffect(() => {
+    if (!selectedRequest) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setSelectedRequest(null); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedRequest]);
+
+  // Close drawer on click outside
+  useEffect(() => {
+    if (!selectedRequest) return;
+    const handler = (e: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(e.target as Node)) {
+        setSelectedRequest(null);
+      }
+    };
+    // Delay so the row-click that opened the drawer doesn't immediately close it
+    const id = setTimeout(() => document.addEventListener('mousedown', handler), 50);
+    return () => { clearTimeout(id); document.removeEventListener('mousedown', handler); };
+  }, [selectedRequest]);
+
   const queryParams = {
     ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
-    ...(serviceFilter !== 'all' ? { service_type: serviceFilter } : {})
+    ...(serviceFilter !== 'all' ? { service_type: serviceFilter } : {}),
   };
 
   const { data, isLoading } = useAdminListRequests(queryParams, {
-    query: {
-      queryKey: getAdminListRequestsQueryKey(queryParams),
-      refetchInterval: 15000 // Poll every 15s as fallback
-    }
+    query: { queryKey: getAdminListRequestsQueryKey(queryParams), refetchInterval: 15000 },
   });
 
-  // Real-time: handle incoming new_request from WS
   const handleNewRequest = useCallback((requestId: number, serviceType: string, customerName: string | null) => {
-    // Refresh the list immediately (bypasses 304 cache)
     queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
-
-    // Toast notification
     const label = serviceType.replace(/_/g, ' ');
     const who = customerName ? ` from ${customerName}` : '';
     toast(`New ${label} request${who}`, {
@@ -163,51 +217,26 @@ export default function Requests() {
       duration: 8000,
       action: {
         label: 'View',
-        onClick: () => {
-          // Clear filters so the new row is visible
-          setStatusFilter('all');
-          setServiceFilter('all');
-          setSearch('');
-        },
+        onClick: () => { setStatusFilter('all'); setServiceFilter('all'); setSearch(''); },
       },
     });
-
-    // Highlight the new row for 4 seconds
     setNewIds(prev => new Set(prev).add(requestId));
     setTimeout(() => {
-      setNewIds(prev => {
-        const next = new Set(prev);
-        next.delete(requestId);
-        return next;
-      });
+      setNewIds(prev => { const next = new Set(prev); next.delete(requestId); return next; });
     }, 4000);
   }, [queryClient]);
 
   useAdminWs(handleNewRequest);
-
-  const requests = data?.requests || [];
-  
-  const filteredRequests = requests.filter(r => {
-    if (!search) return true;
-    const term = search.toLowerCase();
-    return (
-      r.customer.name?.toLowerCase().includes(term) ||
-      r.customer.phone.includes(term) ||
-      r.address?.toLowerCase().includes(term) ||
-      r.id.toString() === term
-    );
-  });
 
   const cancelMutation = useAdminCancelRequest({
     mutation: {
       onSuccess: () => {
         toast.success("Request cancelled successfully");
         queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
+        setSelectedRequest(null);
       },
-      onError: (err: any) => {
-        toast.error(err?.error || "Failed to cancel request");
-      }
-    }
+      onError: (err: any) => toast.error(err?.error || "Failed to cancel request"),
+    },
   });
 
   const cancelRequestFnRef = useRef(cancelMutation.mutate);
@@ -218,6 +247,18 @@ export default function Requests() {
       cancelRequestFnRef.current({ id });
     }
   };
+
+  const requests = (data?.requests || []) as AdminRequest[];
+  const filteredRequests = requests.filter(r => {
+    if (!search) return true;
+    const term = search.toLowerCase();
+    return (
+      r.customer.name?.toLowerCase().includes(term) ||
+      r.customer.phone.includes(term) ||
+      r.address?.toLowerCase().includes(term) ||
+      r.id.toString() === term
+    );
+  });
 
   return (
     <div className="p-8 space-y-6 h-full flex flex-col">
@@ -231,14 +272,14 @@ export default function Requests() {
       <div className="flex items-center gap-4 flex-shrink-0 bg-card p-4 rounded-xl border border-border/50 shadow-sm">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search by ID, customer name, or phone..." 
+          <Input
+            placeholder="Search by ID, customer name, or phone..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 bg-background"
           />
         </div>
-        
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px] bg-background">
             <div className="flex items-center gap-2">
@@ -295,7 +336,7 @@ export default function Requests() {
               <TableRow>
                 <TableCell colSpan={8} className="h-24 text-center">
                   <div className="animate-pulse flex items-center justify-center gap-2 text-muted-foreground">
-                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     Loading requests...
                   </div>
                 </TableCell>
@@ -312,14 +353,20 @@ export default function Requests() {
             ) : (
               filteredRequests.map((req) => {
                 const isNew = newIds.has(req.id);
+                const isSelected = selectedRequest?.id === req.id;
                 return (
                   <TableRow
                     key={req.id}
-                    className={`transition-colors duration-[3000ms] ${isNew ? 'bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                    onClick={() => setSelectedRequest(req)}
+                    className={[
+                      'cursor-pointer transition-colors',
+                      isNew ? 'bg-amber-50 dark:bg-amber-950/30 duration-[3000ms]' : '',
+                      isSelected ? 'bg-primary/5 hover:bg-primary/5' : 'hover:bg-muted/40',
+                    ].join(' ')}
                   >
                     <TableCell className="font-medium text-xs">
                       #{req.id}
-                      {isNew && <span className="ml-1.5 inline-flex items-center gap-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 rounded px-1 py-0.5">New</span>}
+                      {isNew && <span className="ml-1.5 inline-flex items-center text-[9px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 rounded px-1 py-0.5">New</span>}
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANTS[req.status] || "secondary"} className="capitalize text-[10px] uppercase tracking-wider font-semibold">
@@ -345,9 +392,7 @@ export default function Requests() {
                     <TableCell>
                       <div className="flex items-center gap-1.5 max-w-[200px]">
                         <MapPin className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-                        <span className="text-sm truncate" title={req.address || ''}>
-                          {req.address || 'Coordinates only'}
-                        </span>
+                        <span className="text-sm truncate" title={req.address || ''}>{req.address || 'Coordinates only'}</span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -363,11 +408,14 @@ export default function Requests() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <div className="flex flex-col" title={format(new Date(req.created_at), 'PPpp')}>
-                        <span className="text-sm">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm" title={format(new Date(req.created_at), 'PPpp')}>
+                          {formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}
+                        </span>
+                        <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/50 ml-auto" />
                       </div>
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
@@ -379,7 +427,7 @@ export default function Requests() {
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} isPending={req.status === 'pending'} />
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive focus:bg-destructive/10"
                             onClick={() => handleCancel(req.id)}
                             disabled={req.status === 'cancelled' || req.status === 'completed'}
@@ -396,22 +444,310 @@ export default function Requests() {
           </TableBody>
         </Table>
       </div>
+
+      {/* ── Detail drawer ───────────────────────────────────────────────────── */}
+      {selectedRequest && (
+        <RequestDetailDrawer
+          ref={drawerRef}
+          request={selectedRequest}
+          onClose={() => setSelectedRequest(null)}
+          onAssigned={() => {
+            queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
+            setSelectedRequest(null);
+          }}
+          onCancelled={() => handleCancel(selectedRequest.id)}
+        />
+      )}
     </div>
   );
 }
 
-function ReassignDialog({ requestId, currentTechId, isPending }: { requestId: number, currentTechId?: number | null, isPending?: boolean }) {
+// ── Request Detail Drawer ─────────────────────────────────────────────────────
+
+import { forwardRef } from 'react';
+
+const RequestDetailDrawer = forwardRef<HTMLDivElement, {
+  request: AdminRequest;
+  onClose: () => void;
+  onAssigned: () => void;
+  onCancelled: () => void;
+}>(function RequestDetailDrawer({ request, onClose, onAssigned, onCancelled }, ref) {
+  const queryClient = useQueryClient();
+  const req = request;
+  const isAssign = req.status === 'pending' || !req.job?.technician_id;
+  const canCancel = req.status !== 'cancelled' && req.status !== 'completed';
+  const hasCoords = req.location_lat && req.location_lng;
+
+  return (
+    <div
+      ref={ref}
+      className="fixed right-0 top-0 bottom-0 w-[480px] bg-background border-l border-border shadow-2xl z-50 flex flex-col overflow-hidden animate-in slide-in-from-right duration-300"
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div>
+            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Request</p>
+            <h2 className="text-lg font-bold leading-tight">#{req.id}</h2>
+          </div>
+          <Badge variant={STATUS_VARIANTS[req.status] || "secondary"} className="capitalize text-[10px] uppercase tracking-wider font-semibold">
+            {req.status.replace(/_/g, ' ')}
+          </Badge>
+        </div>
+        <button
+          onClick={onClose}
+          className="rounded-md p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label="Close"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Scrollable body */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+
+        {/* Service + time */}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1">Service</p>
+            <p className="text-base font-semibold capitalize">{req.service_type.replace(/_/g, ' ')}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-1 flex items-center gap-1 justify-end">
+              <Clock className="w-3 h-3" /> Elapsed
+            </p>
+            <p className="text-sm font-medium" title={format(new Date(req.created_at), 'PPpp')}>
+              {formatDistanceToNow(new Date(req.created_at), { addSuffix: false })}
+            </p>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Customer */}
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5" /> Customer
+          </p>
+          <div className="bg-muted/40 rounded-lg px-4 py-3 space-y-2">
+            <p className="font-semibold text-sm">{req.customer.name || 'Unknown'}</p>
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Phone className="w-3.5 h-3.5" />
+              {req.customer.phone}
+            </p>
+          </div>
+        </div>
+
+        {/* Vehicle */}
+        {(req.vehicle_make || req.vehicle_plate) && (
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
+              <Car className="w-3.5 h-3.5" /> Vehicle
+            </p>
+            <div className="bg-muted/40 rounded-lg px-4 py-3 grid grid-cols-2 gap-y-2 gap-x-4 text-sm">
+              {req.vehicle_make && (
+                <>
+                  <span className="text-muted-foreground">Make / Model</span>
+                  <span className="font-medium">{req.vehicle_make} {req.vehicle_model}</span>
+                </>
+              )}
+              {req.vehicle_plate && (
+                <>
+                  <span className="text-muted-foreground">Plate</span>
+                  <span className="font-mono font-semibold tracking-wider">{req.vehicle_plate}</span>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Notes */}
+        {req.notes ? (
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Notes
+            </p>
+            <div className="bg-muted/40 rounded-lg px-4 py-3">
+              <p className="text-sm leading-relaxed">{req.notes}</p>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-2 flex items-center gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Notes
+            </p>
+            <p className="text-sm text-muted-foreground italic">No notes provided.</p>
+          </div>
+        )}
+
+        {/* Location + mini map */}
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5" /> Location
+          </p>
+          {req.address && (
+            <p className="text-sm mb-3 text-foreground">{req.address}</p>
+          )}
+          {hasCoords ? (
+            <div className="h-44 rounded-xl overflow-hidden border border-border">
+              <MapContainer
+                key={req.id}
+                center={[req.location_lat as number, req.location_lng as number]}
+                zoom={15}
+                style={{ height: '100%', width: '100%' }}
+                zoomControl={false}
+                dragging={false}
+                scrollWheelZoom={false}
+                doubleClickZoom={false}
+                attributionControl={false}
+              >
+                <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" />
+                <Marker
+                  position={[req.location_lat as number, req.location_lng as number]}
+                  icon={pinIcon}
+                />
+              </MapContainer>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground italic">No coordinates recorded.</p>
+          )}
+        </div>
+
+        {/* Assigned technician */}
+        {req.job?.technician_name && (
+          <div>
+            <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium mb-3 flex items-center gap-1.5">
+              <Wrench className="w-3.5 h-3.5" /> Assigned Technician
+            </p>
+            <div className="bg-muted/40 rounded-lg px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm flex-shrink-0">
+                {req.job.technician_name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <p className="font-semibold text-sm">{req.job.technician_name}</p>
+                {req.job.technician_phone && (
+                  <p className="text-xs text-muted-foreground">{req.job.technician_phone}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer actions */}
+      <div className="flex-shrink-0 border-t border-border p-4 flex gap-3">
+        <AssignInDrawer
+          requestId={req.id}
+          currentTechId={req.job?.technician_id}
+          isAssign={isAssign}
+          onDone={onAssigned}
+        />
+        {canCancel && (
+          <Button
+            variant="outline"
+            className="text-destructive border-destructive/30 hover:bg-destructive/5"
+            onClick={onCancelled}
+          >
+            Cancel Request
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ── Assign button inside the drawer ──────────────────────────────────────────
+
+function AssignInDrawer({ requestId, currentTechId, isAssign, onDone }: {
+  requestId: number;
+  currentTechId?: number | null;
+  isAssign: boolean;
+  onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedTech, setSelectedTech] = useState<string>('');
+
+  const { data, isLoading } = useAdminListTechnicians({
+    query: { queryKey: getAdminListTechniciansQueryKey(), enabled: open },
+  });
+
+  const reassignMutation = useAdminReassignJob({
+    mutation: {
+      onSuccess: () => {
+        toast.success(isAssign ? "Technician assigned successfully" : "Job reassigned successfully");
+        setOpen(false);
+        setSelectedTech('');
+        onDone();
+      },
+      onError: (err: any) => toast.error(err?.error || "Failed to assign technician"),
+    },
+  });
+
+  const handleConfirm = () => {
+    if (!selectedTech) return;
+    reassignMutation.mutate({ id: requestId, data: { technician_id: parseInt(selectedTech, 10) } });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSelectedTech(''); }}>
+      <DialogTrigger asChild>
+        <Button className="flex-1">
+          {isAssign ? "Assign Technician" : "Reassign Job"}
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>{isAssign ? `Assign Technician — Request #${requestId}` : `Reassign Job #${requestId}`}</DialogTitle>
+          <DialogDescription>
+            {isAssign ? "Pick a technician to dispatch to this unassigned request." : "Select a different technician to take over this job."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          {isLoading ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">Loading technicians...</div>
+          ) : !data?.technicians.length ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">No technicians available.</div>
+          ) : (
+            <Select value={selectedTech} onValueChange={setSelectedTech}>
+              <SelectTrigger><SelectValue placeholder="Select a technician" /></SelectTrigger>
+              <SelectContent>
+                {data.technicians.map(tech => (
+                  <SelectItem key={tech.id} value={tech.id.toString()} disabled={tech.id === currentTechId}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>{tech.name || tech.phone}</span>
+                      {tech.id === currentTechId && <span className="text-xs text-muted-foreground ml-2">(Current)</span>}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+          <Button onClick={handleConfirm} disabled={!selectedTech || reassignMutation.isPending}>
+            {reassignMutation.isPending ? "Assigning..." : (isAssign ? "Assign & Dispatch" : "Confirm Dispatch")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Row dropdown ReassignDialog (kept for quick access from the row menu) ─────
+
+function ReassignDialog({ requestId, currentTechId, isPending }: {
+  requestId: number;
+  currentTechId?: number | null;
+  isPending?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [selectedTech, setSelectedTech] = useState<string>('');
   const queryClient = useQueryClient();
-
   const isAssign = isPending || !currentTechId;
 
   const { data, isLoading } = useAdminListTechnicians({
-    query: { 
-      queryKey: getAdminListTechniciansQueryKey(),
-      enabled: open
-    }
+    query: { queryKey: getAdminListTechniciansQueryKey(), enabled: open },
   });
 
   const reassignMutation = useAdminReassignJob({
@@ -422,18 +758,13 @@ function ReassignDialog({ requestId, currentTechId, isPending }: { requestId: nu
         setSelectedTech('');
         queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
       },
-      onError: (err: any) => {
-        toast.error(err?.error || (isAssign ? "Failed to assign technician" : "Failed to reassign job"));
-      }
-    }
+      onError: (err: any) => toast.error(err?.error || (isAssign ? "Failed to assign technician" : "Failed to reassign job")),
+    },
   });
 
   const handleConfirm = () => {
     if (!selectedTech) return;
-    reassignMutation.mutate({ 
-      id: requestId, 
-      data: { technician_id: parseInt(selectedTech, 10) } 
-    });
+    reassignMutation.mutate({ id: requestId, data: { technician_id: parseInt(selectedTech, 10) } });
   };
 
   return (
@@ -447,9 +778,7 @@ function ReassignDialog({ requestId, currentTechId, isPending }: { requestId: nu
         <DialogHeader>
           <DialogTitle>{isAssign ? `Assign Technician — Request #${requestId}` : `Reassign Job #${requestId}`}</DialogTitle>
           <DialogDescription>
-            {isAssign
-              ? "Pick a technician to dispatch to this unassigned request."
-              : "Select a different technician to take over this job."}
+            {isAssign ? "Pick a technician to dispatch to this unassigned request." : "Select a different technician to take over this job."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -459,16 +788,10 @@ function ReassignDialog({ requestId, currentTechId, isPending }: { requestId: nu
             <div className="text-sm text-muted-foreground py-4 text-center">No technicians available.</div>
           ) : (
             <Select value={selectedTech} onValueChange={setSelectedTech}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a technician" />
-              </SelectTrigger>
+              <SelectTrigger><SelectValue placeholder="Select a technician" /></SelectTrigger>
               <SelectContent>
                 {data.technicians.map(tech => (
-                  <SelectItem 
-                    key={tech.id} 
-                    value={tech.id.toString()}
-                    disabled={tech.id === currentTechId}
-                  >
+                  <SelectItem key={tech.id} value={tech.id.toString()} disabled={tech.id === currentTechId}>
                     <div className="flex items-center justify-between w-full">
                       <span>{tech.name || tech.phone}</span>
                       {tech.id === currentTechId && <span className="text-xs text-muted-foreground ml-2">(Current)</span>}
