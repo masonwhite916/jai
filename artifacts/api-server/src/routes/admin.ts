@@ -177,16 +177,36 @@ router.patch("/admin/requests/:id/reassign", requireAdmin, async (req, res) => {
       .where(eq(jobs.request_id, requestId))
       .limit(1);
 
-    if (!job) {
-      res.status(404).json({ error: "No job found for this request" });
-      return;
-    }
+    if (job) {
+      // Reassign the existing job
+      await db
+        .update(jobs)
+        .set({ technician_id, status: "accepted", accepted_at: new Date(), updated_at: new Date() })
+        .where(eq(jobs.id, job.id));
+    } else {
+      // No job yet — verify this is a pending request and create one
+      const [sr] = await db
+        .select({ id: serviceRequests.id, status: serviceRequests.status })
+        .from(serviceRequests)
+        .where(eq(serviceRequests.id, requestId))
+        .limit(1);
 
-    // Reassign the job
-    await db
-      .update(jobs)
-      .set({ technician_id, status: "accepted", accepted_at: new Date(), updated_at: new Date() })
-      .where(eq(jobs.id, job.id));
+      if (!sr) {
+        res.status(404).json({ error: "Request not found" });
+        return;
+      }
+      if (sr.status !== "pending") {
+        res.status(422).json({ error: "Request is not pending and has no job to reassign" });
+        return;
+      }
+
+      await db.insert(jobs).values({
+        request_id:   requestId,
+        technician_id,
+        status:       "accepted",
+        accepted_at:  new Date(),
+      });
+    }
 
     // Update the service request status to assigned
     await db

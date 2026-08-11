@@ -246,7 +246,7 @@ export default function Requests() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} />
+                        <ReassignDialog requestId={req.id} currentTechId={req.job?.technician_id} isPending={req.status === 'pending'} />
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                           className="text-destructive focus:text-destructive focus:bg-destructive/10"
@@ -268,10 +268,12 @@ export default function Requests() {
   );
 }
 
-function ReassignDialog({ requestId, currentTechId }: { requestId: number, currentTechId?: number | null }) {
+function ReassignDialog({ requestId, currentTechId, isPending }: { requestId: number, currentTechId?: number | null, isPending?: boolean }) {
   const [open, setOpen] = useState(false);
   const [selectedTech, setSelectedTech] = useState<string>('');
   const queryClient = useQueryClient();
+
+  const isAssign = isPending || !currentTechId;
 
   const { data, isLoading } = useAdminListTechnicians({
     query: { 
@@ -283,17 +285,18 @@ function ReassignDialog({ requestId, currentTechId }: { requestId: number, curre
   const reassignMutation = useAdminReassignJob({
     mutation: {
       onSuccess: () => {
-        toast.success("Job reassigned successfully");
+        toast.success(isAssign ? "Technician assigned successfully" : "Job reassigned successfully");
         setOpen(false);
+        setSelectedTech('');
         queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
       },
       onError: (err: any) => {
-        toast.error(err?.error || "Failed to reassign job");
+        toast.error(err?.error || (isAssign ? "Failed to assign technician" : "Failed to reassign job"));
       }
     }
   });
 
-  const handleReassign = () => {
+  const handleConfirm = () => {
     if (!selectedTech) return;
     reassignMutation.mutate({ 
       id: requestId, 
@@ -302,36 +305,40 @@ function ReassignDialog({ requestId, currentTechId }: { requestId: number, curre
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setSelectedTech(''); }}>
       <DialogTrigger asChild>
         <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-          Reassign Job
+          {isAssign ? "Assign Technician" : "Reassign Job"}
         </DropdownMenuItem>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <DialogTitle>Reassign Job #{requestId}</DialogTitle>
+          <DialogTitle>{isAssign ? `Assign Technician — Request #${requestId}` : `Reassign Job #${requestId}`}</DialogTitle>
           <DialogDescription>
-            Select a new technician to dispatch to this location.
+            {isAssign
+              ? "Pick a technician to dispatch to this unassigned request."
+              : "Select a different technician to take over this job."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           {isLoading ? (
             <div className="text-sm text-muted-foreground py-4 text-center">Loading technicians...</div>
+          ) : !data?.technicians.length ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">No technicians available.</div>
           ) : (
             <Select value={selectedTech} onValueChange={setSelectedTech}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a technician" />
               </SelectTrigger>
               <SelectContent>
-                {data?.technicians.map(tech => (
+                {data.technicians.map(tech => (
                   <SelectItem 
                     key={tech.id} 
                     value={tech.id.toString()}
                     disabled={tech.id === currentTechId}
                   >
                     <div className="flex items-center justify-between w-full">
-                      <span>{tech.name}</span>
+                      <span>{tech.name || tech.phone}</span>
                       {tech.id === currentTechId && <span className="text-xs text-muted-foreground ml-2">(Current)</span>}
                     </div>
                   </SelectItem>
@@ -342,8 +349,10 @@ function ReassignDialog({ requestId, currentTechId }: { requestId: number, curre
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={handleReassign} disabled={!selectedTech || reassignMutation.isPending}>
-            {reassignMutation.isPending ? "Reassigning..." : "Confirm Dispatch"}
+          <Button onClick={handleConfirm} disabled={!selectedTech || reassignMutation.isPending}>
+            {reassignMutation.isPending
+              ? (isAssign ? "Assigning..." : "Reassigning...")
+              : (isAssign ? "Assign & Dispatch" : "Confirm Dispatch")}
           </Button>
         </DialogFooter>
       </DialogContent>
