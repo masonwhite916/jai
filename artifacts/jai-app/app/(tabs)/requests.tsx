@@ -8,6 +8,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLanguage } from '@/context/LanguageContext';
 import { apiFetch, getAuthToken } from '@/lib/api';
+import { SERVICE_PAYOUTS } from '@/lib/serviceConstants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -56,10 +57,6 @@ const SERVICE_LABELS: Record<string, string> = {
   battery: 'Battery', fuel: 'Fuel', tire: 'Tire change',
   tow: 'Tow truck', lockout: 'Lockout', mechanic: 'Mechanic', electric: 'Electrical',
 };
-const PAYOUTS: Record<string, number> = {
-  battery: 120, fuel: 100, tire: 120, tow: 250, lockout: 200, mechanic: 200, electric: 200,
-};
-
 function apiStatusToLocal(status: string): ReqStatus {
   if (status === 'completed') return 'completed';
   if (status === 'cancelled') return 'cancelled';
@@ -106,7 +103,7 @@ export default function RequestsScreen() {
           date:       formatDate(r.created_at),
           address:    r.address ?? '—',
           status:     apiStatusToLocal(r.status),
-          cost:       r.job ? `${r.job.payout ?? PAYOUTS[r.service_type] ?? 120} SAR` : `${PAYOUTS[r.service_type] ?? 120} SAR`,
+          cost:       r.job ? `${r.job.payout ?? SERVICE_PAYOUTS[r.service_type] ?? 0} SAR` : `${SERVICE_PAYOUTS[r.service_type] ?? 0} SAR`,
           technician: r.techName ?? '—',
         };
       });

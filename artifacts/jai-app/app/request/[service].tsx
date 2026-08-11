@@ -35,8 +35,9 @@ function genRef(): string {
 
 type ServiceDef = { labelKey: TranslationKeys; icon: string; lib: string; basePrice: number };
 
-// NOTE: basePrice values MUST stay in sync with PAYOUTS in artifacts/api-server/src/routes/requests.ts
-// and SERVICE_AMOUNTS in artifacts/api-server/src/routes/moyasar.ts
+// NOTE: basePrice values MUST stay in sync with SERVICE_PAYOUTS in artifacts/jai-app/lib/serviceConstants.ts
+// (which mirrors PAYOUTS in artifacts/api-server/src/routes/requests.ts
+//  and SERVICE_AMOUNTS in artifacts/api-server/src/routes/moyasar.ts)
 const SERVICE_INFO: Record<string, ServiceDef> = {
   battery: { labelKey: 'serviceBattery', icon: 'battery-charging', lib: 'Ionicons', basePrice: 120 },
   fuel:    { labelKey: 'serviceFuel',    icon: 'gas-station',       lib: 'MCIcons',  basePrice: 80  },

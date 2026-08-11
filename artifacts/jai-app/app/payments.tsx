@@ -9,6 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLanguage } from '@/context/LanguageContext';
 import { apiFetch, getAuthToken } from '@/lib/api';
+import { SERVICE_PAYOUTS } from '@/lib/serviceConstants';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -42,10 +43,6 @@ const SERVICE_LABELS: Record<string, { en: string; ar: string }> = {
   lockout:  { en: 'Lockout Assistance',       ar: 'فتح السيارة'        },
   mechanic: { en: 'Light Mechanical Repair',  ar: 'إصلاح ميكانيكي'    },
   electric: { en: 'Electrical Repair',        ar: 'إصلاح كهربائي'     },
-};
-
-const PAYOUTS: Record<string, number> = {
-  battery: 120, fuel: 80, tire: 350, tow: 500, lockout: 200, mechanic: 300, electric: 280,
 };
 
 function formatDate(iso: string, lang: string): string {
@@ -147,7 +144,7 @@ export default function PaymentsScreen() {
         ) : (
           payments.map((p) => {
             const svcLabel = (SERVICE_LABELS[p.service_type] ?? { en: p.service_type, ar: p.service_type })[lang === 'ar' ? 'ar' : 'en'];
-            const amount   = p.amount > 0 ? p.amount : (PAYOUTS[p.service_type] ?? 0);
+            const amount   = p.amount > 0 ? p.amount : (SERVICE_PAYOUTS[p.service_type] ?? 0);
             const isCard   = p.payment_method === 'card';
 
             return (
