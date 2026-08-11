@@ -1,6 +1,6 @@
 import { useAdminGetStats, getAdminGetStatsQueryKey } from '@workspace/api-client-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Activity, CheckCircle, Clock, DollarSign, ArrowUpRight, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { Activity, CheckCircle, Clock, Banknote, ArrowUpRight, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Tooltip as PieTooltip } from 'recharts';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -48,7 +48,7 @@ export default function Dashboard() {
     );
   }
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
   const formatTime = (seconds?: number | null) => {
     if (!seconds) return '--';
     const mins = Math.floor(seconds / 60);
@@ -59,7 +59,7 @@ export default function Dashboard() {
     { title: 'Active Jobs', value: stats.active_jobs, icon: Activity, trend: null },
     { title: 'Completed Today', value: stats.completed_today, icon: CheckCircle, trend: `${stats.requests_today} total` },
     { title: 'Avg Response', value: formatTime(stats.avg_response_seconds), icon: Clock, trend: null },
-    { title: 'Revenue Today', value: formatCurrency(stats.revenue_today), icon: DollarSign, trend: formatCurrency(stats.revenue_total) + ' total' },
+    { title: 'Revenue Today', value: formatCurrency(stats.revenue_today), icon: Banknote, trend: formatCurrency(stats.revenue_total) + ' total' },
   ];
 
   return (

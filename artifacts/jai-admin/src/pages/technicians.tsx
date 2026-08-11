@@ -2,7 +2,7 @@ import { useAdminListTechnicians, getAdminListTechniciansQueryKey } from '@works
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Search, Star, Briefcase, DollarSign, Clock, Navigation } from 'lucide-react';
+import { Search, Star, Briefcase, Banknote, Clock, Navigation } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
 
@@ -24,7 +24,7 @@ export default function Technicians() {
     return tech.name?.toLowerCase().includes(term) || tech.phone.includes(term);
   });
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+  const formatCurrency = (val: number) => new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
 
   return (
     <div className="p-8 space-y-6 h-full flex flex-col">
@@ -85,7 +85,7 @@ export default function Technicians() {
                     <span className="font-medium text-foreground">{tech.rating?.toFixed(1) || 'N/A'}</span>
                   </div>
                   <div className="flex flex-col gap-1 text-muted-foreground">
-                    <div className="flex items-center gap-1.5"><DollarSign className="w-3.5 h-3.5 text-emerald-500" /> Earnings</div>
+                    <div className="flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-emerald-500" /> Earnings</div>
                     <span className="font-medium text-foreground">{formatCurrency(tech.earnings_total)}</span>
                   </div>
                   <div className="flex flex-col gap-1 text-muted-foreground">
