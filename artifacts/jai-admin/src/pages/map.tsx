@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListRequests, getAdminListRequestsQueryKey } from '@workspace/api-client-react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
-import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff, X } from 'lucide-react';
+import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -357,6 +357,11 @@ export default function MapView() {
     });
   }, []);
 
+  // ── Panel collapse state — collapsed by default on mobile (< 768 px) ─────────
+  const [panelCollapsed, setPanelCollapsed] = useState<boolean>(
+    () => typeof window !== 'undefined' && window.innerWidth < 768
+  );
+
   // Default to SF Bay Area if no data
   const center: [number, number] = technicians.length > 0 
     ? [technicians[0].last_lat as number, technicians[0].last_lng as number] 
@@ -384,94 +389,117 @@ export default function MapView() {
       )}
 
       {/* Overlay control panel */}
-      <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl p-3 md:p-4 w-[calc(100vw-2rem)] max-w-[18rem] flex flex-col gap-3 md:gap-4 pointer-events-auto overflow-y-auto max-h-[calc(100vh-6rem)]">
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <h2 className="font-bold text-sm tracking-tight">Live Ops Map</h2>
-            <div className="flex items-center gap-1.5">
-              {wsStatus === 'connected' ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] text-emerald-500 font-medium">Live</span>
-                </>
-              ) : wsStatus === 'connecting' ? (
-                <>
-                  <Wifi className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
-                  <span className="text-[10px] text-amber-500 font-medium">Connecting</span>
-                </>
-              ) : (
-                <>
-                  <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="text-[10px] text-muted-foreground font-medium">Polling</span>
-                </>
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground leading-tight">Tracking {technicians.length} technicians and {activeRequests.length} active jobs.</p>
-        </div>
-
-        {/* ── Idle alert panel ─────────────────────────────────────────────── */}
-        {idleTechs.length > 0 && (
-          <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex flex-col gap-2">
-            <div className="flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-              <span className="text-[11px] font-semibold text-orange-700">
-                {idleTechs.length} technician{idleTechs.length > 1 ? 's' : ''} idle ≥ {IDLE_MINUTES} min
+      <div className="absolute top-4 left-4 z-[1000] bg-card/95 backdrop-blur shadow-lg border border-border rounded-xl w-[calc(100vw-2rem)] max-w-[18rem] flex flex-col pointer-events-auto overflow-hidden">
+        {/* ── Header row — always visible, tappable to toggle ─────────────── */}
+        <button
+          onClick={() => setPanelCollapsed(c => !c)}
+          className="flex items-center justify-between gap-2 px-3 py-2.5 md:px-4 md:py-3 w-full text-left hover:bg-muted/40 transition-colors"
+          aria-expanded={!panelCollapsed}
+          aria-label={panelCollapsed ? 'Expand map panel' : 'Collapse map panel'}
+        >
+          <h2 className="font-bold text-sm tracking-tight">Live Ops Map</h2>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Idle alert badge — visible even when collapsed */}
+            {idleTechs.length > 0 && (
+              <span className="flex items-center gap-0.5 bg-orange-100 text-orange-700 border border-orange-300 rounded px-1.5 py-0.5 text-[10px] font-semibold">
+                <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                {idleTechs.length}
               </span>
+            )}
+            {/* WS status pill */}
+            {wsStatus === 'connected' ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-emerald-500" />
+                <span className="text-[10px] text-emerald-500 font-medium">Live</span>
+              </>
+            ) : wsStatus === 'connecting' ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
+                <span className="text-[10px] text-amber-500 font-medium">Connecting</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-[10px] text-muted-foreground font-medium">Polling</span>
+              </>
+            )}
+            {/* Chevron */}
+            {panelCollapsed
+              ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              : <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
+            }
+          </div>
+        </button>
+
+        {/* ── Collapsible body ─────────────────────────────────────────────── */}
+        {!panelCollapsed && (
+          <div className="flex flex-col gap-3 md:gap-4 px-3 pb-3 md:px-4 md:pb-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+            <p className="text-xs text-muted-foreground leading-tight -mt-1">Tracking {technicians.length} technicians and {activeRequests.length} active jobs.</p>
+
+            {/* ── Idle alert panel ──────────────────────────────────────────── */}
+            {idleTechs.length > 0 && (
+              <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-orange-500 shrink-0" />
+                  <span className="text-[11px] font-semibold text-orange-700">
+                    {idleTechs.length} technician{idleTechs.length > 1 ? 's' : ''} idle ≥ {IDLE_MINUTES} min
+                  </span>
+                </div>
+                <ul className="flex flex-col gap-1">
+                  {idleTechs.map(t => (
+                    <li key={t.id} className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-orange-800 font-medium truncate">{t.name || `Tech #${t.id}`}</span>
+                      <button
+                        onClick={() => snooze(t.id)}
+                        className="flex items-center gap-1 text-[10px] text-orange-600 hover:text-orange-800 shrink-0"
+                        title={`Snooze alert for ${SNOOZE_MINUTES} min`}
+                      >
+                        <BellOff className="w-3 h-3" />
+                        Snooze
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="space-y-2 text-xs">
+              {/* Technician pin freshness legend */}
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Technicians</p>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#10b981' }} />
+                <span>Live <span className="text-muted-foreground">(&lt; 2 min)</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#f59e0b' }} />
+                <span>Stale <span className="text-muted-foreground">(2 – 10 min)</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm shrink-0 opacity-55" style={{ background: '#94a3b8' }} />
+                <span>Offline <span className="text-muted-foreground">(&gt; 10 min)</span></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm shrink-0 bg-orange-500" />
+                <AlertTriangle className="w-2.5 h-2.5 text-orange-500 -ml-1 shrink-0" />
+                <span>Idle <span className="text-muted-foreground">(&gt; {IDLE_MINUTES} min no movement)</span></span>
+              </div>
+              {/* Job pin legend */}
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold pt-1">Jobs</p>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-amber-500 border border-white shrink-0" />
+                <span>Pending Request</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500 border border-white shrink-0" />
+                <span>Accepted</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-purple-500 border border-white shrink-0" />
+                <span>En Route</span>
+              </div>
             </div>
-            <ul className="flex flex-col gap-1">
-              {idleTechs.map(t => (
-                <li key={t.id} className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-orange-800 font-medium truncate">{t.name || `Tech #${t.id}`}</span>
-                  <button
-                    onClick={() => snooze(t.id)}
-                    className="flex items-center gap-1 text-[10px] text-orange-600 hover:text-orange-800 shrink-0"
-                    title={`Snooze alert for ${SNOOZE_MINUTES} min`}
-                  >
-                    <BellOff className="w-3 h-3" />
-                    Snooze
-                  </button>
-                </li>
-              ))}
-            </ul>
           </div>
         )}
-        
-        <div className="space-y-2 text-xs">
-          {/* Technician pin freshness legend */}
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Technicians</p>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#10b981' }} />
-            <span>Live <span className="text-muted-foreground">(&lt; 2 min)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: '#f59e0b' }} />
-            <span>Stale <span className="text-muted-foreground">(2 – 10 min)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm shrink-0 opacity-55" style={{ background: '#94a3b8' }} />
-            <span>Offline <span className="text-muted-foreground">(&gt; 10 min)</span></span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-sm shrink-0 bg-orange-500" />
-            <AlertTriangle className="w-2.5 h-2.5 text-orange-500 -ml-1 shrink-0" />
-            <span>Idle <span className="text-muted-foreground">(&gt; {IDLE_MINUTES} min no movement)</span></span>
-          </div>
-          {/* Job pin legend */}
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold pt-1">Jobs</p>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-500 border border-white shrink-0" />
-            <span>Pending Request</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500 border border-white shrink-0" />
-            <span>Accepted</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-purple-500 border border-white shrink-0" />
-            <span>En Route</span>
-          </div>
-        </div>
       </div>
 
       <div className="flex-1 z-0 relative isolate">
