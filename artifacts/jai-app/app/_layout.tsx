@@ -5,7 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { AppProvider, type User, type ActiveRequest, useApp } from '@/context/AppContext';
+import { AppProvider, type User, type ActiveRequest, type AppNotification, useApp } from '@/context/AppContext';
 import { AdminConfigProvider } from '@/context/AdminConfigContext';
 import { DriverProvider } from '@/context/DriverContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
@@ -47,6 +47,7 @@ interface PreloadedSession {
   role: 'customer' | 'technician' | null;
   token?: string | null;
   activeRequest?: ActiveRequest | null;
+  notifications?: AppNotification[];
 }
 
 // ── In-app notification banner (foreground) ───────────────────────────────────
@@ -199,7 +200,8 @@ function RootLayout() {
       AsyncStorage.getItem('jai_role'),
       AsyncStorage.getItem('jai_token'),
       AsyncStorage.getItem('jai_active_request'),
-    ]).then(([storedLang, storedUser, storedOnboarding, storedRole, storedToken, storedActiveRequest]) => {
+      AsyncStorage.getItem('jai_notifications'),
+    ]).then(([storedLang, storedUser, storedOnboarding, storedRole, storedToken, storedActiveRequest, storedNotifications]) => {
       const lang: Lang = storedLang === 'ar' ? 'ar' : 'en';
       I18nManager.forceRTL(lang === 'ar');
       setInitialLang(lang);
@@ -212,6 +214,13 @@ function RootLayout() {
       if (storedActiveRequest) {
         try { parsedActiveRequest = JSON.parse(storedActiveRequest); } catch { /* ignore */ }
       }
+      let parsedNotifications: AppNotification[] = [];
+      if (storedNotifications) {
+        try {
+          const n = JSON.parse(storedNotifications);
+          if (Array.isArray(n)) parsedNotifications = n;
+        } catch { /* ignore corrupt cache */ }
+      }
       const role = storedRole === 'customer' || storedRole === 'technician' ? storedRole : null;
       setPreloadedSession({
         user: parsedUser,
@@ -219,6 +228,7 @@ function RootLayout() {
         role,
         token: storedToken ?? null,
         activeRequest: parsedActiveRequest,
+        notifications: parsedNotifications,
       });
 
       setBootstrapReady(true);

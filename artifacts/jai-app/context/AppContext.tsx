@@ -99,6 +99,7 @@ interface AppProviderProps {
     role: 'customer' | 'technician' | null;
     token?: string | null;
     activeRequest?: ActiveRequest | null;
+    notifications?: AppNotification[];
   } | null;
 }
 
@@ -119,7 +120,9 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
   const [role, setRoleState] = useState<'customer' | 'technician' | null>(
     preloaded ? initialSession.role : null,
   );
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>(
+    preloaded ? (initialSession.notifications ?? []) : [],
+  );
   const [activeRequest, setActiveRequestState] = useState<ActiveRequest | null>(
     preloaded ? (initialSession?.activeRequest ?? null) : null,
   );
@@ -196,19 +199,32 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
     if (!getAuthToken()) return;
     try {
       const resp = await apiFetch<{ notifications: AppNotification[] }>('/api/notifications?limit=50');
-      setNotifications(resp.notifications ?? []);
-    } catch { /* silently ignore network errors */ }
+      const fresh = resp.notifications ?? [];
+      setNotifications(fresh);
+      // Persist for offline use — fire-and-forget
+      AsyncStorage.setItem('jai_notifications', JSON.stringify(fresh)).catch(() => {});
+    } catch { /* silently ignore network errors — cached state remains */ }
   }
 
   async function loadState() {
     try {
-      const [onboarding, userData, storedRole, token, storedActiveRequest] = await Promise.all([
+      const [onboarding, userData, storedRole, token, storedActiveRequest, storedNotifications] = await Promise.all([
         AsyncStorage.getItem('jai_onboarding'),
         AsyncStorage.getItem('jai_user'),
         AsyncStorage.getItem('jai_role'),
         AsyncStorage.getItem('jai_token'),
         AsyncStorage.getItem('jai_active_request'),
+        AsyncStorage.getItem('jai_notifications'),
       ]);
+
+      // Seed the notifications list immediately so the screen is not empty while
+      // the network request is in-flight or when the device is offline.
+      if (storedNotifications) {
+        try {
+          const cached: AppNotification[] = JSON.parse(storedNotifications);
+          if (Array.isArray(cached)) setNotifications(cached);
+        } catch { /* ignore corrupt cache */ }
+      }
 
       if (storedActiveRequest) {
         try {
@@ -290,6 +306,7 @@ export function AppProvider({ children, initialSession }: AppProviderProps) {
       AsyncStorage.removeItem('jai_user'),
       AsyncStorage.removeItem('jai_token'),
       AsyncStorage.removeItem('jai_active_request'),
+      AsyncStorage.removeItem('jai_notifications'),
     ]);
     setUser(null);
     setIsAuthenticated(false);
