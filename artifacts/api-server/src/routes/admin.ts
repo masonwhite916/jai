@@ -13,8 +13,19 @@ import {
   updateTheme,
   setHeroImageUpdatedAt,
   HERO_IMAGE_PATH,
+  getAppConfig,
+  updateAppTheme,
+  updateAppOffers,
+  updateAppAnnouncement,
+  updateAppServiceConfig,
+  updateAppContact,
   type BannerSettings,
   type ThemeSettings,
+  type AppThemeSettings,
+  type AppOffer,
+  type AppAnnouncement,
+  type AppServiceConfig,
+  type AppContactConfig,
 } from "../lib/siteSettings";
 
 // Multer: store upload in memory, validate type/size
@@ -573,6 +584,67 @@ router.get("/hero-image", (_req, res) => {
   res.setHeader("Content-Type", "image/jpeg");
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
   res.sendFile(HERO_IMAGE_PATH);
+});
+
+// ── GET /api/app-config (public) ─────────────────────────────────────────────
+// Consumed by jai-app to load theme overrides + offers on launch.
+
+router.get("/app-config", async (_req, res) => {
+  res.json(await getAppConfig());
+});
+
+// ── PUT /api/admin/app-config/theme ──────────────────────────────────────────
+
+router.put("/admin/app-config/theme", requireAdmin, async (req, res) => {
+  const theme = req.body as AppThemeSettings;
+  const updated = await updateAppTheme(theme);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/app-config/offers ─────────────────────────────────────────
+
+router.put("/admin/app-config/offers", requireAdmin, async (req, res) => {
+  const offers = req.body as AppOffer[];
+  if (!Array.isArray(offers)) {
+    res.status(400).json({ error: "offers must be an array" });
+    return;
+  }
+  const updated = await updateAppOffers(offers);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/app-config/announcement ────────────────────────────────────
+
+router.put("/admin/app-config/announcement", requireAdmin, async (req, res) => {
+  const announcement = req.body as AppAnnouncement;
+  const updated = await updateAppAnnouncement(announcement);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/app-config/services ────────────────────────────────────────
+
+router.put("/admin/app-config/services", requireAdmin, async (req, res) => {
+  const config = req.body as AppServiceConfig;
+  const updated = await updateAppServiceConfig(config);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/app-config/contact ─────────────────────────────────────────
+
+router.put("/admin/app-config/contact", requireAdmin, async (req, res) => {
+  const contact = req.body as AppContactConfig;
+  const updated = await updateAppContact(contact);
+  res.json(updated);
+});
+
+// ── PUT /api/admin/app-config/plans ───────────────────────────────────────────
+
+router.put("/admin/app-config/plans", requireAdmin, async (req, res) => {
+  const { updateAppPlans, type: _t } = await import("../lib/siteSettings");
+  const plans = req.body;
+  if (!Array.isArray(plans)) { res.status(400).json({ error: "plans must be an array" }); return; }
+  const updated = await updateAppPlans(plans);
+  res.json(updated);
 });
 
 // ── GET /api/site-settings (public) ──────────────────────────────────────────

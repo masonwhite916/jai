@@ -6,6 +6,7 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { AppProvider, type User, type ActiveRequest, useApp } from '@/context/AppContext';
+import { AdminConfigProvider } from '@/context/AdminConfigContext';
 import { DriverProvider } from '@/context/DriverContext';
 import { LanguageProvider, type Lang } from '@/context/LanguageContext';
 import { LocationProvider } from '@/context/LocationContext';
@@ -154,6 +155,8 @@ function RootLayoutNav() {
         name="chat/[jobId]"
         options={{ presentation: 'modal', gestureEnabled: true }}
       />
+      <Stack.Screen name="admin-login" />
+      <Stack.Screen name="admin-panel" />
     </Stack>
   );
 }
@@ -242,15 +245,17 @@ function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <LanguageProvider initialLang={initialLang}>
-                <AppProvider initialSession={preloadedSession}>
-                  <DriverProvider>
-                    <LocationProvider>
-                      <PushNotificationSetup>
-                        <RootLayoutNav />
-                      </PushNotificationSetup>
-                    </LocationProvider>
-                  </DriverProvider>
-                </AppProvider>
+                <AdminConfigProvider>
+                  <AppProvider initialSession={preloadedSession}>
+                    <DriverProvider>
+                      <LocationProvider>
+                        <PushNotificationSetup>
+                          <RootLayoutNav />
+                        </PushNotificationSetup>
+                      </LocationProvider>
+                    </DriverProvider>
+                  </AppProvider>
+                </AdminConfigProvider>
               </LanguageProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

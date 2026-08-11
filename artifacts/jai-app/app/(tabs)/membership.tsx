@@ -10,6 +10,7 @@ import { useApp } from '@/context/AppContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { useAdminConfig, DEFAULT_PLANS } from '@/context/AdminConfigContext';
 
 type Plan = {
   id: string;
@@ -116,6 +117,20 @@ export default function MembershipScreen() {
   const { user, refreshUser } = useApp();
   const { isRTL, font, t } = useLanguage();
   const router = useRouter();
+  const { plans: contextPlans } = useAdminConfig();
+
+  const effectivePlans: Plan[] = (contextPlans.length > 0 ? contextPlans : DEFAULT_PLANS)
+    .filter((p) => p.active)
+    .map((p) => ({
+      id:         p.id,
+      nameEn:     p.nameEn,     nameAr:     p.nameAr,
+      subtitleEn: p.subtitleEn, subtitleAr: p.subtitleAr,
+      price:      p.price,
+      gradient:   [p.color1, p.color2] as readonly [string, string],
+      popular:    p.popular,
+      benefitsEn: p.benefitsEn ?? [],
+      benefitsAr: p.benefitsAr ?? [],
+    }));
 
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
@@ -160,7 +175,7 @@ export default function MembershipScreen() {
           { paddingBottom: insets.bottom + 140 + (Platform.OS === 'web' ? 34 : 0) },
         ]}
       >
-        {PLANS.map((plan) => {
+        {effectivePlans.map((plan) => {
           const name     = isRTL ? plan.nameAr     : plan.nameEn;
           const subtitle = isRTL ? plan.subtitleAr : plan.subtitleEn;
           const benefits = isRTL ? plan.benefitsAr : plan.benefitsEn;

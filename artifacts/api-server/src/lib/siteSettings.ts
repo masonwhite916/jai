@@ -94,6 +94,121 @@ export async function migrateLegacySettingsFile(): Promise<void> {
   } catch { /* non-fatal — legacy file simply stays until next restart */ }
 }
 
+// ── App config types ──────────────────────────────────────────────────────────
+
+export interface AppThemeSettings {
+  gradientStart?: string;
+  gradientMid?:   string;
+  gradientEnd?:   string;
+  primary?:       string;
+  secondary?:     string;
+}
+
+export interface AppOffer {
+  id:         string;
+  titleEn:    string;
+  titleAr:    string;
+  subtitleEn: string;
+  subtitleAr: string;
+  color:      string;
+  color2:     string;
+  active:     boolean;
+}
+
+export interface AppAnnouncement {
+  titleEn:   string;
+  titleAr:   string;
+  color:     string;
+  textColor: string;
+  active:    boolean;
+}
+
+export interface AppServiceConfig {
+  hidden: string[]; // service IDs to hide from home screen
+}
+
+export interface AppContactConfig {
+  phone:    string; // digits only, e.g. 966555616449
+  whatsapp: string; // digits only, e.g. 966555616449
+}
+
+const DEFAULT_ANNOUNCEMENT: AppAnnouncement = { titleEn: '', titleAr: '', color: '#2D1B69', textColor: '#FFFFFF', active: false };
+const DEFAULT_CONTACT: AppContactConfig     = { phone: '966555616449', whatsapp: '966555616449' };
+
+export interface AppConfig {
+  theme:        AppThemeSettings;
+  offers:       AppOffer[];
+  announcement: AppAnnouncement;
+  services:     AppServiceConfig;
+  contact:      AppContactConfig;
+  plans:        AppPlan[];
+}
+
+export async function getAppConfig(): Promise<AppConfig> {
+  const [theme, offers, announcement, services, contact, plans] = await Promise.all([
+    getKey<AppThemeSettings> ("app_theme",         {}),
+    getKey<AppOffer[]>       ("app_offers",         []),
+    getKey<AppAnnouncement>  ("app_announcement",   DEFAULT_ANNOUNCEMENT),
+    getKey<AppServiceConfig> ("app_services",       { hidden: [] }),
+    getKey<AppContactConfig> ("app_contact",        DEFAULT_CONTACT),
+    getKey<AppPlan[]>        ("app_plans",          DEFAULT_PLANS),
+  ]);
+  return { theme, offers, announcement, services, contact, plans };
+}
+
+export async function updateAppTheme(theme: AppThemeSettings): Promise<AppConfig> {
+  await setKey("app_theme", theme);
+  return getAppConfig();
+}
+
+export async function updateAppOffers(offers: AppOffer[]): Promise<AppConfig> {
+  await setKey("app_offers", offers);
+  return getAppConfig();
+}
+
+export async function updateAppAnnouncement(announcement: AppAnnouncement): Promise<AppConfig> {
+  await setKey("app_announcement", announcement);
+  return getAppConfig();
+}
+
+export async function updateAppServiceConfig(config: AppServiceConfig): Promise<AppConfig> {
+  await setKey("app_services", config);
+  return getAppConfig();
+}
+
+export async function updateAppContact(contact: AppContactConfig): Promise<AppConfig> {
+  await setKey("app_contact", contact);
+  return getAppConfig();
+}
+
+// ── App plans ─────────────────────────────────────────────────────────────────
+
+export interface AppPlan {
+  id:         string;
+  nameEn:     string;
+  nameAr:     string;
+  subtitleEn: string;
+  subtitleAr: string;
+  price:      string;
+  color1:     string;
+  color2:     string;
+  popular:    boolean;
+  active:     boolean;
+  benefitsEn: string[];
+  benefitsAr: string[];
+}
+
+const DEFAULT_PLANS: AppPlan[] = [
+  { id: 'basic',     nameEn: 'Basic Package',     nameAr: 'الباقة الأساسية', subtitleEn: 'Daily Use',              subtitleAr: 'للاستخدام اليومي',       price: '199', color1: '#5B2C91', color2: '#7B2A9E', popular: false, active: true, benefitsEn: ['Battery charge — 6 times','Fuel supply — 6 times','Tire change — 6 times','Light electrical & mechanical maintenance — 2 times','Emergency car towing — 2 times'], benefitsAr: ['شحن البطارية — 6 مرات','تزويد الوقود — 6 مرات','تغيير الإطارات — 6 مرات','صيانة كهربائية وميكانيكية خفيفة — مرتان','سحب السيارة في حالات الطوارئ — مرتان'] },
+  { id: 'accidents', nameEn: 'Accidents Package', nameAr: 'باقة الحوادث',    subtitleEn: 'Emergency Coverage',    subtitleAr: 'لحالات الطوارئ',         price: '299', color1: '#2D1B69', color2: '#5B2C91', popular: true,  active: true, benefitsEn: ['Battery charge — 6 times','Fuel supply — 6 times','Tire change — 6 times','Light electrical & mechanical maintenance — 2 times','Car towing in breakdowns — 2 times','Transfer to accident assessment center',"Workshop of client's choice"], benefitsAr: ['شحن البطارية — 6 مرات','تزويد الوقود — 6 مرات','تغيير الإطارات — 6 مرات','صيانة كهربائية وميكانيكية خفيفة','سحب السيارة في حالة العطل — مرتان','نقل سيارة الحادث إلى مركز تقدير الحوادث','ورشة من اختيار العميل'] },
+  { id: 'rental',    nameEn: 'Rental Package',    nameAr: 'باقة الإجرة',     subtitleEn: 'Full Coverage & Comfort', subtitleAr: 'تغطية شاملة وراحة تامة', price: '600', color1: '#8B35BB', color2: '#C21875', popular: false, active: true, benefitsEn: ['Battery charge — 6 times','Fuel supply — 6 times','Tire change — 6 times','Light electrical & mechanical maintenance — 2 times','Car towing in breakdowns — 2 times','Computer fault diagnostics — 3 times'], benefitsAr: ['شحن البطارية — 6 مرات','تزويد الوقود — 6 مرات','تغيير الإطارات — 6 مرات','صيانة كهربائية وميكانيكية خفيفة — مرتان','سحب السيارة في حالة العطل — مرتان','كشف الأعطال بالكمبيوتر — 3 مرات'] },
+];
+
+export async function updateAppPlans(plans: AppPlan[]): Promise<AppConfig> {
+  await setKey("app_plans", plans);
+  return getAppConfig();
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function getSiteSettings(): Promise<SiteSettings> {

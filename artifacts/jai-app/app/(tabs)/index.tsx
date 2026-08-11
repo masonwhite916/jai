@@ -9,6 +9,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useApp } from '@/context/AppContext';
 import { useLanguage, type TranslationKeys } from '@/context/LanguageContext';
+import { useAdminConfig, type AppOffer } from '@/context/AdminConfigContext';
 import { useJaiLocation } from '@/context/LocationContext';
 import Animated, {
   useSharedValue, useAnimatedStyle, withRepeat, withTiming, withSequence,
@@ -94,6 +95,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { user, refreshUser } = useApp();
+  const { theme, offers, announcement, hiddenServices, contact, plans } = useAdminConfig();
+  const [announcementDismissed, setAnnouncementDismissed] = React.useState(false);
 
   useFocusEffect(React.useCallback(() => { void refreshUser(); }, []));
   const { t, isRTL, font } = useLanguage();
@@ -102,6 +105,44 @@ export default function HomeScreen() {
   const firstName = user?.name?.split(' ')[0] ?? 'Guest';
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
+
+  // ── Secret admin tap: 5 taps on the logo within 4 seconds ─────────────────
+  const tapCount    = React.useRef(0);
+  const lastTap     = React.useRef(0);
+  const [logoFlash, setLogoFlash] = React.useState(false);
+
+  function handleLogoTap() {
+    const now = Date.now();
+    if (now - lastTap.current > 4000) tapCount.current = 0;
+    lastTap.current = now;
+    tapCount.current += 1;
+
+    // Brief opacity flash so user knows the tap registered
+    setLogoFlash(true);
+    setTimeout(() => setLogoFlash(false), 120);
+
+    if (tapCount.current >= 5) {
+      tapCount.current = 0;
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      router.push('/admin-login' as any);
+    }
+  }
+
+  // Active offers from admin config; fall back to static cards if none set
+  const activeOffers = offers.filter((o) => o.active);
+  // Services visible on home screen (admin can hide any)
+  const visibleServices = SERVICES.filter((svc) => !hiddenServices.includes(svc.id));
+  // Packages — use context plans if set, otherwise fall back to hardcoded HOME_PLANS
+  const activePlans = plans.length > 0
+    ? plans.filter((p) => p.active).map((p) => ({
+        id: p.id,
+        nameEn: p.nameEn, nameAr: p.nameAr,
+        subtitleEn: p.subtitleEn, subtitleAr: p.subtitleAr,
+        price: p.price,
+        gradient: [p.color1, p.color2] as [string, string],
+        popular: p.popular,
+      }))
+    : HOME_PLANS;
 
   function handleSvc(id: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -119,15 +160,17 @@ export default function HomeScreen() {
       >
         {/* ── Gradient header with curved bottom ───────────────────────────── */}
         <LinearGradient
-          colors={['#1E0D4E', '#3D2080', '#6A2597']}
+          colors={[theme.gradientStart, theme.gradientMid, theme.gradientEnd]}
           locations={[0, 0.55, 1]}
           style={[styles.header, {
             paddingTop: insets.top + 14 + (Platform.OS === 'web' ? 67 : 0),
           }]}
         >
-          {/* Logo + Greeting stacked */}
+          {/* Logo + Greeting stacked — tap 7× to open admin panel */}
           <View style={styles.logoGreetingBlock}>
-            <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
+            <TouchableOpacity onPress={handleLogoTap} activeOpacity={1} style={{ opacity: logoFlash ? 0.5 : 1 }}>
+              <Image source={JAI_LOGO} style={styles.logo} resizeMode="contain" />
+            </TouchableOpacity>
             <Text style={[styles.greeting, { fontFamily: font.regular }]}>
               {t('goodMorning')}
             </Text>
@@ -166,6 +209,18 @@ export default function HomeScreen() {
             </TouchableOpacity>
           )}
         </LinearGradient>
+        {/* ── Admin announcement banner ──────────────────────────────────── */}
+        {announcement.active && !announcementDismissed && !!announcement.titleEn && (
+          <View style={[styles.announceBanner, { backgroundColor: announcement.color }]}>
+            <Text style={[styles.announceTxt, { fontFamily: font.semibold, color: announcement.textColor }]} numberOfLines={2}>
+              {isRTL ? announcement.titleAr : announcement.titleEn}
+            </Text>
+            <TouchableOpacity onPress={() => setAnnouncementDismissed(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Ionicons name="close-circle" size={20} color={announcement.textColor} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* ── SOS Emergency Card ─────────────────────────────────────────── */}
         <TouchableOpacity
           style={styles.sosCard}
@@ -213,7 +268,7 @@ export default function HomeScreen() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 12, paddingRight: 4 }}
           >
-            {HOME_PLANS.map((plan) => {
+            {activePlans.map((plan) => {
               const isActive = user?.membership === plan.id;
               return (
                 <TouchableOpacity
@@ -270,7 +325,7 @@ export default function HomeScreen() {
             {t('chooseService')}
           </Text>
           <View style={[styles.serviceGrid, { flexDirection: isRTL ? 'row-reverse' : 'row' }]}>
-            {SERVICES.map((svc) => (
+            {visibleServices.map((svc) => (
               <TouchableOpacity
                 key={svc.id}
                 style={styles.svcCell}
@@ -310,7 +365,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={[styles.contactCard, { backgroundColor: '#2D1B69' }]}
               activeOpacity={0.85}
-              onPress={() => Linking.openURL('tel:+966555616449')}
+              onPress={() => Linking.openURL(`tel:+${contact.phone}`)}
             >
               <View style={[styles.contactIconRing, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
                 <Ionicons name="call" size={22} color="#FFFFFF" />
@@ -370,56 +425,83 @@ export default function HomeScreen() {
             {t('latestOffers')}
           </Text>
 
-          {/* Offer 1 */}
-          <TouchableOpacity
-            style={styles.offerCard}
-            activeOpacity={0.9}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
-          >
-            <LinearGradient
-              colors={['#2D1B69', '#7B2A9E']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.offerGrad}
-            >
-              <View style={[styles.offerBadge, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}>
-                <Text style={[styles.offerBadgeText, { fontFamily: font.bold }]}>{t('hot')}</Text>
-              </View>
-              <Text style={[styles.offerTitle, { fontFamily: font.bold, textAlign: align }]}>
-                {t('offer1Title')}
-              </Text>
-              <Text style={[styles.offerSub, { fontFamily: font.regular, textAlign: align }]}>
-                {t('offer1Sub')}
-              </Text>
-              {/* Decorative circles */}
-              <View style={styles.offerCircle1} />
-              <View style={styles.offerCircle2} />
-            </LinearGradient>
-          </TouchableOpacity>
+          {activeOffers.length > 0 ? (
+            /* ── Dynamic admin offers ──────────────────────────────────────── */
+            activeOffers.map((offer: AppOffer) => (
+              <TouchableOpacity
+                key={offer.id}
+                style={styles.offerCard}
+                activeOpacity={0.9}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
+              >
+                <LinearGradient
+                  colors={[offer.color, offer.color2]}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.offerGrad}
+                >
+                  <Text style={[styles.offerTitle, { fontFamily: font.bold, textAlign: align }]}>
+                    {isRTL ? offer.titleAr : offer.titleEn}
+                  </Text>
+                  <Text style={[styles.offerSub, { fontFamily: font.regular, textAlign: align }]}>
+                    {isRTL ? offer.subtitleAr : offer.subtitleEn}
+                  </Text>
+                  <View style={styles.offerCircle1} />
+                  <View style={styles.offerCircle2} />
+                </LinearGradient>
+              </TouchableOpacity>
+            ))
+          ) : (
+            /* ── Default static offers (fallback when no admin offers set) ── */
+            <>
+              <TouchableOpacity
+                style={styles.offerCard}
+                activeOpacity={0.9}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
+              >
+                <LinearGradient
+                  colors={['#2D1B69', '#7B2A9E']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.offerGrad}
+                >
+                  <View style={[styles.offerBadge, { alignSelf: isRTL ? 'flex-end' : 'flex-start' }]}>
+                    <Text style={[styles.offerBadgeText, { fontFamily: font.bold }]}>{t('hot')}</Text>
+                  </View>
+                  <Text style={[styles.offerTitle, { fontFamily: font.bold, textAlign: align }]}>
+                    {t('offer1Title')}
+                  </Text>
+                  <Text style={[styles.offerSub, { fontFamily: font.regular, textAlign: align }]}>
+                    {t('offer1Sub')}
+                  </Text>
+                  <View style={styles.offerCircle1} />
+                  <View style={styles.offerCircle2} />
+                </LinearGradient>
+              </TouchableOpacity>
 
-          {/* Offer 2 */}
-          <TouchableOpacity
-            style={styles.offerCard}
-            activeOpacity={0.9}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
-          >
-            <LinearGradient
-              colors={['#C21875', '#8B35BB']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.offerGrad}
-            >
-              <View style={[styles.offerBadge, { alignSelf: isRTL ? 'flex-end' : 'flex-start', backgroundColor: 'rgba(255,255,255,0.25)' }]}>
-                <Text style={[styles.offerBadgeText, { fontFamily: font.bold }]}>{t('new')}</Text>
-              </View>
-              <Text style={[styles.offerTitle, { fontFamily: font.bold, textAlign: align }]}>
-                {t('offer2Title')}
-              </Text>
-              <Text style={[styles.offerSub, { fontFamily: font.regular, textAlign: align }]}>
-                {t('offer2Sub')}
-              </Text>
-              <View style={[styles.offerCircle1, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
-              <View style={[styles.offerCircle2, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
-            </LinearGradient>
-          </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.offerCard}
+                activeOpacity={0.9}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); router.push('/(tabs)/membership' as any); }}
+              >
+                <LinearGradient
+                  colors={['#C21875', '#8B35BB']}
+                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                  style={styles.offerGrad}
+                >
+                  <View style={[styles.offerBadge, { alignSelf: isRTL ? 'flex-end' : 'flex-start', backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                    <Text style={[styles.offerBadgeText, { fontFamily: font.bold }]}>{t('new')}</Text>
+                  </View>
+                  <Text style={[styles.offerTitle, { fontFamily: font.bold, textAlign: align }]}>
+                    {t('offer2Title')}
+                  </Text>
+                  <Text style={[styles.offerSub, { fontFamily: font.regular, textAlign: align }]}>
+                    {t('offer2Sub')}
+                  </Text>
+                  <View style={[styles.offerCircle1, { backgroundColor: 'rgba(255,255,255,0.08)' }]} />
+                  <View style={[styles.offerCircle2, { backgroundColor: 'rgba(255,255,255,0.05)' }]} />
+                </LinearGradient>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -428,6 +510,14 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#F4F2FA' },
+
+  // Announcement banner
+  announceBanner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 16, marginTop: 12, borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12, gap: 10,
+  },
+  announceTxt: { flex: 1, fontSize: 13, lineHeight: 18 },
 
   // Header
   header: {
