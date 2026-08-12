@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, Share, Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -70,6 +70,56 @@ function methodIcon(method: string | null): string {
   if (method === 'cash')    return 'cash-outline';
   if (method === 'covered') return 'star-outline';
   return 'card-outline';
+}
+
+function buildReceiptText(p: PaymentRow, lang: string, isRTL: boolean): string {
+  const svcLabel = (SERVICE_LABELS[p.service_type] ?? { en: p.service_type, ar: p.service_type })[lang === 'ar' ? 'ar' : 'en'];
+  const amount   = p.amount > 0 ? p.amount : (SERVICE_PAYOUTS[p.service_type] ?? 0);
+  const dateStr  = formatDate(p.created_at, lang);
+  const method   = methodLabel(p.payment_method, isRTL);
+  const amountStr = p.payment_method === 'covered' ? (isRTL ? 'مجاني' : 'Free') : `${amount} SAR`;
+
+  if (isRTL) {
+    return [
+      '═══════════════════════════',
+      '        JAI للمساعدة على الطريق        ',
+      '═══════════════════════════',
+      `الخدمة:       ${svcLabel}`,
+      `التاريخ:       ${dateStr}`,
+      p.address ? `الموقع:       ${p.address}` : null,
+      `طريقة الدفع: ${method}`,
+      `المبلغ:       ${amountStr}`,
+      p.payment_id ? `رقم الإيصال: ${p.payment_id.toUpperCase()}` : null,
+      '═══════════════════════════',
+      'شكراً لاستخدامك خدمات JAI',
+    ].filter(Boolean).join('\n');
+  }
+
+  return [
+    '═══════════════════════════',
+    '    JAI Roadside Assistance    ',
+    '═══════════════════════════',
+    `Service:        ${svcLabel}`,
+    `Date:           ${dateStr}`,
+    p.address ? `Location:       ${p.address}` : null,
+    `Payment method: ${method}`,
+    `Amount:         ${amountStr}`,
+    p.payment_id ? `Receipt ID:     ${p.payment_id.toUpperCase()}` : null,
+    '═══════════════════════════',
+    'Thank you for using JAI.',
+  ].filter(Boolean).join('\n');
+}
+
+async function shareReceipt(p: PaymentRow, lang: string, isRTL: boolean) {
+  const text = buildReceiptText(p, lang, isRTL);
+  try {
+    await Share.share({ message: text });
+  } catch (err: any) {
+    // User cancelled — silently ignore. Any other error: show an alert.
+    if (err?.message && !err.message.includes('cancel')) {
+      Alert.alert(isRTL ? 'خطأ' : 'Error', isRTL ? 'تعذّر مشاركة الإيصال.' : 'Could not share receipt.');
+    }
+  }
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -176,7 +226,7 @@ export default function PaymentsScreen() {
                 {/* Divider */}
                 <View style={styles.divider} />
 
-                {/* Bottom row: method + receipt ID */}
+                {/* Bottom row: method + receipt ID + share */}
                 <View style={[styles.cardBottom, { flexDirection: rowDir }]}>
                   <View style={[styles.methodPill, { flexDirection: rowDir }]}>
                     <Ionicons name={methodIcon(p.payment_method) as any} size={14} color="#5B2C91" />
@@ -190,6 +240,16 @@ export default function PaymentsScreen() {
                       {p.payment_id.slice(0, 8).toUpperCase()}
                     </Text>
                   ) : null}
+                  <TouchableOpacity
+                    style={[styles.shareBtn, { flexDirection: rowDir }]}
+                    onPress={() => shareReceipt(p, lang ?? 'en', isRTL)}
+                    accessibilityLabel={isRTL ? 'مشاركة الإيصال' : 'Share receipt'}
+                  >
+                    <Ionicons name="share-outline" size={14} color="#5B2C91" />
+                    <Text style={[styles.shareText, { fontFamily: font.medium }]}>
+                      {isRTL ? 'مشاركة' : 'Share'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             );
@@ -225,4 +285,6 @@ const styles = StyleSheet.create({
   methodPill:  { backgroundColor: '#EDE8F8', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', gap: 5 },
   methodText:  { fontSize: 12, color: '#5B2C91', fontWeight: '500' },
   receiptId:   { fontSize: 11, color: '#9CA3AF', marginLeft: 'auto', marginRight: 'auto' },
+  shareBtn:    { backgroundColor: '#EDE8F8', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, alignItems: 'center', gap: 5, marginLeft: 'auto' },
+  shareText:   { fontSize: 12, color: '#5B2C91', fontWeight: '500' },
 });
