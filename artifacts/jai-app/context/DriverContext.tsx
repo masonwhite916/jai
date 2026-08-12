@@ -168,21 +168,17 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   }, [driver, activeJob, isLoading]);
 
-  // ── WebSocket: connect when we have an auth token ─────────────────────────
+  // ── WebSocket: register listeners unconditionally so they survive reconnects ─
+  // Listeners are always registered at mount and cleaned up at unmount.
+  // Socket connection is managed separately (driver?.id effect + AppState).
   useEffect(() => {
-    const token = getAuthToken();
-    if (!token) return;
-
-    jaiSocket.connect(token);
-
-    // New job broadcast → add to pending queue instantly
+    // New job broadcast → add to pending queue instantly (dedup by id)
     const offNewJob = jaiSocket.on('new_job', (payload) => {
       const raw = payload.job as Record<string, any> | undefined;
-      if (!raw) return;
+      if (!raw || raw.id == null) return;
       const job = apiJobToJob(raw);
-      setJobs((prev) => dedupeJobs(
-        prev.some((j) => j.id === job.id) ? prev : [job, ...prev]
-      ));
+      // Always run through dedupeJobs so rapid-fire duplicates are collapsed
+      setJobs((prev) => dedupeJobs([job, ...prev]));
     });
 
     // Job status changes relayed from the server (for the active job)
@@ -198,9 +194,26 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     return () => {
       offNewJob();
       offJobStatus();
-      // Don't disconnect here — may remount; driver must call logout() to fully disconnect
+      // Don't disconnect here — driver must call logout() to fully disconnect
     };
   }, []);
+
+  // ── Connect socket + reload jobs whenever the authenticated driver changes ──
+  // This handles: initial login, re-login after logout, and session restore.
+  useEffect(() => {
+    if (!driver) return;
+    const token = getAuthToken();
+    if (!token) return;
+    if (!jaiSocket.connected) jaiSocket.connect(token);
+    void loadJobs();
+  }, [driver?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Periodic poll: reconcile job list every 30 s (catches missed WS events) ─
+  useEffect(() => {
+    if (!driver) return;
+    const iv = setInterval(() => { void loadJobs(); }, 30_000);
+    return () => clearInterval(iv);
+  }, [driver?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Reconnect socket on foreground resume ─────────────────────────────────
   useEffect(() => {
@@ -269,7 +282,16 @@ export function DriverProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const login = async (d: Driver) => { setDriver(d); };
+  const login = async (d: Driver) => {
+    setDriver(d);
+    // Ensure socket is connected and job list is fresh immediately on login.
+    // The [driver?.id] effect fires asynchronously — this gives instant coverage.
+    const token = getAuthToken();
+    if (token) {
+      if (!jaiSocket.connected) jaiSocket.connect(token);
+      void loadJobs();
+    }
+  };
 
   const logout = async () => {
     jaiSocket.disconnect();

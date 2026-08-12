@@ -79,7 +79,7 @@ export default function ServiceRequest() {
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<string[]>([]);
   const [photoAssets, setPhotoAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
-  const [paymentIdx, setPaymentIdx] = useState(0);
+  const [paymentIdx, setPaymentIdx] = useState(3); // default to cash
   const [submitting, setSubmitting] = useState(false);
   const TOTAL_STEPS = 4;
 
@@ -458,11 +458,11 @@ export default function ServiceRequest() {
     : step === TOTAL_STEPS && isCardPayment ? idemKeyReady
     : true;
 
-  const PAYMENT_OPTIONS: { label: TranslationKeys; iconName: string }[] = [
-    { label: 'applePay', iconName: 'logo-apple' },
-    { label: 'madaCard', iconName: 'card-outline' },
-    { label: 'visaMaster', iconName: 'card-outline' },
-    { label: 'cash', iconName: 'cash-outline' },
+  const PAYMENT_OPTIONS: { label: TranslationKeys; iconName: string; comingSoon?: boolean }[] = [
+    { label: 'applePay',   iconName: 'logo-apple',  comingSoon: true },
+    { label: 'madaCard',   iconName: 'card-outline', comingSoon: true },
+    { label: 'visaMaster', iconName: 'card-outline', comingSoon: true },
+    { label: 'cash',       iconName: 'cash-outline' },
   ];
 
   const selectedVehicleData = user?.vehicles?.find(v => v.id === selectedVehicle);
@@ -649,17 +649,34 @@ export default function ServiceRequest() {
                 {PAYMENT_OPTIONS.map((opt, i) => (
                   <TouchableOpacity
                     key={opt.label}
-                    style={[styles.paymentOption, i === paymentIdx && styles.paymentOptionSelected, { flexDirection: rowDir }]}
+                    style={[
+                      styles.paymentOption,
+                      i === paymentIdx && !opt.comingSoon && styles.paymentOptionSelected,
+                      opt.comingSoon && styles.paymentOptionDisabled,
+                      { flexDirection: rowDir },
+                    ]}
                     onPress={() => {
+                      if (opt.comingSoon) return;
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setPaymentIdx(i);
                       setCardErrors({});
                     }}
-                    activeOpacity={0.85}
+                    activeOpacity={opt.comingSoon ? 1 : 0.85}
                   >
-                    <Ionicons name={opt.iconName as any} size={20} color={i === paymentIdx ? '#2D1B69' : '#6B7280'} />
-                    <Text style={[styles.paymentLabel, i === paymentIdx && { color: '#2D1B69', fontFamily: font.semibold }, { flex: 1, fontFamily: font.medium, textAlign: align }]}>{t(opt.label)}</Text>
-                    {i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />}
+                    <Ionicons name={opt.iconName as any} size={20} color={opt.comingSoon ? '#C8C4DC' : i === paymentIdx ? '#2D1B69' : '#6B7280'} />
+                    <Text style={[
+                      styles.paymentLabel,
+                      { flex: 1, fontFamily: font.medium, textAlign: align },
+                      i === paymentIdx && !opt.comingSoon && { color: '#2D1B69', fontFamily: font.semibold },
+                      opt.comingSoon && { color: '#C8C4DC' },
+                    ]}>{t(opt.label)}</Text>
+                    {opt.comingSoon ? (
+                      <View style={styles.comingSoonPill}>
+                        <Text style={[styles.comingSoonText, { fontFamily: font.semibold }]}>{isRTL ? 'قريباً' : 'Soon'}</Text>
+                      </View>
+                    ) : (
+                      i === paymentIdx && <Ionicons name="checkmark-circle" size={18} color="#2D1B69" />
+                    )}
                   </TouchableOpacity>
                 ))}
 
@@ -972,7 +989,10 @@ const styles = StyleSheet.create({
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1,
   },
   paymentOptionSelected: { borderColor: '#2D1B69', backgroundColor: '#F8F7FF' },
+  paymentOptionDisabled: { backgroundColor: '#FAFAFA', borderColor: 'transparent', shadowOpacity: 0 },
   paymentLabel: { fontSize: 15, color: '#1A1A1A' },
+  comingSoonPill: { backgroundColor: '#F0EEF8', borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  comingSoonText: { fontSize: 10, color: '#9E9AB0' },
   cardFormBox: {
     backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginTop: 12,
     borderWidth: 1.5, borderColor: '#EDE8F8',

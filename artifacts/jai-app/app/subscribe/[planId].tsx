@@ -392,25 +392,26 @@ export default function SubscribeScreen() {
         </Text>
         <View style={[styles.methodTabs, { flexDirection: rowDir }]}>
           {([
-            { id: 'card',   labelEn: 'Card',      labelAr: 'بطاقة',   icon: 'card-outline'     },
-            { id: 'tabby',  labelEn: 'Tabby',     labelAr: 'تابي',    icon: 'calendar-outline' },
-            { id: 'tamara', labelEn: 'Tamara',    labelAr: 'تمارا',   icon: 'layers-outline'   },
+            { id: 'card',     labelEn: 'Card',      labelAr: 'بطاقة',    icon: 'card-outline',     comingSoon: false },
+            { id: 'tabby',    labelEn: 'Tabby',     labelAr: 'تابي',     icon: 'calendar-outline', comingSoon: true  },
+            { id: 'tamara',   labelEn: 'Tamara',    labelAr: 'تمارا',    icon: 'layers-outline',   comingSoon: true  },
             ...(Platform.OS === 'ios'
-              ? [{ id: 'applepay', labelEn: 'Apple Pay', labelAr: 'Apple Pay', icon: 'logo-apple' }]
+              ? [{ id: 'applepay', labelEn: 'Apple Pay', labelAr: 'Apple Pay', icon: 'logo-apple', comingSoon: true }]
               : []),
-          ] as const).map((m) => (
+          ] as { id: string; labelEn: string; labelAr: string; icon: string; comingSoon: boolean }[]).map((m) => (
             <TouchableOpacity
               key={m.id}
-              style={[styles.methodTab, payMethod === m.id && styles.methodTabActive]}
-              onPress={() => { setPayMethod(m.id as PayMethod); setErrorMsg(null); }}
+              style={[styles.methodTab, payMethod === m.id && !m.comingSoon && styles.methodTabActive, m.comingSoon && styles.methodTabDisabled]}
+              onPress={() => { if (m.comingSoon) return; setPayMethod(m.id as PayMethod); setErrorMsg(null); }}
+              activeOpacity={m.comingSoon ? 1 : 0.7}
             >
-              <Ionicons name={m.icon as any} size={18} color={payMethod === m.id ? '#5B2C91' : '#9CA3AF'} />
-              <Text style={[
-                styles.methodTabText,
-                { fontFamily: font.semibold, color: payMethod === m.id ? '#5B2C91' : '#6B7280' },
-              ]}>
+              <Ionicons name={m.icon as any} size={18} color={m.comingSoon ? '#C8C4DC' : payMethod === m.id ? '#5B2C91' : '#9CA3AF'} />
+              <Text style={[styles.methodTabText, { fontFamily: font.semibold, color: m.comingSoon ? '#C8C4DC' : payMethod === m.id ? '#5B2C91' : '#6B7280' }]}>
                 {isRTL ? m.labelAr : m.labelEn}
               </Text>
+              {m.comingSoon && (
+                <Text style={[styles.methodTabSoon, { fontFamily: font.semibold }]}>{isRTL ? 'قريباً' : 'Soon'}</Text>
+              )}
             </TouchableOpacity>
           ))}
         </View>
@@ -662,8 +663,10 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1.5, borderColor: '#E5E7EB',
     backgroundColor: '#FFF', alignItems: 'center', gap: 4,
   },
-  methodTabActive: { borderColor: '#5B2C91', backgroundColor: '#F3EEFF' },
-  methodTabText:   { fontSize: 13 },
+  methodTabActive:    { borderColor: '#5B2C91', backgroundColor: '#F3EEFF' },
+  methodTabDisabled:  { backgroundColor: '#FAFAFA', borderColor: '#F0EEF0' },
+  methodTabText:      { fontSize: 13 },
+  methodTabSoon:      { fontSize: 9, color: '#B0AAC8', marginTop: -2 },
 
   // Buyer / card fields
   input: {
