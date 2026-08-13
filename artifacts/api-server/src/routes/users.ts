@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import {
   db, users, userSessions, vehicles,
   notifications, jobRatings, technicianLocations, chatMessages, serviceRequests, jobs,
+  applePaySessions,
 } from "@workspace/db";
 import { eq, and, isNull, or, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
@@ -158,6 +159,9 @@ router.delete("/users/me", requireAuth, async (req, res) => {
         await tx.delete(jobs).where(inArray(jobs.request_id, requestIds));
         await tx.delete(serviceRequests).where(eq(serviceRequests.customer_id, userId));
       }
+
+      // apple pay sessions for this user
+      await tx.delete(applePaySessions).where(eq(applePaySessions.user_id, userId));
 
       // finally delete the user row (vehicles + sessions cascade)
       await tx.delete(users).where(eq(users.id, userId));
