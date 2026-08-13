@@ -11,7 +11,8 @@
 
 const _selectQueue    = [];
 const _returningQueue = [];
-const _updateSetCalls = [];
+const _updateSetCalls = [];   // legacy: just the set-objects
+const _updateCalls    = [];   // { table, set: obj } — tracks which table was updated
 
 export function queueSelect(rows)    { _selectQueue.push(rows); }
 export function queueReturning(rows) { _returningQueue.push(rows); }
@@ -19,10 +20,18 @@ export function queueReturning(rows) { _returningQueue.push(rows); }
 /** Returns a copy of all objects passed to update().set() since the last resetDb(). */
 export function getUpdateSetCalls() { return [..._updateSetCalls]; }
 
+/**
+ * Returns a copy of all update calls with table reference and set-object.
+ * Shape: Array<{ table: object, set: object }>
+ * Use `call.table === serviceRequests` (or `=== jobs`) to find table-specific updates.
+ */
+export function getUpdateCalls() { return [..._updateCalls]; }
+
 export function resetDb() {
   _selectQueue.length    = 0;
   _returningQueue.length = 0;
   _updateSetCalls.length = 0;
+  _updateCalls.length    = 0;
 }
 
 // ── Select builder ────────────────────────────────────────────────────────────
@@ -42,9 +51,13 @@ function makeSelectBuilder() {
 
 // ── Update builder ────────────────────────────────────────────────────────────
 
-function makeUpdateBuilder() {
+function makeUpdateBuilder(table) {
   const self = {
-    set:       (obj) => { _updateSetCalls.push(obj); return self; },
+    set:       (obj) => {
+      _updateSetCalls.push(obj);
+      _updateCalls.push({ table, set: obj });
+      return self;
+    },
     where:     () => self,
     returning: ()  => Promise.resolve(_returningQueue.shift() ?? []),
     // Allow await without .returning() — resolves to undefined (no rows).
@@ -71,7 +84,7 @@ function makeInsertBuilder() {
 
 export const db = {
   select: () => makeSelectBuilder(),
-  update: () => makeUpdateBuilder(),
+  update: (table) => makeUpdateBuilder(table),
   insert: () => makeInsertBuilder(),
 };
 

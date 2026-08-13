@@ -19,7 +19,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
-import { queueSelect, queueReturning, resetDb, getUpdateSetCalls } from "./mock-jobs-db.mjs";
+import { queueSelect, queueReturning, resetDb, getUpdateSetCalls, getUpdateCalls, serviceRequests } from "./mock-jobs-db.mjs";
 import { getNotifCalls, resetNotifCalls }                          from "./mock-push-notif.mjs";
 import { getBroadcastCalls, resetBroadcastCalls }                  from "./mock-dispatch.mjs";
 
@@ -470,4 +470,139 @@ test("PATCH /jobs/:id status=working responds 200, updates serviceRequests to in
     requestId: REQUEST_ID,
     status:    "working",
   }, "Broadcast payload should match job_status shape");
+});
+
+// ── Cancelled-transition tests ─────────────────────────────────────────────────
+
+test("PATCH /jobs/:id status=cancelled responds 200, updates serviceRequests to cancelled, and broadcasts job_status", async () => {
+  setup();
+
+  const JOB_ID     = 80;
+  const REQUEST_ID = 40;
+  const TECH_ID    = 4;
+
+  // DB: fetch existing job — must be in a cancellable state, owned by TECH_ID
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "working",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        200,
+  }]);
+
+  // DB: update jobs returning → updated row
+  // (the serviceRequests update for cancelled has no .returning(), so no queue entry needed for it)
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "cancelled",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        200,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "cancelled" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid working→cancelled transition");
+  assert.equal(body.status, "cancelled", "Response body should reflect the new status");
+
+  // Assert that specifically the serviceRequests table was updated with status: "cancelled"
+  // (not just the jobs table, which also receives status: "cancelled" in its update)
+  const updateCalls = getUpdateCalls();
+  const srCancelledCall = updateCalls.find(
+    (c) => c.table === serviceRequests && c.set.status === "cancelled",
+  );
+  assert.ok(
+    srCancelledCall,
+    "db.update(serviceRequests).set({ status: 'cancelled', ... }) should have been called",
+  );
+
+  // Assert that broadcastToRoom was called with the correct room and payload
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 1, "broadcastToRoom should be called exactly once");
+  assert.equal(broadcasts[0].room, `job:${JOB_ID}`, "Broadcast room should be job:<id>");
+  assert.deepEqual(broadcasts[0].payload, {
+    type:      "job_status",
+    jobId:     JOB_ID,
+    requestId: REQUEST_ID,
+    status:    "cancelled",
+  }, "Broadcast payload should match job_status shape");
+});
+
+test("PATCH /jobs/:id status=cancelled from accepted state responds 200, updates serviceRequests to cancelled, and broadcasts", async () => {
+  setup();
+
+  const JOB_ID     = 81;
+  const REQUEST_ID = 41;
+  const TECH_ID    = 4;
+
+  // DB: fetch existing job — accepted state is also cancellable
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "accepted",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        150,
+  }]);
+
+  // DB: update jobs returning → updated row
+  queueReturning([{
+    id:            JOB_ID,
+    status:        "cancelled",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        150,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "cancelled" }, TECH_ID);
+  assert.equal(status, 200, "Route should respond 200 for a valid accepted→cancelled transition");
+  assert.equal(body.status, "cancelled", "Response body should reflect the new status");
+
+  // Assert that specifically the serviceRequests table was updated with status: "cancelled"
+  const updateCalls = getUpdateCalls();
+  const srCancelledCall = updateCalls.find(
+    (c) => c.table === serviceRequests && c.set.status === "cancelled",
+  );
+  assert.ok(
+    srCancelledCall,
+    "db.update(serviceRequests).set({ status: 'cancelled', ... }) should have been called",
+  );
+
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 1, "broadcastToRoom should be called exactly once");
+  assert.equal(broadcasts[0].room, `job:${JOB_ID}`, "Broadcast room should be job:<id>");
+  assert.deepEqual(broadcasts[0].payload, {
+    type:      "job_status",
+    jobId:     JOB_ID,
+    requestId: REQUEST_ID,
+    status:    "cancelled",
+  }, "Broadcast payload should match job_status shape");
+});
+
+test("PATCH /jobs/:id status=cancelled on an already-completed job returns 422", async () => {
+  setup();
+
+  const JOB_ID  = 82;
+  const TECH_ID = 4;
+
+  // DB: fetch existing job — completed is a terminal state; cannot be cancelled
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "completed",
+    technician_id: TECH_ID,
+    request_id:    42,
+    payout:        200,
+  }]);
+
+  const { status, body } = await patchJob(JOB_ID, { status: "cancelled" }, TECH_ID);
+  assert.equal(status, 422, "Cancelling a completed job should return 422");
+  assert.ok(body.error, "Error message should be present");
+
+  // Ensure the serviceRequests table was NOT updated and no broadcast happened
+  const updateCalls = getUpdateCalls();
+  const srCancelledCall = updateCalls.find(
+    (c) => c.table === serviceRequests && c.set.status === "cancelled",
+  );
+  assert.equal(srCancelledCall, undefined, "serviceRequests should NOT be updated for a rejected transition");
+
+  const broadcasts = getBroadcastCalls();
+  assert.equal(broadcasts.length, 0, "broadcastToRoom should NOT be called for a rejected transition");
 });
