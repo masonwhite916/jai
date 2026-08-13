@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useLanguage } from '@/context/LanguageContext';
+import { useApp } from '@/context/AppContext';
 import { apiFetch, getAuthToken } from '@/lib/api';
 import { SERVICE_PAYOUTS } from '@/lib/serviceConstants';
 
@@ -16,6 +17,8 @@ type ReqStatus = 'active' | 'completed' | 'cancelled';
 
 interface RequestRow {
   id: string;
+  serviceType: string;
+  jobId: string;
   service: string;
   icon: string;
   date: string;
@@ -79,6 +82,7 @@ export default function RequestsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { t, isRTL, font } = useLanguage();
+  const { setActiveRequest } = useApp();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
 
@@ -97,14 +101,16 @@ export default function RequestsScreen() {
       const rows: RequestRow[] = data.requests.map((r) => {
         const svcInfo = SERVICE_ICONS[r.service_type] ?? SERVICE_ICONS.battery;
         return {
-          id:         String(r.id),
-          service:    SERVICE_LABELS[r.service_type] ?? r.service_type,
-          icon:       svcInfo.icon,
-          date:       formatDate(r.created_at),
-          address:    r.address ?? '—',
-          status:     apiStatusToLocal(r.status),
-          cost:       r.job ? `${r.job.payout ?? SERVICE_PAYOUTS[r.service_type] ?? 0} SAR` : `${SERVICE_PAYOUTS[r.service_type] ?? 0} SAR`,
-          technician: r.techName ?? '—',
+          id:          String(r.id),
+          serviceType: r.service_type ?? '',
+          jobId:       r.job ? String(r.job.id) : '',
+          service:     SERVICE_LABELS[r.service_type] ?? r.service_type,
+          icon:        svcInfo.icon,
+          date:        formatDate(r.created_at),
+          address:     r.address ?? '—',
+          status:      apiStatusToLocal(r.status),
+          cost:        r.job ? `${r.job.payout ?? SERVICE_PAYOUTS[r.service_type] ?? 0} SAR` : `${SERVICE_PAYOUTS[r.service_type] ?? 0} SAR`,
+          technician:  r.techName ?? '—',
         };
       });
       setRequests(rows);
@@ -134,7 +140,10 @@ export default function RequestsScreen() {
         contentContainerStyle={{ padding: 20, paddingBottom: 100 + (Platform.OS === 'web' ? 34 : 0) }}
       >
         {activeRequest && (
-          <TouchableOpacity style={styles.activeBanner} onPress={() => router.push('/tracking' as any)} activeOpacity={0.9}>
+          <TouchableOpacity style={styles.activeBanner} onPress={() => {
+            setActiveRequest({ requestId: activeRequest.id, jobId: activeRequest.jobId || activeRequest.id, serviceType: activeRequest.serviceType, status: 'assigned' });
+            router.push('/tracking' as any);
+          }} activeOpacity={0.9}>
             <LinearGradient colors={['#C21875', '#8B35BB']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[styles.activeBannerGradient, { flexDirection: rowDir }]}>
               <View style={styles.activePulse} />
               <View style={{ flex: 1 }}>
@@ -171,7 +180,10 @@ export default function RequestsScreen() {
                 key={req.id}
                 style={[styles.requestCard, { flexDirection: rowDir }]}
                 activeOpacity={0.85}
-                onPress={req.status === 'active' ? () => router.push('/tracking' as any) : undefined}
+                onPress={req.status === 'active' ? () => {
+                  setActiveRequest({ requestId: req.id, jobId: req.jobId || req.id, serviceType: req.serviceType, status: 'assigned' });
+                  router.push('/tracking' as any);
+                } : undefined}
               >
                 <View style={[styles.reqIconBg, { backgroundColor: '#2D1B6915' }]}>
                   {SERVICE_ICONS[Object.keys(SERVICE_LABELS).find(k => SERVICE_LABELS[k] === req.service) ?? 'battery']?.lib === 'MC'

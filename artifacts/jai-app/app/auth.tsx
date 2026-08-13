@@ -15,7 +15,9 @@ import { perfMark, perfMeasure } from '@/lib/perf';
 
 const API_BASE = getApiBaseUrl();
 
-type Step = 'phone' | 'otp';
+// OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
+// Re-enable by restoring: type Step = 'phone' | 'otp';
+type Step = 'phone';
 
 export default function Auth() {
   const insets = useSafeAreaInsets();
@@ -23,74 +25,36 @@ export default function Auth() {
   const { login, loginAsGuest } = useApp();
   const { t, isRTL, font, lang, toggleLanguage } = useLanguage();
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
-  const otpInputRef = useRef<TextInput>(null);
-  const [step, setStep] = useState<Step>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const align = isRTL ? 'right' : 'left';
   const rowDir = isRTL ? 'row-reverse' : 'row';
 
-  // Android physical devices often ignore autoFocus — force-focus after step change
-  useEffect(() => {
-    if (step === 'otp') {
-      const t = setTimeout(() => otpInputRef.current?.focus(), 150);
-      return () => clearTimeout(t);
-    }
-  }, [step]);
-
   async function handlePhoneSubmit() {
     if (phone.replace(/\D/g, '').length < 9) { setError(t('phoneError')); return; }
     setError('');
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const resp = await fetch(`${API_BASE}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone }),
-      });
-      const data = await resp.json() as { ok?: boolean; error?: string };
-      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Failed to send OTP');
-      setStep('otp');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send code. Try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function handleResend() {
-    setError('');
-    setOtp('');
-    await handlePhoneSubmit();
-  }
-
-  async function handleOtpSubmit() {
-    if (otp.length < 6) { setError(t('otpError')); return; }
-    setError('');
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // OTP TEMPORARILY BYPASSED — call verify-otp directly with a dummy code.
+    // Re-enable the send-otp step and OTP UI when Taqnyat is back.
     try {
       const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            phone,
-            otp,
-            role: 'customer',
-            platform: Platform.OS,
-            device_name: Platform.OS === 'ios'
-              ? `iOS ${Platform.Version}`
-              : Platform.OS === 'android'
-                ? `Android ${Platform.Version}`
-                : 'Web',
-          }),
+          phone,
+          otp: '000000',
+          platform: Platform.OS,
+          device_name: Platform.OS === 'ios'
+            ? `iOS ${Platform.Version}`
+            : Platform.OS === 'android'
+              ? `Android ${Platform.Version}`
+              : 'Web',
+        }),
       });
       const data = await resp.json() as { ok?: boolean; error?: string; token?: string; user?: any };
-      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');
-      // Merge API user with local defaults for fields the server doesn't yet populate
+      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Login failed');
       const apiUser = data.user ?? {};
       const mergedUser = {
         id:         apiUser.id         ?? 'u1',
@@ -101,17 +65,16 @@ export default function Auth() {
         vehicles:   apiUser.vehicles   ?? [],
       };
       await login(mergedUser, data.token);
-      // Record how long the full auth flow took (OTP entry → verified → session ready).
       perfMark('authComplete');
       perfMeasure('app_to_auth', 'appInteractive', 'authComplete');
-      // Brand-new users (no name yet) complete their profile first
       if (data.user?.profile_complete) {
         router.replace('/(tabs)');
       } else {
         router.replace('/profile-setup');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed. Try again.');
+      setError(err instanceof Error ? err.message : 'Could not sign in. Try again.');
+    } finally {
       setLoading(false);
     }
   }
@@ -154,110 +117,41 @@ export default function Auth() {
         contentContainerStyle={[styles.formContainer, { paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }]}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 'phone' ? (
-          <>
-            <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterPhone')}</Text>
-            <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>{t('phoneHint')}</Text>
+        {/* Phone entry — OTP step removed while Taqnyat API is under maintenance */}
+        <>
+          <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterPhone')}</Text>
+          <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>{t('phoneHint')}</Text>
 
-            <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
-              <View style={styles.countryCode}>
-                <Text style={[styles.countryText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
-              </View>
-              <TextInput
-                style={[styles.input, { fontFamily: font.medium, textAlign: 'left', flex: 1 }]}
-                placeholder="5X XXX XXXX"
-                placeholderTextColor="#C0C0D4"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                maxLength={10}
-              />
+          <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
+            <View style={styles.countryCode}>
+              <Text style={[styles.countryText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
             </View>
+            <TextInput
+              style={[styles.input, { fontFamily: font.medium, textAlign: 'left', flex: 1 }]}
+              placeholder="5X XXX XXXX"
+              placeholderTextColor="#C0C0D4"
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              maxLength={10}
+            />
+          </View>
 
-            {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
+          {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
 
-            <TouchableOpacity onPress={handlePhoneSubmit} activeOpacity={0.88} style={styles.primaryBtnWrap}>
-              <LinearGradient
-                colors={['#2D1B69', '#6A2597']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={[styles.primaryBtn, { flexDirection: rowDir }]}
-              >
-                <Text style={[styles.primaryBtnText, { fontFamily: font.bold }]}>{t('sendOTP')}</Text>
-                <Ionicons name={isRTL ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity
-              onPress={() => setStep('phone')}
-              style={[styles.backRow, { flexDirection: rowDir }]}
+          <TouchableOpacity onPress={handlePhoneSubmit} activeOpacity={0.88} disabled={loading} style={styles.primaryBtnWrap}>
+            <LinearGradient
+              colors={loading ? ['#9CA3AF', '#9CA3AF'] : ['#2D1B69', '#6A2597']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={[styles.primaryBtn, { flexDirection: rowDir }]}
             >
-              <Ionicons name={isRTL ? 'arrow-forward-outline' : 'arrow-back-outline'} size={18} color="#2D1B69" />
-              <Text style={[styles.backText, { fontFamily: font.medium }]}>{t('changeNumber')}</Text>
-            </TouchableOpacity>
-
-            <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterOTP')}</Text>
-            <View style={[styles.whatsappHint, { flexDirection: rowDir }]}>
-              <Ionicons name="chatbubble-ellipses-outline" size={15} color="#2D1B69" />
-              <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align, marginBottom: 0 }]}>
-                {isRTL
-                  ? `تم إرسال رمز التحقق عبر SMS إلى +966 ${phone}`
-                  : `Verification code sent via SMS to +966 ${phone}`}
+              <Text style={[styles.primaryBtnText, { fontFamily: font.bold }]}>
+                {loading ? (isRTL ? 'جارٍ تسجيل الدخول…' : 'Signing in…') : (isRTL ? 'متابعة' : 'Continue')}
               </Text>
-            </View>
-
-            {/* OTP boxes + hidden input in a relative container so the
-                invisible input can cover the full tap area on web */}
-            <TouchableOpacity
-              activeOpacity={1}
-              onPress={() => otpInputRef.current?.focus()}
-              style={styles.otpContainer}
-            >
-              <View style={[styles.otpRow, { flexDirection: rowDir }]}>
-                {[0, 1, 2, 3, 4, 5].map((i) => (
-                  <View key={i} style={[styles.otpBox, otp.length > i && styles.otpBoxFilled]}>
-                    <Text style={[styles.otpDigit, { fontFamily: font.bold }]}>{otp[i] ?? ''}</Text>
-                  </View>
-                ))}
-              </View>
-              {/* Transparent input covers the whole container — receives all taps */}
-              <TextInput
-                ref={otpInputRef}
-                style={styles.hiddenInput}
-                value={otp}
-                onChangeText={setOtp}
-                keyboardType="number-pad"
-                maxLength={6}
-                autoFocus
-                caretHidden
-              />
-            </TouchableOpacity>
-
-            {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
-
-            <TouchableOpacity onPress={handleOtpSubmit} activeOpacity={0.88} disabled={loading} style={styles.primaryBtnWrap}>
-              <LinearGradient
-                colors={loading ? ['#9CA3AF', '#9CA3AF'] : ['#2D1B69', '#6A2597']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={styles.primaryBtn}
-              >
-                <Text style={[styles.primaryBtnText, { fontFamily: font.bold }]}>
-                  {loading ? t('verifying') : t('verifyAndContinue')}
-                </Text>
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={{ alignItems: 'center', marginTop: 16 }}
-              onPress={handleResend}
-              disabled={loading}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.resendText, { fontFamily: font.regular }]}>{t('resendCode')}</Text>
-            </TouchableOpacity>
-          </>
-        )}
+              {!loading && <Ionicons name={isRTL ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />}
+            </LinearGradient>
+          </TouchableOpacity>
+        </>
 
         {/* Divider */}
         <View style={styles.divRow}>

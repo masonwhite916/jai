@@ -48,7 +48,10 @@ router.post("/auth/send-otp", otpLimiter, async (req, res) => {
       }
     }
 
-    const normalised = await sendVerification(phone);
+    // OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
+    // Skip the actual SMS send; just normalise and return ok so the client
+    // can proceed. Re-enable by restoring: await sendVerification(phone)
+    const normalised = normalizePhone(phone);
     res.json({ ok: true, phone: normalised });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -94,16 +97,11 @@ router.post("/auth/verify-otp", async (req, res) => {
       return;
     }
 
-    const { valid, status } = await checkVerification(phone, otp);
-
-    if (status === "expired") {
-      res.status(400).json({ error: "Code has expired. Please request a new one." });
-      return;
-    }
-    if (!valid) {
-      res.status(400).json({ error: "Incorrect code. Please try again." });
-      return;
-    }
+    // OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
+    // Skip checkVerification; accept any code. Re-enable by restoring:
+    //   const { valid, status } = await checkVerification(phone, otp);
+    //   if (status === "expired") { res.status(400).json({...}); return; }
+    //   if (!valid) { res.status(400).json({...}); return; }
 
     const canonicalPhone = normalizePhone(phone);
 

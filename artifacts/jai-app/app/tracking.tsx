@@ -152,40 +152,8 @@ export default function TrackingScreen() {
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align  = isRTL ? 'right' : 'left';
 
-  // ── Null-guard: try to recover active request from API before redirecting ─────
-  // Context may be empty when the user navigates here from the requests list in a
-  // session where the request was placed (e.g. app restarted, or made from another
-  // device). Instead of immediately bouncing home, call the API once to find any
-  // non-terminal request, populate context, and continue. Only redirect if the API
-  // confirms there is nothing active.
+  // ── Null-guard ────────────────────────────────────────────────────────────────
   const hasRequest = !!(activeRequest?.jobId || activeRequest?.requestId);
-  const [recovering, setRecovering] = useState(!hasRequest);
-
-  useEffect(() => {
-    if (hasRequest) { setRecovering(false); return; }
-
-    apiFetch<{ requests: Record<string, any>[] }>('/api/requests')
-      .then((data) => {
-        const active = data.requests.find(
-          (r) => r.status !== 'completed' && r.status !== 'cancelled',
-        );
-        if (active) {
-          setActiveRequest({
-            requestId:   String(active.id),
-            jobId:       active.job ? String(active.job.id) : String(active.id),
-            serviceType: active.service_type ?? '',
-            status:      active.status,
-            customerLat: active.latitude  ?? undefined,
-            customerLng: active.longitude ?? undefined,
-          });
-          setRecovering(false);
-        } else {
-          router.replace('/(tabs)');
-        }
-      })
-      .catch(() => router.replace('/(tabs)'));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Real-time state
   const [jobStatus, setJobStatus] = useState<string>(activeRequest?.status ?? 'pending');
@@ -420,10 +388,21 @@ export default function TrackingScreen() {
     );
   }
 
-  if (recovering) {
+  if (!hasRequest) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FC' }}>
-        <ActivityIndicator size="large" color="#2D1B69" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FC', gap: 12 }}>
+        <Ionicons name="car-outline" size={52} color="#C0C0D0" />
+        <Text style={{ fontSize: 16, color: '#6B7280', fontFamily: font.semibold }}>
+          {isRTL ? 'لا يوجد طلب نشط' : 'No active request'}
+        </Text>
+        <TouchableOpacity
+          onPress={() => router.replace('/(tabs)/requests' as any)}
+          style={{ marginTop: 8, paddingHorizontal: 24, paddingVertical: 12, backgroundColor: '#2D1B69', borderRadius: 12 }}
+        >
+          <Text style={{ color: '#FFFFFF', fontFamily: font.semibold }}>
+            {isRTL ? 'عودة' : 'Go back'}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
