@@ -111,6 +111,20 @@ export default function SubscribeScreen() {
   const [expiry,     setExpiry]     = useState('');
   const [cvc,        setCvc]        = useState('');
 
+  // ── Promo code state ────────────────────────────────────────────────────────
+  const [promoInput,   setPromoInput]   = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoApplied, setPromoApplied] = useState(false);
+  const [promoError,   setPromoError]   = useState<string | null>(null);
+  const [promoDiscount, setPromoDiscount] = useState(0);   // % or SAR
+  const [promoType,    setPromoType]    = useState<'percent' | 'fixed'>('percent');
+  const [promoFinal,   setPromoFinal]   = useState(0);     // discounted SAR price
+  const [promoCode,    setPromoCode]    = useState('');    // confirmed code
+
+  // Effective price (SAR) — base or discounted
+  const planPrice = Number(plan.price);
+  const effectivePrice = promoApplied ? promoFinal : planPrice;
+
   // ── Flow state ──────────────────────────────────────────────────────────────
   const [loading,  setLoading]  = useState(false);
   const [success,  setSuccess]  = useState(false);
@@ -121,6 +135,53 @@ export default function SubscribeScreen() {
   // ── Success animation ───────────────────────────────────────────────────────
   const scaleAnim   = useRef(new Animated.Value(0)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+
+  // ─── Apply promo code ────────────────────────────────────────────────────────
+  async function applyPromoCode() {
+    const trimmed = promoInput.trim();
+    if (!trimmed) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    try {
+      const data = await apiFetch<{
+        valid: boolean;
+        discount?: number;
+        type?: 'percent' | 'fixed';
+        originalAmount?: number;
+        finalAmount?: number;
+        error?: string;
+      }>('/api/payment/validate-promo', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: trimmed, plan: planId ?? 'basic' }),
+      });
+      if (data.valid) {
+        setPromoApplied(true);
+        setPromoDiscount(data.discount ?? 0);
+        setPromoType(data.type ?? 'percent');
+        setPromoFinal(data.finalAmount ?? planPrice);
+        setPromoCode(trimmed.toUpperCase());
+        setPromoError(null);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setPromoError(data.error ?? (isRTL ? 'كود غير صالح' : 'Invalid promo code'));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+    } catch {
+      setPromoError(isRTL ? 'تعذّر التحقق، حاول مجدداً' : 'Could not validate, try again');
+    } finally {
+      setPromoLoading(false);
+    }
+  }
+
+  function removePromo() {
+    setPromoApplied(false);
+    setPromoInput('');
+    setPromoCode('');
+    setPromoError(null);
+    setPromoDiscount(0);
+    setPromoFinal(0);
+  }
 
   // ─── Validation ─────────────────────────────────────────────────────────────
   function validate() {
@@ -193,6 +254,7 @@ export default function SubscribeScreen() {
           month:       mm?.trim(),
           year:        `20${yy?.trim()}`,
           cvc:         cvc.trim(),
+          promoCode:   promoCode || undefined,
         }),
       });
 
@@ -533,12 +595,71 @@ export default function SubscribeScreen() {
           </View>
         )}
 
+        {/* ── Promo code (card only) ── */}
+        {payMethod === 'card' && (
+          <View style={styles.promoSection}>
+            <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 10 }]}>
+              {isRTL ? 'كود الخصم' : 'Promo code'}
+            </Text>
+            {promoApplied ? (
+              <View style={[styles.promoAppliedRow, { flexDirection: rowDir }]}>
+                <View style={[styles.promoChip, { flexDirection: rowDir }]}>
+                  <Ionicons name="pricetag-outline" size={14} color="#16A34A" />
+                  <Text style={[styles.promoChipText, { fontFamily: font.semibold }]}>
+                    {promoCode} — {promoType === 'percent'
+                      ? `${promoDiscount}% ${isRTL ? 'خصم' : 'off'}`
+                      : `${isRTL ? 'خصم' : 'SAR'} ${promoDiscount} ${isRTL ? 'ريال' : 'off'}`}
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={removePromo} hitSlop={8}>
+                  <Ionicons name="close-circle" size={20} color="#6B7280" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <View style={[styles.promoInputRow, { flexDirection: rowDir }]}>
+                  <TextInput
+                    style={[styles.promoInput, { fontFamily: font.medium, flex: 1, textAlign: align }]}
+                    value={promoInput}
+                    onChangeText={v => { setPromoInput(v.toUpperCase()); setPromoError(null); }}
+                    placeholder={isRTL ? 'أدخل كود الخصم' : 'Enter promo code'}
+                    placeholderTextColor="#C0C0D4"
+                    autoCapitalize="characters"
+                    autoCorrect={false}
+                  />
+                  <TouchableOpacity
+                    style={[styles.promoApplyBtn, { opacity: promoLoading ? 0.6 : 1 }]}
+                    onPress={applyPromoCode}
+                    disabled={promoLoading || !promoInput.trim()}
+                    activeOpacity={0.8}
+                  >
+                    {promoLoading
+                      ? <ActivityIndicator size="small" color="#FFF" />
+                      : <Text style={[styles.promoApplyText, { fontFamily: font.semibold }]}>{isRTL ? 'تطبيق' : 'Apply'}</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+                {!!promoError && (
+                  <Text style={[styles.promoErrorText, { fontFamily: font.regular, textAlign: align }]}>{promoError}</Text>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* ── Order summary ── */}
         <View style={styles.orderSummary}>
           <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 14 }]}>
             {isRTL ? 'ملخص الطلب' : 'Order summary'}
           </Text>
           <SummaryRow label={isRTL ? plan.nameAr : plan.nameEn} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold />
+          {promoApplied && (
+            <SummaryRow
+              label={isRTL ? 'خصم الكود' : 'Promo discount'}
+              value={`− ${(planPrice - promoFinal).toFixed(2)} ${isRTL ? 'ريال' : 'SAR'}`}
+              font={font} rowDir={rowDir} discount
+            />
+          )}
           <SummaryRow
             label={isRTL ? 'طريقة السداد' : 'Payment'}
             value={
@@ -551,7 +672,23 @@ export default function SubscribeScreen() {
             font={font} rowDir={rowDir}
           />
           <View style={styles.divider} />
-          <SummaryRow label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT incl.)'} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold accent />
+          {promoApplied ? (
+            <View style={[{ flexDirection: rowDir, justifyContent: 'space-between', alignItems: 'center' }]}>
+              <Text style={[styles.totalLabel, { fontFamily: font.bold, textAlign: align }]}>
+                {isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT incl.)'}
+              </Text>
+              <View style={{ alignItems: isRTL ? 'flex-start' : 'flex-end' }}>
+                <Text style={[styles.totalStrike, { fontFamily: font.regular }]}>
+                  {plan.price} {isRTL ? 'ريال' : 'SAR'}
+                </Text>
+                <Text style={[styles.totalDiscount, { fontFamily: font.bold }]}>
+                  {promoFinal.toFixed(2)} {isRTL ? 'ريال' : 'SAR'}
+                </Text>
+              </View>
+            </View>
+          ) : (
+            <SummaryRow label={isRTL ? 'الإجمالي (شامل الضريبة)' : 'Total (VAT incl.)'} value={`${plan.price} ${isRTL ? 'ريال' : 'SAR'}`} font={font} rowDir={rowDir} bold accent />
+          )}
         </View>
 
         {/* ── Features ── */}
@@ -594,7 +731,9 @@ export default function SubscribeScreen() {
                 <Ionicons name="lock-closed" size={20} color="#FFF" />
                 <Text style={[styles.submitText, { fontFamily: font.bold }]}>
                   {payMethod === 'card'
-                    ? (isRTL ? `ادفع ${plan.price} ريال` : `Pay SAR ${plan.price}`)
+                    ? (isRTL
+                        ? `ادفع ${effectivePrice % 1 === 0 ? effectivePrice : effectivePrice.toFixed(2)} ريال`
+                        : `Pay SAR ${effectivePrice % 1 === 0 ? effectivePrice : effectivePrice.toFixed(2)}`)
                     : payMethod === 'tabby'
                       ? (isRTL ? 'الدفع عبر تابي' : 'Continue with Tabby')
                       : payMethod === 'tamara'
@@ -629,13 +768,14 @@ function Field({ label, error, align, font, children }: {
   );
 }
 
-function SummaryRow({ label, value, font, rowDir, bold, accent }: {
-  label: string; value: string; font: any; rowDir: 'row' | 'row-reverse'; bold?: boolean; accent?: boolean;
+function SummaryRow({ label, value, font, rowDir, bold, accent, discount }: {
+  label: string; value: string; font: any; rowDir: 'row' | 'row-reverse';
+  bold?: boolean; accent?: boolean; discount?: boolean;
 }) {
   return (
     <View style={[styles.summaryRow, { flexDirection: rowDir }]}>
-      <Text style={[styles.summaryLabel, { fontFamily: bold ? font.semibold : font.regular }]}>{label}</Text>
-      <Text style={[styles.summaryValue, { fontFamily: bold ? font.bold : font.regular, color: accent ? '#5B2C91' : '#1A1A1A' }]}>
+      <Text style={[styles.summaryLabel, { fontFamily: bold ? font.semibold : font.regular, color: discount ? '#16A34A' : '#6B7280' }]}>{label}</Text>
+      <Text style={[styles.summaryValue, { fontFamily: bold ? font.bold : font.regular, color: discount ? '#16A34A' : accent ? '#5B2C91' : '#1A1A1A' }]}>
         {value}
       </Text>
     </View>
@@ -692,6 +832,35 @@ const styles = StyleSheet.create({
     backgroundColor: '#EDE8F8', borderRadius: 12, padding: 14, marginTop: 8,
   },
   bnplInfoText: { fontSize: 13, color: '#4B5563' },
+
+  // Promo code
+  promoSection: {
+    backgroundColor: '#FFF', borderRadius: 16, padding: 16,
+    marginTop: 20, borderWidth: 1, borderColor: '#EBEBF5',
+  },
+  promoInputRow: { gap: 8, alignItems: 'center' },
+  promoInput: {
+    backgroundColor: '#F5F3FF', borderRadius: 10,
+    borderWidth: 1.5, borderColor: '#E5E7EB',
+    paddingHorizontal: 14, paddingVertical: 11,
+    fontSize: 14, color: '#1A1A1A',
+  },
+  promoApplyBtn: {
+    backgroundColor: '#5B2C91', borderRadius: 10,
+    paddingHorizontal: 18, paddingVertical: 11, minWidth: 74, alignItems: 'center',
+  },
+  promoApplyText: { color: '#FFF', fontSize: 14 },
+  promoAppliedRow: { alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  promoChip: {
+    backgroundColor: '#DCFCE7', borderRadius: 8,
+    paddingHorizontal: 10, paddingVertical: 6, gap: 6, alignItems: 'center', flex: 1,
+  },
+  promoChipText: { fontSize: 13, color: '#16A34A' },
+  promoErrorText: { fontSize: 12, color: '#E74C3C', marginTop: 6 },
+  // Total with discount
+  totalLabel:   { fontSize: 14, color: '#1A1A1A' },
+  totalStrike:  { fontSize: 13, color: '#9CA3AF', textDecorationLine: 'line-through' },
+  totalDiscount:{ fontSize: 16, color: '#16A34A' },
 
   // Order summary
   orderSummary: {

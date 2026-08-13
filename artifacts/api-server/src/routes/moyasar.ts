@@ -103,23 +103,37 @@ export function applyPromo(amountHalalas: number, promo: PromoCode): number {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/validate-promo  (requires auth)
-// Validate a promo code against a specific service.
-// Body: { code: string; service_type: string }
+// Validate a promo code against a specific service OR subscription plan.
+// Body: { code: string; service_type?: string; plan?: string }
+//   Provide exactly one of service_type or plan.
 // Returns: { valid: true; discount; type; originalAmount; finalAmount } (SAR)
 //       OR { valid: false; error: string }
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/validate-promo", requireAuth, async (req, res) => {
-  const { code, service_type } = req.body as { code?: string; service_type?: string };
+  const { code, service_type, plan } = req.body as {
+    code?: string;
+    service_type?: string;
+    plan?: string;
+  };
 
-  if (!code || !service_type) {
-    res.status(400).json({ valid: false, error: "code and service_type are required" });
+  if (!code || (!service_type && !plan)) {
+    res.status(400).json({ valid: false, error: "code and either service_type or plan are required" });
     return;
   }
 
-  const baseAmount = SERVICE_AMOUNTS[service_type];
-  if (!baseAmount) {
-    res.status(400).json({ valid: false, error: `Unknown service_type: ${service_type}` });
-    return;
+  let baseAmount: number | undefined;
+  if (plan) {
+    baseAmount = PLAN_AMOUNTS[plan];
+    if (!baseAmount) {
+      res.status(400).json({ valid: false, error: `Unknown plan: ${plan}` });
+      return;
+    }
+  } else {
+    baseAmount = SERVICE_AMOUNTS[service_type!];
+    if (!baseAmount) {
+      res.status(400).json({ valid: false, error: `Unknown service_type: ${service_type}` });
+      return;
+    }
   }
 
   const promo = lookupPromo(code);
@@ -194,9 +208,9 @@ const SERVICE_NAMES: Record<string, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/payment/checkout  (requires auth)
 // Charge a card (Mada / Visa / Mastercard) for a subscription plan.
-// Body: { plan, cardName, cardNumber, month, year, cvc, callbackUrl? }
-// Embeds userId + plan in Moyasar metadata so the webhook can activate the
-// correct membership tier server-side without trusting the client.
+// Body: { plan, cardName, cardNumber, month, year, cvc, callbackUrl?, promoCode? }
+// Embeds userId + plan + promo_code in Moyasar metadata so the webhook and
+// /subscription/confirm can activate membership without trusting the client.
 // ─────────────────────────────────────────────────────────────────────────────
 router.post("/payment/checkout", requireAuth, async (req, res) => {
   try {
@@ -208,6 +222,7 @@ router.post("/payment/checkout", requireAuth, async (req, res) => {
       year,
       cvc,
       callbackUrl,
+      promoCode,
     } = req.body as {
       plan: string;
       cardName: string;
@@ -216,12 +231,35 @@ router.post("/payment/checkout", requireAuth, async (req, res) => {
       year: string;
       cvc: string;
       callbackUrl?: string;
+      promoCode?: string;
     };
 
-    const amount = PLAN_AMOUNTS[plan];
-    if (!amount) {
+    const baseAmount = PLAN_AMOUNTS[plan];
+    if (!baseAmount) {
       res.status(400).json({ error: `Unknown plan: ${plan}` });
       return;
+    }
+
+    // Resolve promo discount server-side — never trust the client's claimed discount
+    let resolvedPromoCode: string | null = null;
+    let amount = baseAmount;
+    if (promoCode) {
+      const promo = lookupPromo(promoCode);
+      if (promo) {
+        // Check the user hasn't already used this code
+        const existing = await db
+          .select({ id: promoUses.id })
+          .from(promoUses)
+          .where(and(eq(promoUses.user_id, req.userId!), eq(promoUses.code, promo.code)))
+          .limit(1);
+
+        if (existing.length === 0) {
+          amount = applyPromo(baseAmount, promo);
+          resolvedPromoCode = promo.code;
+        }
+        // Already used → silently ignore; charge full price
+      }
+      // Unknown code → silently ignore
     }
 
     if (MOCK_MODE) {
@@ -247,10 +285,12 @@ router.post("/payment/checkout", requireAuth, async (req, res) => {
       },
       // Bind payment to the authenticated user and plan so the webhook and
       // /subscription/confirm can activate membership without trusting the client.
+      // promo_code embedded so confirm can record the use and verify the amount.
       metadata: {
-        type:   "subscription",
-        userId: String(req.userId),
+        type:       "subscription",
+        userId:     String(req.userId),
         plan,
+        promo_code: resolvedPromoCode ?? "",
       },
     })) as {
       id: string;
@@ -287,11 +327,13 @@ router.post("/payment/subscription/confirm", requireAuth, async (req, res) => {
       return;
     }
 
-    const expectedAmount = PLAN_AMOUNTS[plan];
-    if (!expectedAmount) {
+    const baseAmount = PLAN_AMOUNTS[plan];
+    if (!baseAmount) {
       res.status(400).json({ error: `Unknown plan: ${plan}` });
       return;
     }
+
+    let confirmedPromoCode: string | null = null;
 
     if (MOCK_MODE && paymentId.startsWith(MOCK_PREFIX)) {
       // Testing bypass — no real Moyasar payment to verify
@@ -302,17 +344,11 @@ router.post("/payment/subscription/confirm", requireAuth, async (req, res) => {
         id: string;
         status: string;
         amount: number;
-        metadata?: { userId?: string; plan?: string; type?: string };
+        metadata?: { userId?: string; plan?: string; type?: string; promo_code?: string };
       };
 
       if (payment.status !== "paid") {
         res.status(402).json({ error: "Payment has not been confirmed as paid yet" });
-        return;
-      }
-
-      if (payment.amount !== expectedAmount) {
-        console.error(`[payment] amount mismatch for ${paymentId}: got ${payment.amount}, expected ${expectedAmount}`);
-        res.status(400).json({ error: "Payment amount does not match plan price" });
         return;
       }
 
@@ -322,6 +358,31 @@ router.post("/payment/subscription/confirm", requireAuth, async (req, res) => {
         res.status(403).json({ error: "Payment does not belong to this account" });
         return;
       }
+
+      // Compute the expected amount, accounting for any promo embedded in metadata
+      const metaPromo = payment.metadata?.promo_code ?? "";
+      let expectedAmount = baseAmount;
+      if (metaPromo) {
+        const promo = lookupPromo(metaPromo);
+        if (promo) {
+          expectedAmount = applyPromo(baseAmount, promo);
+          confirmedPromoCode = promo.code;
+        }
+      }
+
+      if (payment.amount !== expectedAmount) {
+        console.error(`[payment] amount mismatch for ${paymentId}: got ${payment.amount}, expected ${expectedAmount}`);
+        res.status(400).json({ error: "Payment amount does not match plan price" });
+        return;
+      }
+    }
+
+    // Record promo use so the code cannot be reused by this user on future purchases
+    if (confirmedPromoCode) {
+      await db
+        .insert(promoUses)
+        .values({ user_id: req.userId!, code: confirmedPromoCode })
+        .onConflictDoNothing();
     }
 
     // Activate membership server-side
