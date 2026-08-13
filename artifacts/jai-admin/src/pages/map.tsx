@@ -327,10 +327,12 @@ export default function MapView() {
     }
   });
 
-  // Show active service requests by REQUEST status (not job status)
+  // Show all active service requests — those without coordinates get a
+  // fallback Riyadh city-centre pin so dispatchers can still see the job exists.
+  const RIYADH_LAT = 24.7136;
+  const RIYADH_LNG = 46.6753;
   const activeRequests = useMemo(() => reqData?.requests.filter(r =>
-    (r.status === 'pending' || r.status === 'assigned' || r.status === 'in_progress') &&
-    r.location_lat && r.location_lng
+    r.status === 'pending' || r.status === 'assigned' || r.status === 'in_progress'
   ) || [], [reqData]);
 
   // ── Idle technician list (non-snoozed) ────────────────────────────────────────
@@ -362,10 +364,11 @@ export default function MapView() {
     () => typeof window !== 'undefined' && window.innerWidth < 768
   );
 
-  // Default to SF Bay Area if no data
-  const center: [number, number] = technicians.length > 0 
-    ? [technicians[0].last_lat as number, technicians[0].last_lng as number] 
-    : [37.7749, -122.4194];
+  // Default centre: Riyadh, Saudi Arabia
+  const RIYADH: [number, number] = [24.7136, 46.6753];
+  const center: [number, number] = technicians.length > 0
+    ? [technicians[0].last_lat as number, technicians[0].last_lng as number]
+    : RIYADH;
 
   if (!mounted) return null;
 
@@ -502,10 +505,23 @@ export default function MapView() {
         )}
       </div>
 
+      {/* ── Empty state overlay — shown when there's nothing to plot ─────────── */}
+      {technicians.length === 0 && activeRequests.length === 0 && (
+        <div className="absolute inset-0 z-[500] flex items-center justify-center pointer-events-none">
+          <div className="bg-card/95 backdrop-blur border border-border rounded-xl shadow-lg px-6 py-5 flex flex-col items-center gap-2 max-w-xs text-center pointer-events-auto">
+            <MapPin className="w-8 h-8 text-muted-foreground/50" />
+            <p className="text-sm font-semibold text-foreground">No live locations yet</p>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Markers appear when technicians share their location or new requests come in.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 z-0 relative isolate">
-        <MapContainer 
-          center={center} 
-          zoom={12} 
+        <MapContainer
+          center={center}
+          zoom={11}
           style={{ height: '100%', width: '100%', zIndex: 1 }}
           zoomControl={false}
         >
@@ -515,40 +531,49 @@ export default function MapView() {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           />
 
-          {/* Active Jobs */}
-          {activeRequests.map(req => (
-            <Marker 
-              key={`req-${req.id}`}
-              position={[req.location_lat as number, req.location_lng as number]}
-              icon={createJobMarker(req.status)}
-            >
-              <Popup className="dispatch-popup">
-                <div className="space-y-2 min-w-[200px]">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-sm">Job #{req.id}</span>
-                    <Badge variant="outline" className="text-[10px] uppercase">
-                      {req.status.replace('_', ' ')}
-                    </Badge>
+          {/* Active Jobs — requests without coordinates fall back to a Riyadh city-centre pin */}
+          {activeRequests.map(req => {
+            const hasCoords = req.location_lat && req.location_lng;
+            const position: [number, number] = hasCoords
+              ? [req.location_lat as number, req.location_lng as number]
+              : [RIYADH_LAT, RIYADH_LNG];
+            return (
+              <Marker
+                key={`req-${req.id}`}
+                position={position}
+                icon={createJobMarker(req.status)}
+                opacity={hasCoords ? 1 : 0.5}
+              >
+                <Popup className="dispatch-popup">
+                  <div className="space-y-2 min-w-[200px]">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-sm">Job #{req.id}</span>
+                      <Badge variant="outline" className="text-[10px] uppercase">
+                        {req.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+
+                    <div className="text-xs space-y-1 mt-2">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Car className="w-3.5 h-3.5" />
+                        <span className="text-foreground">{req.service_type.replace('_', ' ')}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span className="text-foreground truncate block max-w-[180px]">
+                          {hasCoords ? req.address : 'Location unavailable'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Clock className="w-3.5 h-3.5" />
+                        <span className="text-foreground">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
+                      </div>
+                    </div>
                   </div>
-                  
-                  <div className="text-xs space-y-1 mt-2">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Car className="w-3.5 h-3.5" />
-                      <span className="text-foreground">{req.service_type.replace('_', ' ')}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="w-3.5 h-3.5" />
-                      <span className="text-foreground truncate block max-w-[180px]">{req.address}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="w-3.5 h-3.5" />
-                      <span className="text-foreground">{formatDistanceToNow(new Date(req.created_at), { addSuffix: true })}</span>
-                    </div>
-                  </div>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
+                </Popup>
+              </Marker>
+            );
+          })}
 
           {/* Technicians — icon color encodes GPS freshness; badge shows idle state */}
           {technicians.map(tech => {
