@@ -19,7 +19,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
-import { queueSelect, queueReturning, resetDb, getUpdateSetCalls, getUpdateCalls, serviceRequests } from "./mock-jobs-db.mjs";
+import { queueSelect, queueReturning, queueUpdateError, resetDb, getUpdateSetCalls, getUpdateCalls, serviceRequests, jobs } from "./mock-jobs-db.mjs";
 import { getNotifCalls, resetNotifCalls }                          from "./mock-push-notif.mjs";
 import { getBroadcastCalls, resetBroadcastCalls }                  from "./mock-dispatch.mjs";
 
@@ -169,6 +169,68 @@ test("PATCH /jobs/:id status=completed does NOT fire notifyCustomerJobCompleted 
     calls.notifyCustomerJobCompleted.length,
     0,
     "notifyCustomerJobCompleted must NOT be called when completedReq is undefined",
+  );
+});
+
+test("PATCH /jobs/:id status=completed returns 500 and skips side-effects when earnings update fails", async () => {
+  setup();
+
+  const JOB_ID      = 45;
+  const REQUEST_ID  = 13;
+  const CUSTOMER_ID = 6;
+  const TECH_ID     = 1;
+  const PAYOUT      = 150;
+
+  // DB: fetch existing job (must be 'working', owned by TECH_ID)
+  queueSelect([{
+    id:            JOB_ID,
+    status:        "working",
+    technician_id: TECH_ID,
+    request_id:    REQUEST_ID,
+    payout:        PAYOUT,
+  }]);
+
+  // DB: serviceRequests update → succeeds (1st write inside the transaction)
+  queueReturning([{
+    id:           REQUEST_ID,
+    customer_id:  CUSTOMER_ID,
+    service_type: "towing",
+    status:       "completed",
+  }]);
+
+  // Inject an error on the 2nd update().set() call (users/earnings write).
+  // skip=1 lets the serviceRequests write through first.
+  queueUpdateError(new Error("DB: earnings write failed — disk full"), 1);
+
+  const { status: httpStatus } = await patchJob(JOB_ID, { status: "completed" }, TECH_ID);
+  assert.equal(
+    httpStatus,
+    500,
+    "Route must return 500 when the earnings update throws inside the transaction",
+  );
+
+  // Allow any fire-and-forget calls a chance to settle.
+  await new Promise((r) => setTimeout(r, 20));
+
+  // No push notification should have been sent.
+  const calls = getNotifCalls();
+  assert.equal(
+    calls.notifyCustomerJobCompleted.length,
+    0,
+    "notifyCustomerJobCompleted must NOT be called when the earnings update fails",
+  );
+
+  // The jobs table must NOT have been updated to 'completed' — the transaction
+  // rolled back before reaching that write (in production Postgres this is
+  // guaranteed; in the mock we verify the update was never enqueued).
+  const updateCalls = getUpdateCalls();
+  const jobsCompletedCall = updateCalls.find(
+    (c) => c.table === jobs && c.set.status === "completed",
+  );
+  assert.equal(
+    jobsCompletedCall,
+    undefined,
+    "jobs table must NOT be updated to 'completed' when the earnings write fails",
   );
 });
 

@@ -258,21 +258,44 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
     }
 
     if (status === "completed") {
-      updates.completed_at = new Date();
-      const [completedReq] = await db
-        .update(serviceRequests)
-        .set({ status: "completed", updated_at: new Date() })
-        .where(eq(serviceRequests.id, existing.request_id))
-        .returning();
-      // Atomically credit the assigned technician's earnings
-      await db
-        .update(users)
-        .set({
-          jobs_completed: sql`${users.jobs_completed} + 1`,
-          earnings_total: sql`${users.earnings_total} + ${existing.payout}`,
-          updated_at:     new Date(),
-        })
-        .where(eq(users.id, req.userId!));
+      // Wrap the three writes in a single transaction so that a DB failure in
+      // any step rolls back all of them. Without this, a crash in the earnings
+      // update would leave the service request marked "completed" while the
+      // technician never received their earnings credit.
+      const [completedReq, updated] = await db.transaction(async (tx) => {
+        const [completedReq] = await tx
+          .update(serviceRequests)
+          .set({ status: "completed", updated_at: new Date() })
+          .where(eq(serviceRequests.id, existing.request_id))
+          .returning();
+
+        // Credit the technician's earnings — must succeed or the whole
+        // transaction rolls back (serviceRequests reverts too).
+        await tx
+          .update(users)
+          .set({
+            jobs_completed: sql`${users.jobs_completed} + 1`,
+            earnings_total: sql`${users.earnings_total} + ${existing.payout}`,
+            updated_at:     new Date(),
+          })
+          .where(eq(users.id, req.userId!));
+
+        const [updatedJob] = await tx
+          .update(jobs)
+          .set({ ...updates, completed_at: new Date() })
+          .where(eq(jobs.id, id))
+          .returning();
+
+        return [completedReq, updatedJob] as const;
+      });
+
+      // Side-effects outside the transaction: real-time broadcast + push.
+      dispatch.broadcastToRoom(`job:${id}`, {
+        type:      "job_status",
+        jobId:     id,
+        requestId: existing.request_id,
+        status,
+      });
 
       if (completedReq) {
         void notifyCustomerJobCompleted({
@@ -282,6 +305,9 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
           requestId:   existing.request_id,
         });
       }
+
+      res.json(updated);
+      return;
     }
 
     if (status === "cancelled") {
