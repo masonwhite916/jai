@@ -152,13 +152,38 @@ export default function TrackingScreen() {
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align  = isRTL ? 'right' : 'left';
 
-  // ── Null-guard: redirect home if there is no active request ──────────────────
+  // ── Null-guard: try to recover active request from API before redirecting ─────
+  // Context may be empty when the user navigates here from the requests list in a
+  // session where the request was placed (e.g. app restarted, or made from another
+  // device). Instead of immediately bouncing home, call the API once to find any
+  // non-terminal request, populate context, and continue. Only redirect if the API
+  // confirms there is nothing active.
   const hasRequest = !!(activeRequest?.jobId || activeRequest?.requestId);
+  const [recovering, setRecovering] = useState(!hasRequest);
 
   useEffect(() => {
-    if (!hasRequest) {
-      router.replace('/(tabs)');
-    }
+    if (hasRequest) { setRecovering(false); return; }
+
+    apiFetch<{ requests: Record<string, any>[] }>('/api/requests')
+      .then((data) => {
+        const active = data.requests.find(
+          (r) => r.status !== 'completed' && r.status !== 'cancelled',
+        );
+        if (active) {
+          setActiveRequest({
+            requestId:   String(active.id),
+            jobId:       active.job ? String(active.job.id) : String(active.id),
+            serviceType: active.service_type ?? '',
+            status:      active.status,
+            customerLat: active.latitude  ?? undefined,
+            customerLng: active.longitude ?? undefined,
+          });
+          setRecovering(false);
+        } else {
+          router.replace('/(tabs)');
+        }
+      })
+      .catch(() => router.replace('/(tabs)'));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -391,6 +416,14 @@ export default function TrackingScreen() {
         <Text style={{ marginTop: 16, fontFamily: font.semibold, fontSize: 16, color: '#2D1B69' }}>
           {isRTL ? 'جارٍ العودة إلى الرئيسية…' : 'Returning to home…'}
         </Text>
+      </View>
+    );
+  }
+
+  if (recovering) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8F9FC' }}>
+        <ActivityIndicator size="large" color="#2D1B69" />
       </View>
     );
   }
