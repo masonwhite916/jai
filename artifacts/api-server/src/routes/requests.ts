@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { db, serviceRequests, jobs, users } from "@workspace/db";
+import { db, serviceRequests, jobs, users, promoUses } from "@workspace/db";
 import { eq, desc, and, isNotNull } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
@@ -152,6 +152,21 @@ router.post("/requests", requireAuth, async (req, res) => {
     if (authoritativePromoRaw) {
       const promo = lookupPromo(authoritativePromoRaw);
       if (promo) {
+        // Cash promo: atomically claim before the service request is created.
+        // Card promo: already claimed in /payment/service-checkout — skip to avoid double-insert.
+        if (resolvedPaymentMethod === "cash") {
+          const claimed = await db
+            .insert(promoUses)
+            .values({ user_id: req.userId!, code: promo.code })
+            .onConflictDoNothing({ target: [promoUses.user_id, promoUses.code] })
+            .returning({ id: promoUses.id });
+
+          if (claimed.length === 0) {
+            res.status(400).json({ error: "Code already used" });
+            return;
+          }
+        }
+
         const discountedHalalas = applyPromo(baseHalalas, promo);
         resolvedPromoCode = promo.code;
         resolvedDiscountHalalas = baseHalalas - discountedHalalas; // precise, no fraction

@@ -1,5 +1,5 @@
 import {
-  pgTable, serial, text, integer, real, timestamp, pgEnum, boolean, jsonb,
+  pgTable, serial, text, integer, real, timestamp, pgEnum, boolean, jsonb, uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
@@ -195,6 +195,18 @@ export const servicePaymentRefs = pgTable("service_payment_refs", {
 });
 
 export type ServicePaymentRef = typeof servicePaymentRefs.$inferSelect;
+
+// ── Promo code usage tracking (per-user, single-use enforcement) ──────────────
+// One row per (user_id, code) — unique constraint prevents double-use.
+
+export const promoUses = pgTable("promo_uses", {
+  id:      serial("id").primaryKey(),
+  user_id: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  code:    text("code").notNull(),
+  used_at: timestamp("used_at").notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("promo_uses_user_id_code_key").on(t.user_id, t.code),
+]);
 
 // ── TypeScript types ──────────────────────────────────────────────────────────
 

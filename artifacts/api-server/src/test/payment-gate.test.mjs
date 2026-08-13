@@ -20,7 +20,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
-import { queueSelect, resetDb, getInsertValues } from "./mock-payment-db.mjs";
+import { queueSelect, queueInsertReturn, resetDb, getInsertValues } from "./mock-payment-db.mjs";
 import { setMoyasarResult, setMoyasarError, resetMoyasar } from "./mock-moyasar.mjs";
 
 // ── Import the router under test (after hooks have wired the mocks) ──────────
@@ -272,6 +272,8 @@ test("2b. non-member cash intent — payment_method recorded as cash", async () 
 test("10. cash + valid promo WELCOME — request created, promo recorded in insert", async () => {
   setup();
   queueSelect([{ membership: "none" }]);
+  // promoUses insert comes first (index 0); serviceRequests is index 1
+  queueInsertReturn([{ id: 1 }]); // promo claim succeeds
 
   const { status, body } = await postRequest({
     service_type: "fuel",        // basePrice SAR 80
@@ -283,8 +285,8 @@ test("10. cash + valid promo WELCOME — request created, promo recorded in inse
   assert.equal(status, 201, "Cash + valid promo should create the request");
   assert.ok(body.request || body.job, "Response should contain request/job");
 
-  // Verify the discount was recorded server-side
-  const inserted = getInsertValues(0); // 0 = serviceRequests insert (jobs is index 1)
+  // Index 0 = promoUses insert; index 1 = serviceRequests insert; index 2 = jobs
+  const inserted = getInsertValues(1);
   assert.equal(inserted?.promo_code,      "WELCOME", "promo_code should be stored");
   // discount_amount stored in halalas: 15% of SAR 80 = SAR 12 = 1200 halalas
   assert.equal(inserted?.discount_amount, 1200, "discount_amount should be 1200 halalas (15% of 80 SAR)");
@@ -378,6 +380,8 @@ test("14. card + tampered client body promo ignored — metadata is authoritativ
 test("15. cash + SAVE50 promo — fixed SAR 50 off tow (SAR 500 → 450), discount_amount=50", async () => {
   setup();
   queueSelect([{ membership: "none" }]);
+  // promoUses insert comes first (index 0); serviceRequests is index 1
+  queueInsertReturn([{ id: 1 }]); // promo claim succeeds
 
   const { status } = await postRequest({
     service_type: "tow",         // basePrice SAR 500
@@ -388,9 +392,29 @@ test("15. cash + SAVE50 promo — fixed SAR 50 off tow (SAR 500 → 450), discou
   });
   assert.equal(status, 201, "Cash + SAVE50 fixed promo should create the request");
 
-  const inserted = getInsertValues(0);
+  // Index 0 = promoUses insert; index 1 = serviceRequests insert
+  const inserted = getInsertValues(1);
   assert.equal(inserted?.promo_code,           "SAVE50", "promo_code should be SAVE50");
   // SAVE50 = SAR 50 off → 5000 halalas discount; tow base = 50000 halalas, final = 45000 halalas
   assert.equal(inserted?.discount_amount,      5000,  "discount_amount should be 5000 halalas (SAR 50)");
   assert.equal(inserted?.final_amount_halalas, 45000, "final_amount_halalas should be 45000 (SAR 450)");
+});
+
+test("16. cash + already-used promo → 400 before request is created", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+  // promoUses insert returns [] → conflict, code already claimed
+  queueInsertReturn([]);
+
+  const { status, body } = await postRequest({
+    service_type: "fuel",
+    cash_intent:  true,
+    promo_code:   "WELCOME",
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 400, "Should reject with 400 when promo already used");
+  assert.equal(body.error, "Code already used");
+  // Confirm no serviceRequests row was inserted
+  assert.equal(getInsertValues(1), null, "serviceRequests should not be inserted");
 });

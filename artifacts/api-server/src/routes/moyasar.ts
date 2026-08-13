@@ -15,7 +15,7 @@ import { Router, type IRouter } from "express";
 import { randomUUID } from "crypto";
 import { moyasarFetch } from "../lib/moyasarClient";
 import { db } from "@workspace/db";
-import { users, vehicles, servicePaymentRefs, applePaySessions } from "@workspace/db/schema";
+import { users, vehicles, servicePaymentRefs, applePaySessions, promoUses } from "@workspace/db/schema";
 import { and, eq, gt } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth";
 import { toVehicleDto } from "../lib/vehicleDto";
@@ -125,6 +125,18 @@ router.post("/payment/validate-promo", requireAuth, async (req, res) => {
   const promo = lookupPromo(code);
   if (!promo) {
     res.json({ valid: false, error: "Invalid promo code" });
+    return;
+  }
+
+  // Check if the authenticated user has already used this code
+  const existing = await db
+    .select({ id: promoUses.id })
+    .from(promoUses)
+    .where(and(eq(promoUses.user_id, req.userId!), eq(promoUses.code, promo.code)))
+    .limit(1);
+
+  if (existing.length > 0) {
+    res.json({ valid: false, error: "Code already used" });
     return;
   }
 
@@ -414,6 +426,25 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
     const promo = promoCode ? lookupPromo(promoCode) : null;
     const amount = promo ? applyPromo(baseAmount, promo) : baseAmount;
 
+    // ── Atomic promo claim ─────────────────────────────────────────────────
+    // Insert the usage row BEFORE charging. If a row for (user_id, code)
+    // already exists the DB unique constraint fires and RETURNING returns
+    // nothing — we reject immediately without racing against concurrent
+    // requests. If payment later fails we delete the claim so the user can
+    // retry (including with the same code).
+    if (promo) {
+      const claimed = await db
+        .insert(promoUses)
+        .values({ user_id: req.userId!, code: promo.code })
+        .onConflictDoNothing({ target: [promoUses.user_id, promoUses.code] })
+        .returning({ id: promoUses.id });
+
+      if (claimed.length === 0) {
+        res.status(400).json({ error: "Code already used" });
+        return;
+      }
+    }
+
     if (MOCK_MODE) {
       console.warn(`[payment] MOCK MODE — simulating paid service for "${service_type}" (no real charge)`);
       res.json({ paymentId: `${MOCK_PREFIX}${Date.now()}`, status: "paid", transactionUrl: null, finalAmount: amount / 100 });
@@ -422,30 +453,38 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
 
     const cleanNumber = cardNumber.replace(/\D/g, "");
 
-    const payment = (await moyasarFetch("POST", "/payments", {
-      amount,
-      currency:     "SAR",
-      description:  SERVICE_NAMES[service_type] ?? service_type,
-      callback_url: callbackUrl ?? process.env.MOYASAR_CALLBACK_URL ?? "",
-      source: {
-        type:   "creditcard",
-        name:   cardName,
-        number: cleanNumber,
-        month,
-        year,
-        cvm:    cvc,
-      },
-      metadata: {
-        type:         "service",
-        service_type: service_type,
-        user_id:      String(req.userId),
-        ...(promo ? { promo_code: promo.code } : {}),
-      },
-    }, idempotencyKey)) as {
-      id: string;
-      status: string;
-      source: { transaction_url?: string };
-    };
+    let payment: { id: string; status: string; source: { transaction_url?: string } };
+    try {
+      payment = (await moyasarFetch("POST", "/payments", {
+        amount,
+        currency:     "SAR",
+        description:  SERVICE_NAMES[service_type] ?? service_type,
+        callback_url: callbackUrl ?? process.env.MOYASAR_CALLBACK_URL ?? "",
+        source: {
+          type:   "creditcard",
+          name:   cardName,
+          number: cleanNumber,
+          month,
+          year,
+          cvm:    cvc,
+        },
+        metadata: {
+          type:         "service",
+          service_type: service_type,
+          user_id:      String(req.userId),
+          ...(promo ? { promo_code: promo.code } : {}),
+        },
+      }, idempotencyKey)) as { id: string; status: string; source: { transaction_url?: string } };
+    } catch (paymentErr) {
+      // Payment initiation failed — release the promo claim so the user can retry
+      if (promo) {
+        await db.delete(promoUses).where(
+          and(eq(promoUses.user_id, req.userId!), eq(promoUses.code, promo.code))
+        );
+        console.warn(`[payment] released promo claim for user ${req.userId} code ${promo.code} after payment error`);
+      }
+      throw paymentErr;
+    }
 
     res.json({
       paymentId:      payment.id,

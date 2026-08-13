@@ -46,6 +46,17 @@ export async function migratePaymentSchema(): Promise<void> {
       )
     `);
 
+    // ── promo_uses: per-user single-use enforcement ───────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS promo_uses (
+        id      serial PRIMARY KEY,
+        user_id integer NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        code    text NOT NULL,
+        used_at timestamptz NOT NULL DEFAULT NOW(),
+        UNIQUE (user_id, code)
+      )
+    `);
+
     logger.info("migratePaymentSchema: schema up to date");
   } catch (err) {
     logger.error({ err }, "migratePaymentSchema: migration failed");
