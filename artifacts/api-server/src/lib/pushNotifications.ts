@@ -24,9 +24,22 @@ interface PushMessage {
   channelId?: string;
 }
 
+/** Shape of a ticket returned by the Expo /push/send endpoint. */
+interface ExpoTicket {
+  status: "ok" | "error";
+  id?: string;
+  message?: string;
+  details?: { error?: string };
+}
+
 /**
  * Fire-and-forget: send one or more push messages to the Expo Push service.
  * Accepts a single message (to: string | string[]) or an array of messages.
+ *
+ * After each batch is sent the function inspects per-ticket errors from the
+ * Expo send response.  Any ticket that reports `DeviceNotRegistered` has its
+ * token immediately nulled out in the database so future sends are not wasted
+ * on dead registrations.
  */
 export async function sendPush(
   messages: PushMessage | PushMessage[],
@@ -39,6 +52,16 @@ export async function sendPush(
   });
   if (!filtered.length) return;
 
+  // Flatten to one message per token so we can map send tickets back to the
+  // specific token that caused a DeviceNotRegistered error.
+  const flat: Array<{ msg: Omit<PushMessage, "to"> & { to: string }; token: string }> = [];
+  for (const msg of filtered) {
+    const tokens = Array.isArray(msg.to) ? msg.to : [msg.to];
+    for (const token of tokens) {
+      flat.push({ msg: { ...msg, to: token }, token });
+    }
+  }
+
   try {
     const res = await fetch(EXPO_PUSH_URL, {
       method:  "POST",
@@ -48,11 +71,45 @@ export async function sendPush(
         "Accept-Encoding":   "gzip, deflate",
         "X-Request-Source": "jai-api-server",
       },
-      body: JSON.stringify(filtered),
+      body: JSON.stringify(flat.map((f) => f.msg)),
     });
+
     if (!res.ok) {
       const text = await res.text().catch(() => "(unreadable)");
       logger.warn({ status: res.status, body: text }, "Expo push API error");
+      return;
+    }
+
+    // Parse the send tickets and remove any token the device rejected.
+    const json = await res.json().catch(() => null) as { data?: ExpoTicket[] } | null;
+    const tickets: ExpoTicket[] = json?.data ?? [];
+
+    const staleTokens: string[] = [];
+    for (let i = 0; i < tickets.length; i++) {
+      const ticket = tickets[i];
+      const token  = flat[i]?.token;
+      if (
+        ticket?.status  === "error" &&
+        ticket?.details?.error === "DeviceNotRegistered" &&
+        token
+      ) {
+        staleTokens.push(token);
+      }
+    }
+
+    if (staleTokens.length > 0) {
+      logger.info({ staleTokens }, "Removing DeviceNotRegistered push tokens");
+      await Promise.all(
+        staleTokens.map((token) =>
+          db
+            .update(users)
+            .set({ push_token: null })
+            .where(eq(users.push_token, token))
+            .catch((err: unknown) => {
+              logger.warn({ err, token }, "Failed to remove stale push token");
+            }),
+        ),
+      );
     }
   } catch (err) {
     logger.warn({ err }, "Failed to reach Expo push API");

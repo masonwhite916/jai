@@ -15,6 +15,7 @@
 
 const _selectQueue   = [];
 const _insertedRows  = [];
+const _updatedTokens = []; // tokens passed to .where(eq(users.push_token, token)) via update
 
 /** Push the next rows that a select/await-chain will resolve with. */
 export function queueSelect(rows) {
@@ -26,10 +27,19 @@ export function getInsertedRows() {
   return [..._insertedRows];
 }
 
+/**
+ * Return the list of push tokens that were nulled out via
+ * db.update(users).set({ push_token: null }).where(...)
+ */
+export function getNulledTokens() {
+  return [..._updatedTokens];
+}
+
 /** Reset all state between tests. */
 export function resetDb() {
   _selectQueue.length  = 0;
   _insertedRows.length = 0;
+  _updatedTokens.length = 0;
 }
 
 // ── Query builder ─────────────────────────────────────────────────────────────
@@ -63,9 +73,43 @@ function makeInsertBuilder() {
   return self;
 }
 
+/**
+ * Tracks db.update(users).set({ push_token: null }).where(eq(users.push_token, token))
+ * The where() call receives the result of the drizzle eq() helper which is opaque,
+ * so we instead capture the set() payload and record the token from there.
+ *
+ * Because pushNotifications.ts calls .where(eq(users.push_token, token)) and the mock
+ * users/eq are no-ops, we expose a simpler API: update builder captures the `set` value
+ * and stores the nulled token (matched by the where argument, which the real code derives
+ * from a known token string).  The mock stores each unique token passed as the where
+ * argument via the whereToken setter.
+ */
+function makeUpdateBuilder() {
+  let _setPayload = null;
+  const self = {
+    set: (payload) => {
+      _setPayload = payload;
+      return self;
+    },
+    where: (whereArg) => {
+      // whereArg is the result of eq(users.push_token, token).
+      // The mock eq() returns the token string directly so we can capture it.
+      if (typeof whereArg === "string") {
+        _updatedTokens.push(whereArg);
+      }
+      return self;
+    },
+    catch: (_fn) => Promise.resolve(undefined),
+    then: (onResolve, onReject) =>
+            Promise.resolve([]).then(onResolve, onReject),
+  };
+  return self;
+}
+
 export const db = {
   select: () => makeSelectBuilder(),
   insert: () => makeInsertBuilder(),
+  update: () => makeUpdateBuilder(),
 };
 
 // Table symbols — passed as arguments but never inspected by the mock.

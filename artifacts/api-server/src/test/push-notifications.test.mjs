@@ -25,6 +25,7 @@ import {
   queueSelect,
   resetDb,
   getInsertedRows,
+  getNulledTokens,
 } from "./mock-push-db.mjs";
 
 // ── Global fetch spy ──────────────────────────────────────────────────────────
@@ -58,6 +59,7 @@ process.env.LOG_LEVEL = "silent";
 process.env.NODE_ENV  = "production";
 
 const {
+  sendPush,
   notifyTechniciansNewJob,
   notifyCustomerJobAccepted,
   notifyCustomerJobCompleted,
@@ -106,18 +108,21 @@ test("1. notifyTechniciansNewJob — fetches techs with valid tokens and calls E
   const bodies = expoCallBodies();
   assert.equal(bodies.length, 1, "Expo push API should be called exactly once");
 
+  // sendPush now flattens multi-token messages to one entry per token so that
+  // individual DeviceNotRegistered tickets can be mapped back to a specific token.
   const payload = bodies[0];
   assert.ok(Array.isArray(payload), "Payload sent to Expo should be an array");
-  assert.equal(payload.length, 1, "Array should have one message object");
+  assert.equal(payload.length, 2, "Flattened payload should have one entry per valid token");
 
+  // Each entry must be addressed to exactly one token (string, not array)
+  const tokens = payload.map((m) => m.to);
+  assert.ok(tokens.includes(VALID_TOKEN_A), "Valid token A must be included");
+  assert.ok(tokens.includes(VALID_TOKEN_B), "Valid token B must be included");
+  assert.equal(tokens.includes(SHORT_TOKEN), false, "Short token must be excluded");
+  assert.equal(tokens.includes(NULL_TOKEN),  false, "Null token must be excluded");
+
+  // Payload shape (check first message — both should be identical apart from 'to')
   const msg = payload[0];
-  // Only valid tokens should be in the 'to' array
-  assert.ok(Array.isArray(msg.to), "'to' should be an array of tokens");
-  assert.ok(msg.to.includes(VALID_TOKEN_A), "Valid token A must be included");
-  assert.ok(msg.to.includes(VALID_TOKEN_B), "Valid token B must be included");
-  assert.equal(msg.to.includes(SHORT_TOKEN), false, "Short token must be excluded");
-
-  // Payload shape
   assert.ok(msg.title.includes("Battery"), "Title should include capitalised service type");
   assert.ok(msg.title.includes("123 Main St"), "Title should include the address");
   assert.ok(msg.body.includes("120"), "Body should mention the payout amount");
@@ -226,4 +231,56 @@ test("5. notifyCustomerJobCompleted — sends correct title/body/data for a comp
   assert.equal(msg.data?.type,      "job_completed", "data.type should be 'job_completed'");
   assert.equal(msg.data?.requestId, 200,              "data.requestId should match opts.requestId");
   assert.equal(msg.data?.screen,    "requests",       "data.screen should be 'requests'");
+});
+
+test("6. sendPush — nulls DeviceNotRegistered tokens returned in the Expo send ticket response", async () => {
+  setup();
+
+  const STALE_TOKEN = "ExponentPushToken[stale_device_xyz123]";
+  const GOOD_TOKEN  = "ExponentPushToken[healthy_device_abc]";
+
+  // Override fetch to return mixed tickets: first token ok, second DeviceNotRegistered
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    capturedFetchCalls.push({
+      url,
+      body:    options?.body ? JSON.parse(options.body) : undefined,
+      headers: options?.headers ?? {},
+    });
+    return {
+      ok:     true,
+      status: 200,
+      text:   async () => "",
+      json:   async () => ({
+        data: [
+          { status: "ok",    id: "receipt-111" },
+          { status: "error", message: "The device cannot receive push notifications",
+            details: { error: "DeviceNotRegistered" } },
+        ],
+      }),
+    };
+  };
+
+  try {
+    // Two tokens in one call — only the second is stale
+    await sendPush({
+      to:    [GOOD_TOKEN, STALE_TOKEN],
+      title: "Test",
+      body:  "Test body",
+    });
+
+    // The stale token must have been nulled in the DB
+    const nulled = getNulledTokens();
+    assert.equal(nulled.length, 1, "Exactly one token should be nulled");
+    assert.equal(nulled[0], STALE_TOKEN, "The DeviceNotRegistered token must be the one nulled");
+
+    // The Expo push endpoint must have been called once, with two flattened messages
+    const bodies = expoCallBodies();
+    assert.equal(bodies.length, 1, "Expo push API should be called once");
+    assert.equal(bodies[0].length, 2, "Flattened payload should contain one entry per token");
+    assert.equal(bodies[0][0].to, GOOD_TOKEN,  "First entry should be the good token");
+    assert.equal(bodies[0][1].to, STALE_TOKEN, "Second entry should be the stale token");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

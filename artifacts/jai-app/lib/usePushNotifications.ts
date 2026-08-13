@@ -114,14 +114,17 @@ interface Options {
 }
 
 export function usePushNotifications({ isAuthenticated, onForegroundNotification }: Options) {
-  const tokenUploadedRef      = useRef(false);
-  const foregroundSub         = useRef<Notifications.Subscription | null>(null);
-  const responseSub           = useRef<Notifications.Subscription | null>(null);
-  const handleNavigation      = useNotificationRouter();
+  const foregroundSub    = useRef<Notifications.Subscription | null>(null);
+  const responseSub      = useRef<Notifications.Subscription | null>(null);
+  const handleNavigation = useNotificationRouter();
 
-  // Register token and upload once the user is authenticated
+  // Re-upload the push token on every authenticated app launch.
+  // No deduplication guard — if the user reinstalls the app or clears device
+  // push credentials, Expo issues a new token that must reach the server so
+  // the old (dead) token is replaced.  The server endpoint upserts, so
+  // duplicate uploads from the same token are harmless.
   useEffect(() => {
-    if (!isAuthenticated || tokenUploadedRef.current) return;
+    if (!isAuthenticated) return;
     if (Platform.OS === 'web') return;
     if (!getAuthToken()) return;
 
@@ -134,7 +137,6 @@ export function usePushNotifications({ isAuthenticated, onForegroundNotification
           method: 'PUT',
           body:   JSON.stringify({ push_token: token }),
         });
-        tokenUploadedRef.current = true;
       } catch {
         // Non-fatal — will retry on next app launch
       }
@@ -171,11 +173,4 @@ export function usePushNotifications({ isAuthenticated, onForegroundNotification
       responseSub.current?.remove();
     };
   }, [handleNavigation]);
-
-  // Reset upload flag on logout (so the next login re-uploads the token)
-  const resetTokenFlag = useCallback(() => {
-    tokenUploadedRef.current = false;
-  }, []);
-
-  return { resetTokenFlag };
 }
