@@ -60,6 +60,12 @@ export default function ProfileScreen() {
 
   function handleDeleteAccount() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    // Alert.alert with buttons is a no-op on react-native-web — use window.confirm there.
+    if (Platform.OS === 'web') {
+      const ok = typeof window !== 'undefined' && window.confirm(`${t('deleteAccountTitle')}\n\n${t('deleteAccountMessage')}`);
+      if (ok) confirmDeleteAccount();
+      return;
+    }
     Alert.alert(
       t('deleteAccountTitle'),
       t('deleteAccountMessage'),
@@ -81,7 +87,11 @@ export default function ProfileScreen() {
       await logout();
       router.replace('/auth');
     } catch {
-      Alert.alert('Error', 'Could not delete account. Please try again.');
+      if (Platform.OS === 'web') {
+        if (typeof window !== 'undefined') window.alert('Could not delete account. Please try again.');
+      } else {
+        Alert.alert('Error', 'Could not delete account. Please try again.');
+      }
     } finally {
       setIsDeleting(false);
     }
