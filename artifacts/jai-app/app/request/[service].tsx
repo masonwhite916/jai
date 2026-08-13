@@ -135,6 +135,53 @@ export default function ServiceRequest() {
   const [cvc,        setCvc]        = useState('');
   const [cardErrors, setCardErrors] = useState<Record<string, string>>({});
 
+  // ── Promo code ────────────────────────────────────────────────────────────
+  const [promoInput,    setPromoInput]    = useState('');
+  const [promoLoading,  setPromoLoading]  = useState(false);
+  const [promoApplied,  setPromoApplied]  = useState(false);
+  const [promoError,    setPromoError]    = useState('');
+  const [promoDiscount, setPromoDiscount] = useState(0);   // % or SAR
+  const [promoType,     setPromoType]     = useState<'percent' | 'fixed'>('percent');
+  const [promoFinal,    setPromoFinal]    = useState(0);   // final SAR price
+
+  async function applyPromoCode() {
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+    setPromoLoading(true);
+    setPromoError('');
+    setPromoApplied(false);
+    try {
+      const res = await apiFetch<{
+        valid: boolean;
+        discount?: number;
+        type?: 'percent' | 'fixed';
+        finalAmount?: number;
+        error?: string;
+      }>('/api/payment/validate-promo', {
+        method: 'POST',
+        body: JSON.stringify({ code, service_type: service ?? 'battery' }),
+      });
+      if (res.valid && res.finalAmount !== undefined) {
+        setPromoApplied(true);
+        setPromoDiscount(res.discount ?? 0);
+        setPromoType(res.type ?? 'percent');
+        setPromoFinal(res.finalAmount);
+        setPromoError('');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      } else {
+        setPromoError(res.error ?? (isRTL ? 'كود غير صحيح' : 'Invalid code'));
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      }
+    } catch {
+      setPromoError(isRTL ? 'تعذّر التحقق من الكود' : 'Could not validate code');
+    } finally {
+      setPromoLoading(false);
+    }
+  }
+
+  /** Effective price after promo (or base price if none applied). */
+  const effectivePrice = promoApplied ? promoFinal : info.basePrice;
+
   // ── Poll Moyasar payment status (card checkout with possible 3DS) ──────────
   // Returns a tri-state:
   //   'paid'    — Moyasar confirmed the charge succeeded
@@ -180,8 +227,8 @@ export default function ServiceRequest() {
         Alert.alert(
           isRTL ? 'الدفع عند الوصول' : 'Cash on Delivery',
           isRTL
-            ? `المبلغ المستحق: ${info.basePrice} ريال\nسيتم تحصيل المبلغ عند وصول الفني.`
-            : `Amount due: ${info.basePrice} SAR\nPayment will be collected when the technician arrives.`,
+            ? `المبلغ المستحق: ${effectivePrice} ريال\nسيتم تحصيل المبلغ عند وصول الفني.`
+            : `Amount due: ${effectivePrice} SAR\nPayment will be collected when the technician arrives.`,
           [
             { text: isRTL ? 'إلغاء' : 'Cancel', style: 'cancel', onPress: () => reject(new Error('cancelled')) },
             { text: isRTL ? 'تأكيد' : 'Confirm', onPress: () => resolve({ cash_intent: true }) },
@@ -252,6 +299,7 @@ export default function ServiceRequest() {
         paymentId: string;
         status: string;
         transactionUrl: string | null;
+        finalAmount?: number;
       }>('/api/payment/service-checkout', {
         method: 'POST',
         body: JSON.stringify({
@@ -262,6 +310,7 @@ export default function ServiceRequest() {
           year:            `20${yy?.trim()}`,
           cvc:             cvc.trim(),
           idempotencyKey:  idempotencyKeyRef.current,
+          ...(promoApplied && promoInput ? { promoCode: promoInput.trim().toUpperCase() } : {}),
         }),
       });
 
@@ -339,6 +388,8 @@ export default function ServiceRequest() {
           address:      gps.fullAddress       ?? null,
           photo_urls:   uploadedUrls.length ? JSON.stringify(uploadedUrls) : null,
           ...paymentPayload,
+          // Pass validated promo code server-side for all payment methods
+          ...(promoApplied && promoInput ? { promo_code: promoInput.trim().toUpperCase() } : {}),
         };
         if (selectedVehicleData) {
           body.vehicle_make  = selectedVehicleData.make;
@@ -384,7 +435,7 @@ export default function ServiceRequest() {
         setPayConfirm({
           paymentId: paymentPayload.payment_id,
           method:    methodLabels[paymentIdx] ?? 'Card',
-          amount:    info.basePrice,
+          amount:    effectivePrice,
         });
       } else {
         router.replace('/tracking');
@@ -623,6 +674,11 @@ export default function ServiceRequest() {
                       {isRTL ? 'مجاناً' : 'Free'}
                     </Text>
                   </View>
+                ) : promoApplied ? (
+                  <View style={styles.coveredPriceWrap}>
+                    <Text style={[styles.totalValueStrike, { fontFamily: font.regular }]}>{info.basePrice} SAR</Text>
+                    <Text style={[styles.totalValueFree, { fontFamily: font.bold }]}>{promoFinal} SAR</Text>
+                  </View>
                 ) : (
                   <Text style={[styles.totalValue, { fontFamily: font.bold }]}>{info.basePrice} SAR</Text>
                 )}
@@ -660,6 +716,14 @@ export default function ServiceRequest() {
                       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                       setPaymentIdx(i);
                       setCardErrors({});
+                      // Only clear promo when switching to Apple Pay (not supported yet)
+                      if (i === 0) {
+                        setPromoApplied(false);
+                        setPromoInput('');
+                        setPromoDiscount(0);
+                        setPromoFinal(0);
+                        setPromoError('');
+                      }
                     }}
                     activeOpacity={opt.comingSoon ? 1 : 0.85}
                   >
@@ -758,6 +822,68 @@ export default function ServiceRequest() {
                   </View>
                 )}
 
+                {/* ── Promo code — shown for card and cash, not Apple Pay ── */}
+                {(paymentIdx === 1 || paymentIdx === 2 || paymentIdx === 3) && (
+                  <View style={styles.promoBox}>
+                    <Text style={[styles.promoLabel, { fontFamily: font.bold, textAlign: align }]}>
+                      {isRTL ? 'كود الخصم' : 'Promo code'}
+                    </Text>
+                    <View style={[styles.promoRow, { flexDirection: rowDir }]}>
+                      <TextInput
+                        style={[
+                          styles.promoInput,
+                          { fontFamily: font.regular, textAlign: align },
+                          promoApplied && styles.promoInputApplied,
+                          !!promoError   && styles.promoInputError,
+                        ]}
+                        value={promoInput}
+                        onChangeText={v => {
+                          setPromoInput(v.toUpperCase());
+                          setPromoError('');
+                          if (promoApplied) {
+                            setPromoApplied(false);
+                            setPromoDiscount(0);
+                            setPromoFinal(0);
+                          }
+                        }}
+                        autoCapitalize="characters"
+                        placeholder={isRTL ? 'أدخل الكود' : 'Enter code'}
+                        placeholderTextColor="#C0C0D4"
+                        editable={!promoApplied}
+                      />
+                      <TouchableOpacity
+                        style={[styles.promoBtn, promoApplied && styles.promoBtnApplied]}
+                        onPress={promoApplied
+                          ? () => { setPromoApplied(false); setPromoInput(''); setPromoDiscount(0); setPromoFinal(0); setPromoError(''); }
+                          : applyPromoCode}
+                        disabled={promoLoading || (!promoApplied && !promoInput.trim())}
+                        activeOpacity={0.85}
+                      >
+                        {promoLoading
+                          ? <ActivityIndicator size="small" color="#FFF" />
+                          : <Text style={[styles.promoBtnText, { fontFamily: font.bold }]}>
+                              {promoApplied
+                                ? (isRTL ? 'إزالة' : 'Remove')
+                                : (isRTL ? 'تطبيق' : 'Apply')}
+                            </Text>}
+                      </TouchableOpacity>
+                    </View>
+                    {promoApplied && (
+                      <View style={[styles.promoSuccess, { flexDirection: rowDir }]}>
+                        <Ionicons name="checkmark-circle" size={15} color="#2ECC71" />
+                        <Text style={[styles.promoSuccessText, { fontFamily: font.semibold }]}>
+                          {promoType === 'percent'
+                            ? (isRTL ? `خصم ${promoDiscount}٪ مطبّق` : `${promoDiscount}% off applied`)
+                            : (isRTL ? `خصم ${promoDiscount} ريال مطبّق` : `SAR ${promoDiscount} off applied`)}
+                        </Text>
+                      </View>
+                    )}
+                    {!!promoError && (
+                      <Text style={[styles.promoErrorText, { fontFamily: font.regular, textAlign: align }]}>{promoError}</Text>
+                    )}
+                  </View>
+                )}
+
                 {/* ── Apple Pay note ── */}
                 {paymentIdx === 0 && (
                   <View style={[styles.applePayNote, { flexDirection: rowDir }]}>
@@ -776,8 +902,8 @@ export default function ServiceRequest() {
                     <Ionicons name="cash-outline" size={18} color="#2ECC71" />
                     <Text style={[styles.cashNoteText, { fontFamily: font.regular, textAlign: align }]}>
                       {isRTL
-                        ? `المبلغ المستحق عند الوصول: ${info.basePrice} ريال`
-                        : `Amount due on arrival: ${info.basePrice} SAR`}
+                        ? `المبلغ المستحق عند الوصول: ${effectivePrice} ريال`
+                        : `Amount due on arrival: ${effectivePrice} SAR`}
                     </Text>
                   </View>
                 )}
@@ -981,6 +1107,32 @@ const styles = StyleSheet.create({
   },
   planCoverageTitle: { fontSize: 15, color: '#1A1A1A', marginBottom: 2 },
   planCoverageSub: { fontSize: 13, color: '#6B7280', lineHeight: 19 },
+  // ── Promo code ──────────────────────────────────────────────────────────────
+  promoBox: {
+    backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, marginBottom: 20,
+    borderWidth: 1.5, borderColor: '#EDE8F8',
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  promoLabel: { fontSize: 14, color: '#1A1A1A', marginBottom: 10 },
+  promoRow: { alignItems: 'center', gap: 10 },
+  promoInput: {
+    flex: 1, backgroundColor: '#F8F7FF', borderRadius: 10, padding: 12,
+    fontSize: 15, color: '#1A1A1A', borderWidth: 1.5, borderColor: '#EBEBF5',
+    letterSpacing: 1.2,
+  },
+  promoInputApplied: { borderColor: '#2ECC71', backgroundColor: '#F0FBF5' },
+  promoInputError:   { borderColor: '#E74C3C' },
+  promoBtn: {
+    backgroundColor: '#2D1B69', borderRadius: 10,
+    paddingHorizontal: 16, paddingVertical: 13,
+    alignItems: 'center', justifyContent: 'center', minWidth: 72,
+  },
+  promoBtnApplied: { backgroundColor: '#9CA3AF' },
+  promoBtnText: { color: '#FFFFFF', fontSize: 14 },
+  promoSuccess: { alignItems: 'center', gap: 6, marginTop: 8 },
+  promoSuccessText: { fontSize: 13, color: '#2ECC71' },
+  promoErrorText: { fontSize: 12, color: '#E74C3C', marginTop: 6 },
+  // ── End promo ────────────────────────────────────────────────────────────────
   paymentTitle: { fontSize: 17, fontWeight: '700', color: '#1A1A1A', marginBottom: 12 },
   paymentOption: {
     backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14,

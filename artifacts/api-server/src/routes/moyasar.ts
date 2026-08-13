@@ -67,6 +67,78 @@ const MOCK_MODE   = process.env.PAYMENT_MOCK_MODE === "true";
 const MOCK_PREFIX = "mock_";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Promo codes
+// To add/remove codes, edit PROMO_CODES below and redeploy.
+// type 'percent' = X% off, 'fixed' = X SAR off.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface PromoCode {
+  discount: number;
+  type: "percent" | "fixed";
+}
+
+const PROMO_CODES: Record<string, PromoCode> = {
+  WELCOME: { discount: 15, type: "percent" },
+  SAVE50:  { discount: 50, type: "fixed"   },
+  JAI10:   { discount: 10, type: "percent" },
+  JAI15:   { discount: 15, type: "percent" },
+  JAI20:   { discount: 20, type: "percent" },
+  JAI25:   { discount: 25, type: "percent" },
+};
+
+/** Look up a promo code (case-insensitive). Returns null if not found. */
+export function lookupPromo(raw: string): (PromoCode & { code: string }) | null {
+  const code = raw.trim().toUpperCase();
+  const promo = PROMO_CODES[code];
+  return promo ? { ...promo, code } : null;
+}
+
+/** Apply promo discount to a halala amount. Returns discounted amount (≥ 0). */
+export function applyPromo(amountHalalas: number, promo: PromoCode): number {
+  if (promo.type === "percent") {
+    return Math.max(0, Math.round(amountHalalas * (1 - promo.discount / 100)));
+  }
+  return Math.max(0, amountHalalas - promo.discount * 100); // SAR → halalas
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/payment/validate-promo  (requires auth)
+// Validate a promo code against a specific service.
+// Body: { code: string; service_type: string }
+// Returns: { valid: true; discount; type; originalAmount; finalAmount } (SAR)
+//       OR { valid: false; error: string }
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/payment/validate-promo", requireAuth, async (req, res) => {
+  const { code, service_type } = req.body as { code?: string; service_type?: string };
+
+  if (!code || !service_type) {
+    res.status(400).json({ valid: false, error: "code and service_type are required" });
+    return;
+  }
+
+  const baseAmount = SERVICE_AMOUNTS[service_type];
+  if (!baseAmount) {
+    res.status(400).json({ valid: false, error: `Unknown service_type: ${service_type}` });
+    return;
+  }
+
+  const promo = lookupPromo(code);
+  if (!promo) {
+    res.json({ valid: false, error: "Invalid promo code" });
+    return;
+  }
+
+  const finalHalalas = applyPromo(baseAmount, promo);
+  res.json({
+    valid:          true,
+    discount:       promo.discount,
+    type:           promo.type,
+    originalAmount: baseAmount    / 100, // SAR
+    finalAmount:    finalHalalas  / 100, // SAR
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Shared price tables
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -319,6 +391,7 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
       cvc,
       callbackUrl,
       idempotencyKey,
+      promoCode,
     } = req.body as {
       service_type: string;
       cardName: string;
@@ -328,17 +401,22 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
       cvc: string;
       callbackUrl?: string;
       idempotencyKey?: string;
+      promoCode?: string;
     };
 
-    const amount = SERVICE_AMOUNTS[service_type];
-    if (!amount) {
+    const baseAmount = SERVICE_AMOUNTS[service_type];
+    if (!baseAmount) {
       res.status(400).json({ error: `Unknown service_type: ${service_type}` });
       return;
     }
 
+    // Apply promo discount if a valid code was supplied
+    const promo = promoCode ? lookupPromo(promoCode) : null;
+    const amount = promo ? applyPromo(baseAmount, promo) : baseAmount;
+
     if (MOCK_MODE) {
       console.warn(`[payment] MOCK MODE — simulating paid service for "${service_type}" (no real charge)`);
-      res.json({ paymentId: `${MOCK_PREFIX}${Date.now()}`, status: "paid", transactionUrl: null });
+      res.json({ paymentId: `${MOCK_PREFIX}${Date.now()}`, status: "paid", transactionUrl: null, finalAmount: amount / 100 });
       return;
     }
 
@@ -357,11 +435,11 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
         year,
         cvm:    cvc,
       },
-      // Bind payment to this authenticated user and service for server-side verification
       metadata: {
         type:         "service",
         service_type: service_type,
         user_id:      String(req.userId),
+        ...(promo ? { promo_code: promo.code } : {}),
       },
     }, idempotencyKey)) as {
       id: string;
@@ -373,6 +451,7 @@ router.post("/payment/service-checkout", requireAuth, async (req, res) => {
       paymentId:      payment.id,
       status:         payment.status,
       transactionUrl: payment.source?.transaction_url ?? null,
+      finalAmount:    amount / 100, // SAR — for the confirmation sheet
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Payment error";

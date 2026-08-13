@@ -20,7 +20,7 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 
-import { queueSelect, resetDb }       from "./mock-payment-db.mjs";
+import { queueSelect, resetDb, getInsertValues } from "./mock-payment-db.mjs";
 import { setMoyasarResult, setMoyasarError, resetMoyasar } from "./mock-moyasar.mjs";
 
 // ── Import the router under test (after hooks have wired the mocks) ──────────
@@ -265,4 +265,132 @@ test("2b. non-member cash intent — payment_method recorded as cash", async () 
   assert.equal(status, 201, "Confirmed cash-on-delivery should be accepted");
   // The mock DB returns a dummy request row; verify the route reached insert
   assert.ok(body.request || body.job, "Response should include request or job");
+});
+
+// ── Promo code tests ──────────────────────────────────────────────────────────
+
+test("10. cash + valid promo WELCOME — request created, promo recorded in insert", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+
+  const { status, body } = await postRequest({
+    service_type: "fuel",        // basePrice SAR 80
+    cash_intent:  true,
+    promo_code:   "WELCOME",     // 15% off → SAR 68, discount SAR 12
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 201, "Cash + valid promo should create the request");
+  assert.ok(body.request || body.job, "Response should contain request/job");
+
+  // Verify the discount was recorded server-side
+  const inserted = getInsertValues(0); // 0 = serviceRequests insert (jobs is index 1)
+  assert.equal(inserted?.promo_code,      "WELCOME", "promo_code should be stored");
+  // discount_amount stored in halalas: 15% of SAR 80 = SAR 12 = 1200 halalas
+  assert.equal(inserted?.discount_amount, 1200, "discount_amount should be 1200 halalas (15% of 80 SAR)");
+  // final_amount_halalas: SAR 80 - SAR 12 = SAR 68 = 6800 halalas
+  assert.equal(inserted?.final_amount_halalas, 6800, "final_amount_halalas should be 6800 (SAR 68)");
+});
+
+test("11. cash + invalid promo — request created, promo silently ignored", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+
+  const { status } = await postRequest({
+    service_type: "fuel",
+    cash_intent:  true,
+    promo_code:   "BOGUS999",    // unknown code
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 201, "Cash + invalid promo should still create the request");
+
+  const inserted = getInsertValues(0);
+  assert.equal(inserted?.promo_code,      null, "Invalid promo should not be stored");
+  assert.equal(inserted?.discount_amount, null, "discount_amount should be null for invalid promo");
+});
+
+test("12. card + promo in metadata — discounted amount accepted, promo recorded", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+  // WELCOME = 15% off fuel SAR 80 → SAR 68 = 6800 halalas
+  setMoyasarResult({
+    status:   "paid",
+    amount:   6800,
+    metadata: { type: "service", service_type: "fuel", user_id: "1", promo_code: "WELCOME" },
+  });
+
+  const { status } = await postRequest({
+    service_type: "fuel",
+    payment_id:   "pay_promo_card",
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 201, "Card payment with valid metadata promo should be accepted at discounted amount");
+
+  const inserted = getInsertValues(0);
+  assert.equal(inserted?.promo_code, "WELCOME", "promo_code should be sourced from payment metadata");
+});
+
+test("13. card + discounted amount but NO metadata promo — rejected (amount too low)", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+  // 6800 halalas but no promo in metadata → server expects full 8000 halalas
+  setMoyasarResult({
+    status:   "paid",
+    amount:   6800,
+    metadata: { type: "service", service_type: "fuel", user_id: "1" },
+  });
+
+  const { status } = await postRequest({
+    service_type: "fuel",
+    payment_id:   "pay_low_no_promo",
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 402, "Discounted amount without metadata promo should be rejected");
+});
+
+test("14. card + tampered client body promo ignored — metadata is authoritative", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+  // Payment at full price, metadata has no promo — client tries to inject one via body
+  setMoyasarResult({
+    status:   "paid",
+    amount:   8000, // full SAR 80 in halalas
+    metadata: { type: "service", service_type: "fuel", user_id: "1" },
+  });
+
+  const { status } = await postRequest({
+    service_type: "fuel",
+    payment_id:   "pay_tampered_promo",
+    promo_code:   "WELCOME",  // attacker claims a promo that wasn't in the payment
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  // Request should succeed (full payment passes), but NO promo should be recorded
+  assert.equal(status, 201, "Full payment should still be accepted even when client sends a promo code");
+
+  const inserted = getInsertValues(0);
+  assert.equal(inserted?.promo_code, null, "Tampered client-body promo should be ignored for card payments");
+});
+
+test("15. cash + SAVE50 promo — fixed SAR 50 off tow (SAR 500 → 450), discount_amount=50", async () => {
+  setup();
+  queueSelect([{ membership: "none" }]);
+
+  const { status } = await postRequest({
+    service_type: "tow",         // basePrice SAR 500
+    cash_intent:  true,
+    promo_code:   "SAVE50",      // fixed SAR 50 off
+    location_lat: 24.7,
+    location_lng: 46.7,
+  });
+  assert.equal(status, 201, "Cash + SAVE50 fixed promo should create the request");
+
+  const inserted = getInsertValues(0);
+  assert.equal(inserted?.promo_code,           "SAVE50", "promo_code should be SAVE50");
+  // SAVE50 = SAR 50 off → 5000 halalas discount; tow base = 50000 halalas, final = 45000 halalas
+  assert.equal(inserted?.discount_amount,      5000,  "discount_amount should be 5000 halalas (SAR 50)");
+  assert.equal(inserted?.final_amount_halalas, 45000, "final_amount_halalas should be 45000 (SAR 450)");
 });

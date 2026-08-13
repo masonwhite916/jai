@@ -17,8 +17,11 @@ export async function migratePaymentSchema(): Promise<void> {
     // ── service_requests: payment columns ────────────────────────────────────
     await client.query(`
       ALTER TABLE service_requests
-        ADD COLUMN IF NOT EXISTS payment_id     text UNIQUE,
-        ADD COLUMN IF NOT EXISTS payment_method text
+        ADD COLUMN IF NOT EXISTS payment_id           text UNIQUE,
+        ADD COLUMN IF NOT EXISTS payment_method       text,
+        ADD COLUMN IF NOT EXISTS promo_code           text,
+        ADD COLUMN IF NOT EXISTS discount_amount      integer,
+        ADD COLUMN IF NOT EXISTS final_amount_halalas integer
     `);
 
     // ── service_payment_refs: webhook → poll bridge ───────────────────────────

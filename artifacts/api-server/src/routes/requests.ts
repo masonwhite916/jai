@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth";
 import { dispatch } from "../lib/dispatch";
 import { notifyTechniciansNewJob } from "../lib/pushNotifications";
 import { moyasarFetch } from "../lib/moyasarClient";
+import { lookupPromo, applyPromo } from "./moyasar";
 
 const router: IRouter = Router();
 
@@ -22,7 +23,7 @@ router.post("/requests", requireAuth, async (req, res) => {
     const {
       service_type, vehicle_make, vehicle_model, vehicle_year,
       vehicle_plate, vehicle_color, location_lat, location_lng, address, notes, photo_urls,
-      payment_id, cash_intent,
+      payment_id, cash_intent, promo_code,
     } = req.body as {
       service_type: string;
       vehicle_make?: string; vehicle_model?: string; vehicle_year?: string;
@@ -31,6 +32,7 @@ router.post("/requests", requireAuth, async (req, res) => {
       address?: string; notes?: string; photo_urls?: string;
       payment_id?: string;
       cash_intent?: boolean;
+      promo_code?: string;
     };
 
     if (!service_type) {
@@ -55,12 +57,17 @@ router.post("/requests", requireAuth, async (req, res) => {
     const isCovered = membership !== "none" && coveredServices.includes(service_type);
 
     let resolvedPaymentMethod: string;
+    // For card payments: promo is sourced exclusively from verified Moyasar metadata.
+    // For cash payments: promo comes from the client body (honour-system; tech collects discounted amount).
+    let verifiedMetaPromoCode: string | undefined;
+    // Canonical amount actually charged / due, in halalas. Set during payment verification.
+    let cardAmountHalalas: number | undefined;
 
     if (isCovered) {
       // Member — no payment needed
       resolvedPaymentMethod = "covered";
     } else if (cash_intent === true) {
-      // Cash on delivery — accepted as-is
+      // Cash on delivery — accepted; promo is informational (technician collects discounted amount)
       resolvedPaymentMethod = "cash";
     } else if (payment_id) {
       // Verify the Moyasar payment is actually paid, bound to this user, and covers this service
@@ -68,7 +75,7 @@ router.post("/requests", requireAuth, async (req, res) => {
         const payment = (await moyasarFetch("GET", `/payments/${payment_id}`)) as {
           status: string;
           amount: number;
-          metadata?: { type?: string; service_type?: string; user_id?: string };
+          metadata?: { type?: string; service_type?: string; user_id?: string; promo_code?: string };
         };
 
         if (payment.status !== "paid") {
@@ -98,12 +105,24 @@ router.post("/requests", requireAuth, async (req, res) => {
           return;
         }
 
-        // Amount sanity-check: payment must cover the full service cost in halalas (SAR × 100)
-        const expectedHalalas = (PAYOUTS[service_type] ?? 0) * 100;
+        // Amount sanity-check: payment must cover the (possibly promo-discounted) service cost.
+        // Promo is derived exclusively from server-issued metadata — client-body promo_code is
+        // intentionally ignored for card payments to prevent tampered discount requests.
+        const baseHalalas = (PAYOUTS[service_type] ?? 0) * 100;
+        let expectedHalalas = baseHalalas;
+        if (payment.metadata?.promo_code) {
+          const promo = lookupPromo(payment.metadata.promo_code);
+          if (promo) {
+            expectedHalalas = applyPromo(baseHalalas, promo);
+            verifiedMetaPromoCode = promo.code; // authoritative — came from Moyasar metadata
+          }
+          // Unknown/expired metadata code → fall back to full price (prevents forged codes)
+        }
         if (payment.amount < expectedHalalas) {
           res.status(402).json({ error: "Payment amount is less than the service cost." });
           return;
         }
+        cardAmountHalalas = payment.amount; // authoritative — verified from Moyasar
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Payment verification failed";
         res.status(402).json({ error: `Could not verify payment: ${msg}` });
@@ -118,21 +137,59 @@ router.post("/requests", requireAuth, async (req, res) => {
       return;
     }
 
+    // Resolve authoritative promo code:
+    //   card  → only from verified Moyasar metadata (set above); client body is ignored
+    //   cash  → from client body (validated here server-side)
+    //   covered → no promo
+    const authoritativePromoRaw =
+      resolvedPaymentMethod === "card" ? verifiedMetaPromoCode :
+      resolvedPaymentMethod === "cash" ? promo_code : undefined;
+
+    const baseHalalas = (PAYOUTS[service_type] ?? 0) * 100;
+
+    let resolvedPromoCode: string | null = null;
+    let resolvedDiscountHalalas: number = 0;  // halalas — avoids SAR fraction rounding
+    if (authoritativePromoRaw) {
+      const promo = lookupPromo(authoritativePromoRaw);
+      if (promo) {
+        const discountedHalalas = applyPromo(baseHalalas, promo);
+        resolvedPromoCode = promo.code;
+        resolvedDiscountHalalas = baseHalalas - discountedHalalas; // precise, no fraction
+      }
+      // Unknown/expired code: silently ignore — don't block the request
+    }
+
+    // Canonical customer-payable amount:
+    //   card    → authoritative amount verified from Moyasar (halalas)
+    //   cash    → base minus promo discount (halalas)
+    //   covered → 0 (free)
+    let finalAmountHalalas: number;
+    if (resolvedPaymentMethod === "card" && cardAmountHalalas !== undefined) {
+      finalAmountHalalas = cardAmountHalalas;
+    } else if (resolvedPaymentMethod === "cash") {
+      finalAmountHalalas = baseHalalas - resolvedDiscountHalalas;
+    } else {
+      finalAmountHalalas = 0; // covered (membership)
+    }
+
     // Create the service request (payment_id has a UNIQUE constraint — prevents replay attacks)
     let req_: (typeof serviceRequests.$inferSelect);
     try {
       const rows = await db
         .insert(serviceRequests)
         .values({
-          customer_id:    req.userId!,
-          service_type:   service_type as any,
+          customer_id:          req.userId!,
+          service_type:         service_type as any,
           vehicle_make, vehicle_model, vehicle_year,
           vehicle_plate, vehicle_color,
           location_lat, location_lng, address, notes,
           photo_urls,
-          payment_id:     payment_id ?? null,
-          payment_method: resolvedPaymentMethod,
-        })
+          payment_id:           payment_id ?? null,
+          payment_method:       resolvedPaymentMethod,
+          promo_code:           resolvedPromoCode,
+          discount_amount:      resolvedDiscountHalalas || null,  // halalas
+          final_amount_halalas: finalAmountHalalas,
+        } as any)
         .returning();
       req_ = rows[0];
     } catch (err: unknown) {
@@ -344,13 +401,15 @@ router.get("/payments", requireAuth, async (req, res) => {
     // never see a receipt before the service is finished.
     const rows = await db
       .select({
-        id:             serviceRequests.id,
-        service_type:   serviceRequests.service_type,
-        created_at:     serviceRequests.created_at,
-        payment_id:     serviceRequests.payment_id,
-        payment_method: serviceRequests.payment_method,
-        address:        serviceRequests.address,
-        payout:         jobs.payout,
+        id:                   serviceRequests.id,
+        service_type:         serviceRequests.service_type,
+        created_at:           serviceRequests.created_at,
+        payment_id:           serviceRequests.payment_id,
+        payment_method:       serviceRequests.payment_method,
+        address:              serviceRequests.address,
+        promo_code:           serviceRequests.promo_code,
+        final_amount_halalas: (serviceRequests as any).final_amount_halalas,
+        payout:               jobs.payout,
       })
       .from(serviceRequests)
       .leftJoin(jobs, eq(jobs.request_id, serviceRequests.id))
@@ -377,15 +436,25 @@ router.get("/payments", requireAuth, async (req, res) => {
       }
     }
 
-    const payments = Array.from(seen.values()).map((r) => ({
-      id:             r.id,
-      service_type:   r.service_type,
-      created_at:     r.created_at,
-      payment_id:     r.payment_id,
-      payment_method: r.payment_method,
-      address:        r.address,
-      amount:         r.payout ?? PAYOUTS[r.service_type] ?? 0,
-    }));
+    const payments = Array.from(seen.values()).map((r) => {
+      // Prefer the authoritative final_amount_halalas (in SAR) stored at checkout time.
+      // Fall back to the job payout, then the static price table — for older records.
+      const finalHalalas: number | null | undefined = (r as any).final_amount_halalas;
+      const amount = finalHalalas != null
+        ? finalHalalas / 100
+        : r.payout ?? PAYOUTS[r.service_type] ?? 0;
+
+      return {
+        id:             r.id,
+        service_type:   r.service_type,
+        created_at:     r.created_at,
+        payment_id:     r.payment_id,
+        payment_method: r.payment_method,
+        address:        r.address,
+        promo_code:     (r as any).promo_code ?? null,
+        amount,
+      };
+    });
 
     // Maintain descending chronological order after Map de-dup
     payments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());

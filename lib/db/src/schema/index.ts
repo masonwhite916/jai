@@ -52,8 +52,11 @@ export const serviceRequests = pgTable("service_requests", {
   address:       text("address"),
   notes:         text("notes"),
   photo_urls:    text("photo_urls"),   // JSON array of upload paths
-  payment_id:    text("payment_id").unique(), // Moyasar payment ID — unique to prevent replay (null = covered/cash)
+  payment_id:     text("payment_id").unique(), // Moyasar payment ID — unique to prevent replay (null = covered/cash)
   payment_method: text("payment_method"),          // 'card' | 'cash' | 'covered'
+  promo_code:           text("promo_code"),             // validated promo code applied at checkout (if any)
+  discount_amount:      integer("discount_amount"),    // discount in halalas (SAR × 100) — integer avoids fraction rounding
+  final_amount_halalas: integer("final_amount_halalas"), // canonical customer-payable amount in halalas
   created_at:    timestamp("created_at").notNull().defaultNow(),
   updated_at:    timestamp("updated_at").notNull().defaultNow(),
 });

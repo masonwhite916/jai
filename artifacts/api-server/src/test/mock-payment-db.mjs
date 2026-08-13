@@ -5,15 +5,26 @@
  */
 
 const _selectQueue = [];
+const _insertHistory = [];  // grows as db.insert().values() calls happen in order
 
 /** Queue the next rows that a .select()…chain will resolve with. */
 export function queueSelect(rows) {
   _selectQueue.push(rows);
 }
 
-/** Reset all queues. */
+/**
+ * Return values from the Nth db.insert().values() call in the current test
+ * (0-indexed). The first insert is serviceRequests (index 0), the second is
+ * jobs (index 1).
+ */
+export function getInsertValues(callIndex = 0) {
+  return _insertHistory[callIndex] ?? null;
+}
+
+/** Reset all queues and captured state. */
 export function resetDb() {
   _selectQueue.length = 0;
+  _insertHistory.length = 0;
 }
 
 // Minimal drizzle-style builder: all chain methods return self, resolves via queue.
@@ -26,7 +37,7 @@ const makeBuilder = (opts = {}) => {
     returning: () => Promise.resolve(opts.insertRows ?? []),
     set:       () => self,
     values:    (v) => {
-      self._insertValues = v;
+      _insertHistory.push(v);  // append in call order — don't overwrite
       return self;
     },
     onConflictDoUpdate: () => self,
@@ -36,7 +47,7 @@ const makeBuilder = (opts = {}) => {
 
 export const db = {
   select:   () => makeBuilder(),
-  insert:   (table) => makeBuilder({ insertRows: [{ id: 99, status: "pending" }] }),
+  insert:   () => makeBuilder({ insertRows: [{ id: 99, status: "pending" }] }),
   update:   () => makeBuilder(),
   delete:   () => makeBuilder(),
 };
