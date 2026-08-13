@@ -41,6 +41,7 @@ export default function ProfileScreen() {
   const { t, isRTL, font, toggleLanguage, lang } = useLanguage();
   const gps = useJaiLocation();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const rowDir = isRTL ? 'row-reverse' : 'row';
   const align = isRTL ? 'right' : 'left';
@@ -60,38 +61,18 @@ export default function ProfileScreen() {
 
   function handleDeleteAccount() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    // Alert.alert with buttons is a no-op on react-native-web — use window.confirm there.
-    if (Platform.OS === 'web') {
-      const ok = typeof window !== 'undefined' && window.confirm(`${t('deleteAccountTitle')}\n\n${t('deleteAccountMessage')}`);
-      if (ok) confirmDeleteAccount();
-      return;
-    }
-    Alert.alert(
-      t('deleteAccountTitle'),
-      t('deleteAccountMessage'),
-      [
-        { text: t('cancel') ?? 'Cancel', style: 'cancel' },
-        {
-          text: t('deleteAccountConfirm'),
-          style: 'destructive',
-          onPress: confirmDeleteAccount,
-        },
-      ],
-    );
+    setShowDeleteConfirm(true);
   }
 
   async function confirmDeleteAccount() {
+    setShowDeleteConfirm(false);
     setIsDeleting(true);
     try {
       await apiFetch('/api/users/me', { method: 'DELETE' });
       await logout();
       router.replace('/auth');
     } catch {
-      if (Platform.OS === 'web') {
-        if (typeof window !== 'undefined') window.alert('Could not delete account. Please try again.');
-      } else {
-        Alert.alert('Error', 'Could not delete account. Please try again.');
-      }
+      Alert.alert('Error', 'Could not delete account. Please try again.');
     } finally {
       setIsDeleting(false);
     }
@@ -213,6 +194,37 @@ export default function ProfileScreen() {
           </View>
         </View>
       </ScrollView>
+
+      {/* Delete account confirmation modal */}
+      <Modal visible={showDeleteConfirm} transparent animationType="fade" onRequestClose={() => setShowDeleteConfirm(false)}>
+        <View style={styles.loadingOverlay}>
+          <View style={[styles.loadingBox, { gap: 16, paddingHorizontal: 24, paddingVertical: 28, maxWidth: 320 }]}>
+            <View style={[styles.menuIcon, styles.menuIconAccent, { width: 52, height: 52, borderRadius: 16, alignSelf: 'center' }]}>
+              <Ionicons name="trash-outline" size={26} color="#E74C3C" />
+            </View>
+            <Text style={[styles.loadingText, { fontFamily: font.bold, fontSize: 17, color: '#1A1A1A', textAlign: 'center' }]}>
+              {t('deleteAccountTitle')}
+            </Text>
+            <Text style={[{ fontFamily: font.regular, fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 21 }]}>
+              {t('deleteAccountMessage')}
+            </Text>
+            <TouchableOpacity
+              onPress={confirmDeleteAccount}
+              style={{ backgroundColor: '#E74C3C', borderRadius: 12, paddingVertical: 14, alignItems: 'center', width: '100%' }}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#FFF', fontFamily: font.bold, fontSize: 15 }}>{t('deleteAccountConfirm')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowDeleteConfirm(false)}
+              style={{ paddingVertical: 10, alignItems: 'center', width: '100%' }}
+              activeOpacity={0.7}
+            >
+              <Text style={{ color: '#6B7280', fontFamily: font.medium, fontSize: 15 }}>{t('cancel') ?? 'Cancel'}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Deletion loading overlay */}
       {isDeleting && (
