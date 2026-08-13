@@ -7,3 +7,4 @@
 - [Next.js monorepo migration](nextjs-monorepo-migration.md) — six required fixes when adding Next.js to this monorepo; see topic file before touching config
 - [React #418 in preview](jai-web-hydration-418.md) — preview instrumentation causes it on SSR-hydrating artifacts; clean browser shows zero errors; don't chase app fixes
 - [Tester browser reports hover:none](tester-hover-none.md) — Tailwind v4 media-gates hover: utilities, so the testing subagent can't verify hover/press styles; verify via emitted CSS instead
+- [Hermes private class fields build failure](hermes-private-fields.md) — Android release breaks on hermes-compiler@0.14 + react-native@0.83+ src/private/ files; fix: unstable_transformProfile hermes-v0 in babel.config.js
