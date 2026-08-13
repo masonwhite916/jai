@@ -229,6 +229,12 @@ router.patch("/jobs/:id", requireAuth, async (req, res) => {
         techRating: tech?.rating ?? 4.5,
       });
 
+      // Notify ALL technicians so they remove this job from their pending boards instantly
+      dispatch.broadcastToRoom("technicians", {
+        type:  "job_taken",
+        jobId: id,
+      });
+
       // Fetch customer_id from the service request so we can push to them
       const [sreq] = await db
         .select({ customer_id: serviceRequests.customer_id, service_type: serviceRequests.service_type })

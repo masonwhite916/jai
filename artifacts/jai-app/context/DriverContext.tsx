@@ -191,9 +191,19 @@ export function DriverProvider({ children }: { children: ReactNode }) {
       }
     });
 
+    // Another technician accepted this job — remove it from the pending board immediately
+    const offJobTaken = jaiSocket.on('job_taken', (payload) => {
+      const { jobId } = payload as { jobId: number };
+      const id = String(jobId);
+      // Only remove jobs the current technician hasn't accepted themselves
+      // (their own accepted job is already in activeJob, not pending)
+      setJobs((prev) => prev.filter((j) => !(j.id === id && j.status === 'pending')));
+    });
+
     return () => {
       offNewJob();
       offJobStatus();
+      offJobTaken();
       // Don't disconnect here — driver must call logout() to fully disconnect
     };
   }, []);
