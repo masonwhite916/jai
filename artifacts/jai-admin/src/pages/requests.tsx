@@ -203,9 +203,17 @@ export default function Requests() {
     ...(serviceFilter !== 'all' ? { service_type: serviceFilter } : {}),
   };
 
-  const { data, isLoading } = useAdminListRequests(queryParams, {
-    query: { queryKey: getAdminListRequestsQueryKey(queryParams), refetchInterval: 15000 },
+  const { data, isLoading, dataUpdatedAt } = useAdminListRequests(queryParams, {
+    query: { queryKey: getAdminListRequestsQueryKey(queryParams), refetchInterval: 30_000 },
   });
+
+  // ── "Last synced" ticker ───────────────────────────────────────────────────
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!dataUpdatedAt) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [dataUpdatedAt]);
 
   const handleNewRequest = useCallback((requestId: number, serviceType: string, customerName: string | null) => {
     queryClient.invalidateQueries({ queryKey: ['/api/admin/requests'] });
@@ -262,9 +270,16 @@ export default function Requests() {
 
   return (
     <div className="p-4 md:p-8 space-y-4 md:space-y-6 h-full flex flex-col">
-      <div className="flex-shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight">Service Requests</h1>
-        <p className="text-sm text-muted-foreground">Manage and track all active and historical jobs.</p>
+      <div className="flex-shrink-0 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Service Requests</h1>
+          <p className="text-sm text-muted-foreground">Manage and track all active and historical jobs.</p>
+        </div>
+        {dataUpdatedAt > 0 && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap mt-1 flex-shrink-0">
+            Last synced · {formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: false })} ago
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 flex-shrink-0 bg-card p-3 md:p-4 rounded-xl border border-border/50 shadow-sm">

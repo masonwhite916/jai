@@ -20,6 +20,7 @@ export * from './bannerLang';
 export * from './bannerSettings';
 export * from './errorResponse';
 export * from './healthStatus';
+export * from './heroImageUploadResult';
 export * from './reassignInput';
 export * from './serviceTypeCount';
 export * from './siteSettings';

@@ -13,7 +13,9 @@ import * as zod from 'zod';
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
-  "status": zod.string()
+  "status": zod.string(),
+  "env": zod.string().optional(),
+  "db_host": zod.string().optional()
 })
 
 
@@ -203,7 +205,8 @@ export const AdminGetSiteSettingsResponse = zod.object({
   "primary": zod.string().optional(),
   "secondary": zod.string().optional(),
   "accent": zod.string().optional()
-}).describe('CSS colour overrides (hex values)')
+}).describe('CSS colour overrides (hex values)'),
+  "heroImageUpdatedAt": zod.string().optional().describe('ISO timestamp of last hero image upload (used as cache-buster)')
 })
 
 
@@ -253,7 +256,8 @@ export const AdminUpdateBannersResponse = zod.object({
   "primary": zod.string().optional(),
   "secondary": zod.string().optional(),
   "accent": zod.string().optional()
-}).describe('CSS colour overrides (hex values)')
+}).describe('CSS colour overrides (hex values)'),
+  "heroImageUpdatedAt": zod.string().optional().describe('ISO timestamp of last hero image upload (used as cache-buster)')
 })
 
 
@@ -290,8 +294,29 @@ export const AdminUpdateThemeResponse = zod.object({
   "primary": zod.string().optional(),
   "secondary": zod.string().optional(),
   "accent": zod.string().optional()
-}).describe('CSS colour overrides (hex values)')
+}).describe('CSS colour overrides (hex values)'),
+  "heroImageUpdatedAt": zod.string().optional().describe('ISO timestamp of last hero image upload (used as cache-buster)')
 })
+
+
+/**
+ * Replaces the hero background image. JPG or PNG, max 5 MB. Admin token required.
+ * @summary Upload a custom hero background image
+ */
+export const AdminUploadHeroImageBody = zod.object({
+  "image": zod.any()
+})
+
+export const AdminUploadHeroImageResponse = zod.object({
+  "heroImageUpdatedAt": zod.string()
+})
+
+
+/**
+ * Returns the uploaded hero image. 404 if no custom image has been uploaded.
+ * @summary Get the custom hero background image
+ */
+export const GetHeroImageResponse = zod.unknown()
 
 
 /**
@@ -321,7 +346,8 @@ export const GetSiteSettingsResponse = zod.object({
   "primary": zod.string().optional(),
   "secondary": zod.string().optional(),
   "accent": zod.string().optional()
-}).describe('CSS colour overrides (hex values)')
+}).describe('CSS colour overrides (hex values)'),
+  "heroImageUpdatedAt": zod.string().optional().describe('ISO timestamp of last hero image upload (used as cache-buster)')
 })
 
 

@@ -293,6 +293,10 @@ components:
       properties:
         status:
           type: string
+        env:
+          type: string
+        db_host:
+          type: string
       required:
         - status
 

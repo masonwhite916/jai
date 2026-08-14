@@ -7,6 +7,8 @@
  */
 export interface HealthStatus {
   status: string;
+  env?: string;
+  db_host?: string;
 }
 
 export interface ErrorResponse {
@@ -125,6 +127,10 @@ export interface SiteSettings {
   heroImageUpdatedAt?: string;
 }
 
+export interface HeroImageUploadResult {
+  heroImageUpdatedAt: string;
+}
+
 export interface ServiceTypeCount {
   service_type: string;
   count: number;
@@ -159,5 +165,9 @@ export type AdminListRequests200 = {
 
 export type AdminListTechnicians200 = {
   technicians: AdminTechnician[];
+};
+
+export type AdminUploadHeroImageBody = {
+  image: Blob;
 };
 
