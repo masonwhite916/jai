@@ -152,6 +152,30 @@ paths:
                     items:
                       $ref: "#/components/schemas/AdminTechnician"
                 required: [technicians]
+    post:
+      operationId: adminCreateTechnician
+      tags: [admin]
+      summary: Create a new technician account
+      description: Creates a user with role=technician. Admin token required.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTechnicianInput"
+      responses:
+        "201":
+          description: Technician created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminTechnician"
+        "409":
+          description: Phone number already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   # ── Admin site settings ─────────────────────────────────────────────────────
   /admin/site-settings:
@@ -311,9 +335,11 @@ components:
     AdminLoginInput:
       type: object
       properties:
+        username:
+          type: string
         password:
           type: string
-      required: [password]
+      required: [username, password]
 
     AdminSession:
       type: object
@@ -418,6 +444,16 @@ components:
         last_seen_at:
           type: ["string", "null"]
       required: [id, phone, jobs_completed, earnings_total, active_jobs]
+
+    # ── Create technician input ────────────────────────────────────────────────
+    CreateTechnicianInput:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+      required: [phone]
 
     # ── Reassign input ─────────────────────────────────────────────────────────
     ReassignInput:

@@ -27,8 +27,10 @@ import type {
   AdminRequest,
   AdminSession,
   AdminStats,
+  AdminTechnician,
   AdminUploadHeroImageBody,
   BannerSettings,
+  CreateTechnicianInput,
   ErrorResponse,
   HealthStatus,
   HeroImageUploadResult,
@@ -519,6 +521,78 @@ export function useAdminListTechnicians<TData = Awaited<ReturnType<typeof adminL
 
 
 
+
+export const getAdminCreateTechnicianUrl = () => {
+
+
+
+
+  return `/api/admin/technicians`
+}
+
+/**
+ * Creates a user with role=technician. Admin token required.
+ * @summary Create a new technician account
+ */
+export const adminCreateTechnician = async (createTechnicianInput: CreateTechnicianInput, options?: RequestInit): Promise<AdminTechnician> => {
+
+  return customFetch<AdminTechnician>(getAdminCreateTechnicianUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(createTechnicianInput)
+  }
+);}
+
+
+
+
+
+export const getAdminCreateTechnicianMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminCreateTechnician>>, TError,{data: BodyType<CreateTechnicianInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof adminCreateTechnician>>, TError,{data: BodyType<CreateTechnicianInput>}, TContext> => {
+
+const mutationKey = ['adminCreateTechnician'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof adminCreateTechnician>>, {data: BodyType<CreateTechnicianInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  adminCreateTechnician(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AdminCreateTechnicianMutationResult = NonNullable<Awaited<ReturnType<typeof adminCreateTechnician>>>
+    export type AdminCreateTechnicianMutationBody = BodyType<CreateTechnicianInput>
+    export type AdminCreateTechnicianMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Create a new technician account
+ */
+export const useAdminCreateTechnician = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof adminCreateTechnician>>, TError,{data: BodyType<CreateTechnicianInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof adminCreateTechnician>>,
+        TError,
+        {data: BodyType<CreateTechnicianInput>},
+        TContext
+      > => {
+      return useMutation(getAdminCreateTechnicianMutationOptions(options));
+    }
 
 export const getAdminGetSiteSettingsUrl = () => {
 

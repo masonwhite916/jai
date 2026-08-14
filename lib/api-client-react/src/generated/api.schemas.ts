@@ -16,6 +16,7 @@ export interface ErrorResponse {
 }
 
 export interface AdminLoginInput {
+  username: string;
   password: string;
 }
 
@@ -88,6 +89,11 @@ export interface AdminTechnician {
   last_lng?: number | null;
   /** @nullable */
   last_seen_at?: string | null;
+}
+
+export interface CreateTechnicianInput {
+  name?: string;
+  phone: string;
 }
 
 export interface ReassignInput {

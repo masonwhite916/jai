@@ -9,6 +9,7 @@ import { ShieldAlert } from 'lucide-react';
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   
   const loginMutation = useAdminLogin({
@@ -19,18 +20,18 @@ export default function Login() {
         setLocation('/dashboard');
       },
       onError: (_error) => {
-        toast.error('Invalid credentials. Please try again.');
+        toast.error('Incorrect username or password. Please try again.');
       }
     }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) {
-      toast.error('Password is required');
+    if (!username || !password) {
+      toast.error('Username and password are required');
       return;
     }
-    loginMutation.mutate({ data: { password } });
+    loginMutation.mutate({ data: { username, password } });
   };
 
   return (
@@ -42,13 +43,27 @@ export default function Login() {
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-foreground">JAI Ops Center</h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Enter the master control password to access the dispatch panel.
+            Sign in with your admin credentials to access the dispatch panel.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 bg-card border border-border p-6 rounded-xl shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-5 bg-card border border-border p-6 rounded-xl shadow-sm">
           <div className="space-y-2">
-            <Label htmlFor="password">Access Password</Label>
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin"
+              className="w-full"
+              autoFocus
+              autoComplete="username"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
             <Input
               id="password"
               type="password"
@@ -56,7 +71,7 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               className="w-full"
-              autoFocus
+              autoComplete="current-password"
             />
           </div>
 
@@ -65,7 +80,7 @@ export default function Login() {
             className="w-full" 
             disabled={loginMutation.isPending}
           >
-            {loginMutation.isPending ? 'Authenticating...' : 'Gain Access'}
+            {loginMutation.isPending ? 'Authenticating...' : 'Sign In'}
           </Button>
         </form>
         

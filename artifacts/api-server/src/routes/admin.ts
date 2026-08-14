@@ -35,16 +35,23 @@ const router: IRouter = Router();
 // ── POST /api/admin/login ─────────────────────────────────────────────────────
 
 router.post("/admin/login", async (req, res) => {
-  const { password } = req.body as { password?: string };
+  const { username, password } = req.body as { username?: string; password?: string };
   const adminPassword = process.env.ADMIN_PASSWORD;
+  const adminUsername = process.env.ADMIN_USERNAME; // optional — if unset, any username is accepted
 
   if (!adminPassword) {
     res.status(503).json({ error: "Admin login is not configured" });
     return;
   }
 
-  if (!password || password !== adminPassword) {
-    res.status(401).json({ error: "Incorrect password" });
+  if (!username || !password) {
+    res.status(401).json({ error: "Username and password are required" });
+    return;
+  }
+
+  const usernameOk = !adminUsername || username === adminUsername;
+  if (!usernameOk || password !== adminPassword) {
+    res.status(401).json({ error: "Incorrect username or password" });
     return;
   }
 
@@ -379,6 +386,59 @@ router.patch("/admin/requests/:id/cancel", requireAdmin, async (req, res) => {
         completed_at:     full.job_completed_at?.toISOString() ?? null,
         created_at:       full.job_created_at?.toISOString() ?? null,
       },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── POST /api/admin/technicians ───────────────────────────────────────────────
+
+router.post("/admin/technicians", requireAdmin, async (req, res) => {
+  try {
+    const { name, phone } = req.body as { name?: string; phone?: string };
+
+    if (!phone) {
+      res.status(400).json({ error: "phone is required" });
+      return;
+    }
+
+    // Check for duplicate phone
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1);
+
+    if (existing) {
+      res.status(409).json({ error: "A user with this phone number already exists" });
+      return;
+    }
+
+    const [created] = await db
+      .insert(users)
+      .values({ phone, name: name || null, role: "technician" })
+      .returning({
+        id:             users.id,
+        name:           users.name,
+        phone:          users.phone,
+        rating:         users.rating,
+        jobs_completed: users.jobs_completed,
+        earnings_total: users.earnings_total,
+      });
+
+    res.status(201).json({
+      id:             created.id,
+      name:           created.name,
+      phone:          created.phone,
+      rating:         created.rating,
+      jobs_completed: created.jobs_completed,
+      earnings_total: created.earnings_total,
+      active_jobs:    0,
+      last_lat:       null,
+      last_lng:       null,
+      last_seen_at:   null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";

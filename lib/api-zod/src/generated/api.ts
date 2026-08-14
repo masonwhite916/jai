@@ -24,6 +24,7 @@ export const HealthCheckResponse = zod.object({
  * @summary Admin login
  */
 export const AdminLoginBody = zod.object({
+  "username": zod.string(),
   "password": zod.string()
 })
 
@@ -179,6 +180,29 @@ export const AdminListTechniciansResponse = zod.object({
 
 
 /**
+ * Creates a user with role=technician. Admin token required.
+ * @summary Create a new technician account
+ */
+export const AdminCreateTechnicianBody = zod.object({
+  "name": zod.string().optional(),
+  "phone": zod.string()
+})
+
+export const AdminCreateTechnicianResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string().nullish(),
+  "phone": zod.string(),
+  "rating": zod.number().nullish(),
+  "jobs_completed": zod.number(),
+  "earnings_total": zod.number(),
+  "active_jobs": zod.number(),
+  "last_lat": zod.number().nullish(),
+  "last_lng": zod.number().nullish(),
+  "last_seen_at": zod.string().nullish()
+})
+
+
+/**
  * Returns saved banner text overrides and theme colour overrides. Admin token required.
  * @summary Get current site settings (banners + theme)
  */
@@ -304,7 +328,7 @@ export const AdminUpdateThemeResponse = zod.object({
  * @summary Upload a custom hero background image
  */
 export const AdminUploadHeroImageBody = zod.object({
-  "image": zod.any()
+  "image": zod.instanceof(File)
 })
 
 export const AdminUploadHeroImageResponse = zod.object({

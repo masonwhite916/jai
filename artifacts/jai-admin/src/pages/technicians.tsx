@@ -1,55 +1,113 @@
-import { useAdminListTechnicians, getAdminListTechniciansQueryKey } from '@workspace/api-client-react';
+import {
+  useAdminListTechnicians,
+  useAdminCreateTechnician,
+  getAdminListTechniciansQueryKey,
+} from '@workspace/api-client-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Search, Star, Briefcase, Banknote, Clock, Navigation } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Search, Star, Briefcase, Banknote, Clock, UserPlus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 
 export default function Technicians() {
   const [search, setSearch] = useState('');
-  
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+
+  const queryClient = useQueryClient();
+
   const { data, isLoading, isError } = useAdminListTechnicians({
     query: {
       queryKey: getAdminListTechniciansQueryKey(),
-      refetchInterval: 30000
-    }
+      refetchInterval: 30000,
+    },
   });
 
+  const createMutation = useAdminCreateTechnician({
+    mutation: {
+      onSuccess: (tech) => {
+        queryClient.invalidateQueries({ queryKey: getAdminListTechniciansQueryKey() });
+        toast.success(`Technician ${tech.name || tech.phone} added`);
+        setDialogOpen(false);
+        setNewName('');
+        setNewPhone('');
+      },
+      onError: (err: { response?: { data?: { error?: string } } }) => {
+        const msg = err?.response?.data?.error ?? 'Failed to add technician';
+        toast.error(msg);
+      },
+    },
+  });
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPhone.trim()) {
+      toast.error('Phone number is required');
+      return;
+    }
+    createMutation.mutate({ data: { name: newName.trim() || undefined, phone: newPhone.trim() } });
+  };
+
   const technicians = data?.technicians || [];
-  
-  const filteredTechs = technicians.filter(tech => {
+
+  const filteredTechs = technicians.filter((tech) => {
     if (!search) return true;
     const term = search.toLowerCase();
     return tech.name?.toLowerCase().includes(term) || tech.phone.includes(term);
   });
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('en-SA', { style: 'currency', currency: 'SAR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(val);
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('en-SA', {
+      style: 'currency',
+      currency: 'SAR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(val);
 
   return (
     <div className="p-4 md:p-8 space-y-6 h-full flex flex-col">
-      {/* Header — stacks vertically on small screens */}
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Technician Roster</h1>
           <p className="text-sm text-muted-foreground">Monitor fleet performance, status, and earnings.</p>
         </div>
-        
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Find technician..." 
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 bg-card shadow-sm"
-          />
+
+        <div className="flex gap-2 items-center">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Find technician..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 bg-card shadow-sm"
+            />
+          </div>
+          <Button onClick={() => setDialogOpen(true)} className="shrink-0 gap-1.5">
+            <UserPlus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Technician</span>
+            <span className="sm:hidden">Add</span>
+          </Button>
         </div>
       </div>
 
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1">
-          {[1,2,3,4,5,6,7,8].map(i => (
-            <div key={i} className="h-48 bg-card border border-border/50 rounded-xl animate-pulse"></div>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="h-48 bg-card border border-border/50 rounded-xl animate-pulse" />
           ))}
         </div>
       ) : isError ? (
@@ -62,8 +120,11 @@ export default function Technicians() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 flex-1 overflow-auto content-start pb-8">
-          {filteredTechs.map(tech => (
-            <Card key={tech.id} className="shadow-sm border-border/60 hover:border-primary/30 transition-colors group">
+          {filteredTechs.map((tech) => (
+            <Card
+              key={tech.id}
+              className="shadow-sm border-border/60 hover:border-primary/30 transition-colors group"
+            >
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
@@ -71,32 +132,50 @@ export default function Technicians() {
                       {tech.name ? tech.name.charAt(0).toUpperCase() : 'T'}
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-semibold text-base leading-tight truncate">{tech.name || 'Unnamed Tech'}</h3>
+                      <h3 className="font-semibold text-base leading-tight truncate">
+                        {tech.name || 'Unnamed Tech'}
+                      </h3>
                       <p className="text-xs text-muted-foreground">{tech.phone}</p>
                     </div>
                   </div>
-                  <Badge variant={tech.active_jobs > 0 ? 'default' : 'secondary'} className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0">
+                  <Badge
+                    variant={tech.active_jobs > 0 ? 'default' : 'secondary'}
+                    className="text-[10px] uppercase tracking-wider font-semibold flex-shrink-0"
+                  >
                     {tech.active_jobs > 0 ? 'On Job' : 'Available'}
                   </Badge>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-y-4 gap-x-2 text-sm mt-6">
                   <div className="flex flex-col gap-1 text-muted-foreground">
-                    <div className="flex items-center gap-1.5"><Briefcase className="w-3.5 h-3.5" /> Jobs</div>
+                    <div className="flex items-center gap-1.5">
+                      <Briefcase className="w-3.5 h-3.5" /> Jobs
+                    </div>
                     <span className="font-medium text-foreground">{tech.jobs_completed} completed</span>
                   </div>
                   <div className="flex flex-col gap-1 text-muted-foreground">
-                    <div className="flex items-center gap-1.5"><Star className="w-3.5 h-3.5 text-amber-400" /> Rating</div>
+                    <div className="flex items-center gap-1.5">
+                      <Star className="w-3.5 h-3.5 text-amber-400" /> Rating
+                    </div>
                     <span className="font-medium text-foreground">{tech.rating?.toFixed(1) || 'N/A'}</span>
                   </div>
                   <div className="flex flex-col gap-1 text-muted-foreground">
-                    <div className="flex items-center gap-1.5"><Banknote className="w-3.5 h-3.5 text-emerald-500" /> Earnings</div>
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="w-3.5 h-3.5 text-emerald-500" /> Earnings
+                    </div>
                     <span className="font-medium text-foreground">{formatCurrency(tech.earnings_total)}</span>
                   </div>
                   <div className="flex flex-col gap-1 text-muted-foreground">
-                    <div className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Last Seen</div>
-                    <span className="font-medium text-foreground text-xs" title={tech.last_seen_at || ''}>
-                      {tech.last_seen_at ? formatDistanceToNow(new Date(tech.last_seen_at), { addSuffix: true }) : 'Never'}
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" /> Last Seen
+                    </div>
+                    <span
+                      className="font-medium text-foreground text-xs"
+                      title={tech.last_seen_at || ''}
+                    >
+                      {tech.last_seen_at
+                        ? formatDistanceToNow(new Date(tech.last_seen_at), { addSuffix: true })
+                        : 'Never'}
                     </span>
                   </div>
                 </div>
@@ -105,6 +184,55 @@ export default function Technicians() {
           ))}
         </div>
       )}
+
+      {/* Add Technician Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Technician</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label htmlFor="tech-name">Full Name</Label>
+              <Input
+                id="tech-name"
+                placeholder="e.g. Ahmed Al-Rashidi"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tech-phone">
+                Phone Number <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="tech-phone"
+                placeholder="+966 5X XXX XXXX"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                type="tel"
+              />
+              <p className="text-xs text-muted-foreground">
+                The technician will use this number to log into the driver app.
+              </p>
+            </div>
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+                disabled={createMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Adding...' : 'Add Technician'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

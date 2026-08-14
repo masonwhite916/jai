@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export type AdminUploadHeroImageBody = {
-  image: Blob;
-};
+export interface CreateTechnicianInput {
+  name?: string;
+  phone: string;
+}
