@@ -13,14 +13,14 @@ import { useJaiLocation } from '@/context/LocationContext';
 import { apiFetch } from '@/lib/api';
 import * as Haptics from 'expo-haptics';
 
-function MenuItem({ icon, label, sublabel, onPress, accent, rightLabel }: {
+function MenuItem({ icon, label, sublabel, onPress, accent, rightLabel, disabled }: {
   icon: string; label: string; sublabel?: string;
-  onPress?: () => void; accent?: boolean; rightLabel?: string;
+  onPress?: () => void; accent?: boolean; rightLabel?: string; disabled?: boolean;
 }) {
   const { isRTL, font } = useLanguage();
   const rowDir = isRTL ? 'row-reverse' : 'row';
   return (
-    <TouchableOpacity style={[styles.menuItem, { flexDirection: rowDir }]} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={[styles.menuItem, { flexDirection: rowDir }, disabled && { opacity: 0.4 }]} onPress={disabled ? undefined : onPress} activeOpacity={disabled ? 1 : 0.7}>
       <View style={[styles.menuIcon, accent && styles.menuIconAccent]}>
         <Ionicons name={icon as any} size={20} color={accent ? '#E74C3C' : '#2D1B69'} />
       </View>
@@ -190,7 +190,7 @@ export default function ProfileScreen() {
             <MenuItem icon="shield-checkmark-outline" label={t('privacyPolicy')} onPress={() => Linking.openURL('https://jaiksa.replit.app/jai-web/privacy')} />
             <MenuItem icon="swap-horizontal-outline" label={t('switchRole')} onPress={handleSwitchRole} />
             <MenuItem icon="log-out-outline" label={t('signOut')} onPress={handleLogout} accent />
-            <MenuItem icon="trash-outline" label={t('deleteAccount')} onPress={handleDeleteAccount} accent />
+            <MenuItem icon="trash-outline" label={t('deleteAccount')} onPress={handleDeleteAccount} accent disabled={isDeleting} />
           </View>
         </View>
       </ScrollView>

@@ -104,9 +104,23 @@ router.post("/users/logout", requireAuth, async (req, res) => {
 // Permanently deletes the authenticated user and all associated personal data.
 // Job history (service_requests, jobs) is anonymised rather than deleted to
 // satisfy the 5-year financial-record retention requirement under Saudi PDPL.
+// Idempotent: returns 200 if the user row is already gone (handles double-tap
+// / retry on slow networks without surfacing a confusing error).
 router.delete("/users/me", requireAuth, async (req, res) => {
   const userId = req.userId!;
   try {
+    // Idempotency guard: if the user was already deleted (e.g. a retry after
+    // a network drop) just return success rather than 404/500.
+    const existing = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    if (!existing.length) {
+      res.json({ ok: true });
+      return;
+    }
+
     // 1. Collect service request IDs belonging to this customer so we can
     //    cascade through jobs → chat before removing the requests themselves.
     const userRequests = await db
