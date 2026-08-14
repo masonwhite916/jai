@@ -640,7 +640,7 @@ router.put("/admin/app-config/contact", requireAdmin, async (req, res) => {
 // ── PUT /api/admin/app-config/plans ───────────────────────────────────────────
 
 router.put("/admin/app-config/plans", requireAdmin, async (req, res) => {
-  const { updateAppPlans, type: _t } = await import("../lib/siteSettings");
+  const { updateAppPlans } = await import("../lib/siteSettings");
   const plans = req.body;
   if (!Array.isArray(plans)) { res.status(400).json({ error: "plans must be an array" }); return; }
   const updated = await updateAppPlans(plans);
