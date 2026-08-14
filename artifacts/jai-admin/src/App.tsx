@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from '@ta
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, Router as WouterRouter, useLocation } from 'wouter';
-import { setAuthTokenGetter } from '@workspace/api-client-react';
+import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
+import { RAILWAY_API_URL } from '@/config';
 
 import NotFound from '@/pages/not-found';
 import Login from '@/pages/login';
@@ -12,6 +13,9 @@ import Technicians from '@/pages/technicians';
 import MapView from '@/pages/map';
 import Layout from '@/components/layout/shell';
 import { useEffect } from 'react';
+
+// Route all API calls to the Railway backend
+setBaseUrl(RAILWAY_API_URL);
 
 // Setup auth token for all api client requests
 setAuthTokenGetter(() => {

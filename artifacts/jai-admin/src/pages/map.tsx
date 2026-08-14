@@ -4,6 +4,7 @@ import { useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminListR
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import { Icon, divIcon } from 'leaflet';
 import { MapPin, Navigation, Phone, Car, Clock, Wifi, WifiOff, AlertTriangle, BellOff, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { RAILWAY_WS_URL } from '@/config';
 import { formatDistanceToNow, differenceInMinutes } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -166,8 +167,7 @@ export default function MapView() {
       existing.close();
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    const ws = new WebSocket(RAILWAY_WS_URL);
     wsRef.current = ws;
     setWsStatus('connecting');
 

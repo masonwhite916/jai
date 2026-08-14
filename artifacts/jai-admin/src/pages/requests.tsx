@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { RAILWAY_WS_URL } from '@/config';
 import { useAdminListRequests, getAdminListRequestsQueryKey, useAdminListTechnicians, getAdminListTechniciansQueryKey, useAdminReassignJob, useAdminCancelRequest } from '@workspace/api-client-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { Search, Filter, MoreVertical, MapPin, Car, AlertCircle, Bell, X, User, FileText, Clock, Phone, Wrench, ChevronRight } from 'lucide-react';
@@ -108,8 +109,7 @@ function useAdminWs(onNewRequest: (requestId: number, serviceType: string, custo
       existing.close();
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+    const ws = new WebSocket(RAILWAY_WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => ws.send(JSON.stringify({ type: 'auth', token }));
