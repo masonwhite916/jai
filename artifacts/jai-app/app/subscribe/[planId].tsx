@@ -595,8 +595,8 @@ export default function SubscribeScreen() {
           </View>
         )}
 
-        {/* ── Promo code (card only) ── */}
-        {payMethod === 'card' && (
+        {/* ── Promo code ── */}
+        {payMethod !== 'apple' && (
           <View style={styles.promoSection}>
             <Text style={[styles.sectionLabel, { fontFamily: font.bold, textAlign: align, marginBottom: 10 }]}>
               {isRTL ? 'كود الخصم' : 'Promo code'}
