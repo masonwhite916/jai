@@ -7,3 +7,4 @@
 - [Next.js monorepo migration](nextjs-monorepo-migration.md) — six required fixes when adding Next.js to this monorepo; see topic file before touching config
 - [React #418 in preview](jai-web-hydration-418.md) — preview instrumentation causes it on SSR-hydrating artifacts; clean browser shows zero errors; don't chase app fixes
 - [Tester browser reports hover:none](tester-hover-none.md) — Tailwind v4 media-gates hover: utilities, so the testing subagent can't verify hover/press styles; verify via emitted CSS instead
+- [Admin panel uses Railway backend](railway-backend.md) — jai-admin & APK hit an external Railway server, not the local api-server; don't debug admin data against local logs/DB
