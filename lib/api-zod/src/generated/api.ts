@@ -350,7 +350,7 @@ export const AdminUpdateThemeResponse = zod.object({
  * @summary Upload a custom hero background image
  */
 export const AdminUploadHeroImageBody = zod.object({
-  "image": zod.instanceof(File)
+  "image": zod.any()
 })
 
 export const AdminUploadHeroImageResponse = zod.object({
