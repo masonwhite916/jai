@@ -1,19 +1,16 @@
 import { Router, type IRouter } from "express";
-import rateLimit from "express-rate-limit";
-import { sendVerification, checkVerification, normalizePhone } from "../lib/taqnyatClient";
 import { generateToken, hashToken, tokenExpiresAt } from "../lib/tokenAuth";
 import { db, users, userSessions, vehicles } from "@workspace/db";
 import { eq, and, gt, isNull } from "drizzle-orm";
 import { toVehicleDto } from "../lib/vehicleDto";
 
-// Max 5 OTP requests per IP per 10 minutes
-const otpLimiter = rateLimit({
-  windowMs:        10 * 60 * 1000,
-  max:             5,
-  standardHeaders: true,
-  legacyHeaders:   false,
-  message:         { error: "Too many OTP requests. Please wait before trying again." },
-});
+/** Normalise a Saudi phone number to E.164 (+966XXXXXXXXX). */
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.startsWith("966")) return `+966${digits.slice(3)}`;
+  if (digits.startsWith("0"))   return `+966${digits.slice(1)}`;
+  return `+966${digits}`;
+}
 
 const router: IRouter = Router();
 
@@ -24,50 +21,28 @@ const TECH_INVITE_CODE: string | undefined = process.env.TECHNICIAN_INVITE_CODE;
 
 // ── POST /api/auth/send-otp ───────────────────────────────────────────────────
 // Body: { phone: string, invite_code?: string }
-// When invite_code is supplied it is validated BEFORE the SMS is sent so that
-// a wrong code never burns a verification credit.
-router.post("/auth/send-otp", otpLimiter, async (req, res) => {
-  try {
-    const { phone, invite_code } = req.body as { phone?: string; invite_code?: string };
-    if (!phone || phone.replace(/\D/g, "").length < 9) {
-      res.status(400).json({ error: "Invalid phone number" });
+// OTP is disabled — any number proceeds directly to verify-otp.
+router.post("/auth/send-otp", async (req, res) => {
+  const { phone, invite_code } = req.body as { phone?: string; invite_code?: string };
+  if (!phone || phone.replace(/\D/g, "").length < 9) {
+    res.status(400).json({ error: "Invalid phone number" });
+    return;
+  }
+
+  if (invite_code !== undefined && invite_code !== "") {
+    const isValidCode =
+      TECH_INVITE_CODE !== undefined &&
+      TECH_INVITE_CODE.length > 0 &&
+      typeof invite_code === "string" &&
+      invite_code.trim() === TECH_INVITE_CODE;
+
+    if (!isValidCode) {
+      res.status(400).json({ error: "Invalid invite code. Please check it and try again.", field: "invite_code" });
       return;
     }
-
-    // If an invite_code was provided, validate it now — before spending an SMS credit.
-    if (invite_code !== undefined && invite_code !== "") {
-      const isValidCode =
-        TECH_INVITE_CODE !== undefined &&
-        TECH_INVITE_CODE.length > 0 &&
-        typeof invite_code === "string" &&
-        invite_code.trim() === TECH_INVITE_CODE;
-
-      if (!isValidCode) {
-        res.status(400).json({ error: "Invalid invite code. Please check it and try again.", field: "invite_code" });
-        return;
-      }
-    }
-
-    // OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
-    // Skip the actual SMS send; just normalise and return ok so the client
-    // can proceed. Re-enable by restoring: await sendVerification(phone)
-    const normalised = normalizePhone(phone);
-    res.json({ ok: true, phone: normalised });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    const isServiceError =
-      message.includes("TAQNYAT_BEARER_TOKEN") ||
-      message.includes("balance too low") ||
-      message.includes("sender name not activated");
-    const isBadNumber = message.includes("not recognised");
-    if (isServiceError) {
-      res.status(503).json({ error: "SMS service is temporarily unavailable. Please try again later." });
-    } else if (isBadNumber) {
-      res.status(400).json({ error: "This phone number is not recognised. Please check and try again." });
-    } else {
-      res.status(500).json({ error: "Could not send verification code. Please try again." });
-    }
   }
+
+  res.json({ ok: true, phone: normalizePhone(phone) });
 });
 
 // ── POST /api/auth/verify-otp ─────────────────────────────────────────────────
@@ -97,12 +72,7 @@ router.post("/auth/verify-otp", async (req, res) => {
       return;
     }
 
-    // OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
-    // Skip checkVerification; accept any code. Re-enable by restoring:
-    //   const { valid, status } = await checkVerification(phone, otp);
-    //   if (status === "expired") { res.status(400).json({...}); return; }
-    //   if (!valid) { res.status(400).json({...}); return; }
-
+    // OTP is disabled — all numbers proceed without code verification.
     const canonicalPhone = normalizePhone(phone);
 
     // Upsert user
@@ -176,8 +146,8 @@ router.post("/auth/verify-otp", async (req, res) => {
       },
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: message });
+    console.error("[auth] verify-otp error:", err);
+    res.status(500).json({ error: "Verification failed. Please try again." });
   }
 });
 

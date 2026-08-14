@@ -22,16 +22,4 @@ export function runStartupChecks(): void {
     );
   }
 
-  // ── Taqnyat / OTP ──────────────────────────────────────────────────────────
-  const hasTaqnyat = !!process.env["TAQNYAT_BEARER_TOKEN"];
-
-  if (!hasTaqnyat) {
-    logger.warn(
-      {
-        service: "taqnyat",
-        missingEnvVars: ["TAQNYAT_BEARER_TOKEN"],
-      },
-      "STARTUP WARNING: TAQNYAT_BEARER_TOKEN is not set — OTP send will fail for real phone numbers (test bypass with TEST_PHONE_NUMBER still works)",
-    );
-  }
 }
