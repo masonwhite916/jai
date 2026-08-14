@@ -223,7 +223,7 @@ paths:
               properties:
                 image:
                   type: string
-                  format: binary
+                  description: Base64-encoded image data or multipart binary field
               required: [image]
       responses:
         "200":
