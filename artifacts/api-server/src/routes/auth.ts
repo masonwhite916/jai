@@ -16,63 +16,34 @@ const router: IRouter = Router();
 
 // Server-side invite code gate for new technician accounts.
 // Fail-closed: if TECHNICIAN_INVITE_CODE is not set, technician signup is disabled.
-// Existing users' roles are NEVER changed via OTP flow.
+// Existing users' roles are NEVER changed via the login flow.
 const TECH_INVITE_CODE: string | undefined = process.env.TECHNICIAN_INVITE_CODE;
 
-// ── POST /api/auth/send-otp ───────────────────────────────────────────────────
-// Body: { phone: string, invite_code?: string }
-// OTP is disabled — any number proceeds directly to verify-otp.
-router.post("/auth/send-otp", async (req, res) => {
-  const { phone, invite_code } = req.body as { phone?: string; invite_code?: string };
-  if (!phone || phone.replace(/\D/g, "").length < 9) {
-    res.status(400).json({ error: "Invalid phone number" });
-    return;
-  }
-
-  if (invite_code !== undefined && invite_code !== "") {
-    const isValidCode =
-      TECH_INVITE_CODE !== undefined &&
-      TECH_INVITE_CODE.length > 0 &&
-      typeof invite_code === "string" &&
-      invite_code.trim() === TECH_INVITE_CODE;
-
-    if (!isValidCode) {
-      res.status(400).json({ error: "Invalid invite code. Please check it and try again.", field: "invite_code" });
-      return;
-    }
-  }
-
-  res.json({ ok: true, phone: normalizePhone(phone) });
-});
-
-// ── POST /api/auth/verify-otp ─────────────────────────────────────────────────
-// Body: { phone, otp, name?, invite_code?, device_name?, platform? }
-//
+// ── Shared phone-login handler ────────────────────────────────────────────────
 // Role policy:
 //   - Existing user → role is NEVER changed; invite_code ignored.
 //   - New user + valid invite_code → role = 'technician'.
 //   - New user, no/invalid code   → role = 'customer'.
-//
-// Returns: { ok, token, user }
-router.post("/auth/verify-otp", async (req, res) => {
+async function phoneLogin(
+  req: import("express").Request,
+  res: import("express").Response,
+) {
   try {
     const {
-      phone, otp, name, invite_code, device_name, platform,
+      phone, name, invite_code, device_name, platform,
     } = req.body as {
       phone?:       string;
-      otp?:         string;
       name?:        string;
       invite_code?: string;
       device_name?: string;
       platform?:    string;
     };
 
-    if (!phone || !otp) {
-      res.status(400).json({ error: "phone and otp are required" });
+    if (!phone || phone.replace(/\D/g, "").length < 9) {
+      res.status(400).json({ error: "Invalid phone number" });
       return;
     }
 
-    // OTP is disabled — all numbers proceed without code verification.
     const canonicalPhone = normalizePhone(phone);
 
     // Upsert user
@@ -146,10 +117,45 @@ router.post("/auth/verify-otp", async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("[auth] verify-otp error:", err);
-    res.status(500).json({ error: "Verification failed. Please try again." });
+    console.error("[auth] login error:", err);
+    res.status(500).json({ error: "Login failed. Please try again." });
   }
+}
+
+// ── POST /api/auth/login ──────────────────────────────────────────────────────
+// Primary phone-login endpoint (no OTP required).
+// Body: { phone, name?, invite_code?, device_name?, platform? }
+// Returns: { ok, token, user }
+router.post("/auth/login", phoneLogin);
+
+// ── POST /api/auth/send-otp  (legacy alias) ───────────────────────────────────
+// Kept for backward-compat with old app builds. Just validates the phone and
+// returns ok so the caller can proceed to verify-otp.
+router.post("/auth/send-otp", async (req, res) => {
+  const { phone, invite_code } = req.body as { phone?: string; invite_code?: string };
+  if (!phone || phone.replace(/\D/g, "").length < 9) {
+    res.status(400).json({ error: "Invalid phone number" });
+    return;
+  }
+  if (invite_code !== undefined && invite_code !== "") {
+    const isValidCode =
+      TECH_INVITE_CODE !== undefined &&
+      TECH_INVITE_CODE.length > 0 &&
+      typeof invite_code === "string" &&
+      invite_code.trim() === TECH_INVITE_CODE;
+    if (!isValidCode) {
+      res.status(400).json({ error: "Invalid invite code. Please check it and try again.", field: "invite_code" });
+      return;
+    }
+  }
+  res.json({ ok: true, phone });
 });
+
+// ── POST /api/auth/verify-otp  (legacy alias) ────────────────────────────────
+// Kept for backward-compat with old app builds. `otp` field is accepted but
+// ignored — login proceeds on phone alone.
+// Body: { phone, otp?, name?, invite_code?, device_name?, platform? }
+router.post("/auth/verify-otp", phoneLogin);
 
 // ── POST /api/auth/logout ─────────────────────────────────────────────────────
 // Revokes only the calling session (sets revoked_at). Other devices unaffected.

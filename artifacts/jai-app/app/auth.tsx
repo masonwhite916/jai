@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity,
   TextInput, Platform, ScrollView, KeyboardAvoidingView, Image,
@@ -14,10 +14,6 @@ import { getApiBaseUrl } from '@/lib/api';
 import { perfMark, perfMeasure } from '@/lib/perf';
 
 const API_BASE = getApiBaseUrl();
-
-// OTP TEMPORARILY BYPASSED — Taqnyat API under maintenance.
-// Re-enable by restoring: type Step = 'phone' | 'otp';
-type Step = 'phone';
 
 export default function Auth() {
   const insets = useSafeAreaInsets();
@@ -36,15 +32,12 @@ export default function Auth() {
     setError('');
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // OTP TEMPORARILY BYPASSED — call verify-otp directly with a dummy code.
-    // Re-enable the send-otp step and OTP UI when Taqnyat is back.
     try {
-      const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+      const resp = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           phone,
-          otp: '000000',
           platform: Platform.OS,
           device_name: Platform.OS === 'ios'
             ? `iOS ${Platform.Version}`
@@ -117,41 +110,38 @@ export default function Auth() {
         contentContainerStyle={[styles.formContainer, { paddingBottom: insets.bottom + 24 + (Platform.OS === 'web' ? 34 : 0) }]}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Phone entry — OTP step removed while Taqnyat API is under maintenance */}
-        <>
-          <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterPhone')}</Text>
-          <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>{t('phoneHint')}</Text>
+        <Text style={[styles.heading, { fontFamily: font.bold, textAlign: align }]}>{t('enterPhone')}</Text>
+        <Text style={[styles.hint, { fontFamily: font.regular, textAlign: align }]}>{t('phoneHint')}</Text>
 
-          <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
-            <View style={styles.countryCode}>
-              <Text style={[styles.countryText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
-            </View>
-            <TextInput
-              style={[styles.input, { fontFamily: font.medium, textAlign: 'left', flex: 1 }]}
-              placeholder="5X XXX XXXX"
-              placeholderTextColor="#C0C0D4"
-              value={phone}
-              onChangeText={setPhone}
-              keyboardType="phone-pad"
-              maxLength={10}
-            />
+        <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
+          <View style={styles.countryCode}>
+            <Text style={[styles.countryText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
           </View>
+          <TextInput
+            style={[styles.input, { fontFamily: font.medium, textAlign: 'left', flex: 1 }]}
+            placeholder="5X XXX XXXX"
+            placeholderTextColor="#C0C0D4"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={10}
+          />
+        </View>
 
-          {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
+        {!!error && <Text style={[styles.error, { fontFamily: font.regular, textAlign: align }]}>{error}</Text>}
 
-          <TouchableOpacity onPress={handlePhoneSubmit} activeOpacity={0.88} disabled={loading} style={styles.primaryBtnWrap}>
-            <LinearGradient
-              colors={loading ? ['#9CA3AF', '#9CA3AF'] : ['#2D1B69', '#6A2597']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={[styles.primaryBtn, { flexDirection: rowDir }]}
-            >
-              <Text style={[styles.primaryBtnText, { fontFamily: font.bold }]}>
-                {loading ? (isRTL ? 'جارٍ تسجيل الدخول…' : 'Signing in…') : (isRTL ? 'متابعة' : 'Continue')}
-              </Text>
-              {!loading && <Ionicons name={isRTL ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />}
-            </LinearGradient>
-          </TouchableOpacity>
-        </>
+        <TouchableOpacity onPress={handlePhoneSubmit} activeOpacity={0.88} disabled={loading} style={styles.primaryBtnWrap}>
+          <LinearGradient
+            colors={loading ? ['#9CA3AF', '#9CA3AF'] : ['#2D1B69', '#6A2597']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={[styles.primaryBtn, { flexDirection: rowDir }]}
+          >
+            <Text style={[styles.primaryBtnText, { fontFamily: font.bold }]}>
+              {loading ? (isRTL ? 'جارٍ تسجيل الدخول…' : 'Signing in…') : (isRTL ? 'متابعة' : 'Continue')}
+            </Text>
+            {!loading && <Ionicons name={isRTL ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />}
+          </LinearGradient>
+        </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.divRow}>
@@ -214,29 +204,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
   },
 
-  whatsappHint: {
-    alignItems: 'center', gap: 8, marginBottom: 26,
-  },
-
-  // OTP
-  backRow: { alignItems: 'center', gap: 8, marginBottom: 24 },
-  backText: { fontSize: 14, color: '#2D1B69' },
-  otpContainer: { position: 'relative', marginBottom: 8 },
-  otpRow: { gap: 12, justifyContent: 'center', zIndex: 1 },
-  otpBox: {
-    width: 50, height: 58, borderRadius: 14,
-    backgroundColor: '#FFFFFF', borderWidth: 2, borderColor: '#E0DBEF',
-    justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#2D1B69', shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07, shadowRadius: 6, elevation: 2,
-  },
-  otpBoxFilled: { borderColor: '#2D1B69', backgroundColor: '#EDE8F8' },
-  otpDigit: { fontSize: 26, color: '#120840' },
-  hiddenInput: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    opacity: 0, zIndex: 2,
-  },
-
   error: { fontSize: 13, color: '#E74C3C', marginBottom: 10 },
 
   primaryBtnWrap: {
@@ -249,8 +216,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', gap: 10,
   },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16 },
-
-  resendText: { fontSize: 13, color: '#9CA3AF' },
 
   divRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 24 },
   divLine: { flex: 1, height: 1, backgroundColor: '#E0DBEF' },

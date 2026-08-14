@@ -29,13 +29,12 @@ Roadside assistance platform for Saudi Arabia: customers request help (tow, batt
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
 - Mobile: Expo (SDK 54) + expo-router
-- SMS OTP: Taqnyat (Twilio-compatible wrapper in `api-server/src/lib/taqnyatClient.ts`)
 - Payments: Whop (subscriptions)
 
 ## Architecture decisions
 
 - One shared API server for all artifacts; clients reach it at `/api` via the shared proxy (web: `window.location.origin`; native: `Constants.expoConfig.extra.apiHost` injected by each app's `app.config.js`)
-- Auth is phone OTP → opaque bearer token stored per-app in AsyncStorage; roles: customer / technician / admin. Technician role granted ONLY at signup with valid `TECHNICIAN_INVITE_CODE`; existing users' roles never change via OTP flow
+- Auth is phone-only login → opaque bearer token stored per-app in AsyncStorage; roles: customer / technician / admin. Technician role granted ONLY at signup with valid `TECHNICIAN_INVITE_CODE`; existing users' roles never change via the login flow
 - Job status flow enforced server-side: pending → accepted → en_route → arrived → working → completed (cancelled from any active state); PATCH returns bare job row; accept conflicts → 409 (race) or 422 (already past pending)
 - Realtime: WS rooms — `technicians` (new_job broadcasts), `job:{id}` (status + tech location relay), admin room for dispatch panel
 - Driver app computes distance/ETA client-side (haversine, ~2 min/km) because the server doesn't fill `distance_km`/`eta_min`
@@ -44,7 +43,7 @@ Roadside assistance platform for Saudi Arabia: customers request help (tow, batt
 ## Product
 
 - Customer app: request help, live technician tracking, membership subscriptions (Whop)
-- Technician app: OTP sign-in with invite code, live job board, accept/work jobs with status flow, GPS streaming during active job, earnings summary
+- Technician app: phone sign-in with invite code, live job board, accept/work jobs with status flow, GPS streaming during active job, earnings summary
 - Dispatch panel: live map of jobs and technician locations, job management
 - Website: marketing + service info; deck: client presentation
 
@@ -56,7 +55,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Only one Expo artifact can own the expo dev domain (`router = "expo-domain"` in artifact.toml); the other mobile app's dev preview is degraded until swapped back (see agent memory: expo-multi-artifact-preview)
 - Expo dev server can serve a stale bundle after edits — restart the Expo workflow before judging changes
-- OTP sends real SMS via Taqnyat — no dev bypass; for API-level testing seed users with tokens directly in the dev DB
+- Login is phone-only (no OTP/SMS); for API-level testing seed users with tokens directly in the dev DB
 - `Alert.alert` is a no-op on RN-web — use each app's `lib/ui.ts` `notify`/`confirmAsync` helpers
 
 ## Pointers

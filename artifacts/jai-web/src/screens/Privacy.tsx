@@ -39,11 +39,11 @@ const sections = [
   {
     en: {
       title: '4. Third-Party Services',
-      body: 'To deliver our service we share limited data with the following trusted processors: Moyasar (payment processing — name, email, card token); Taqnyat (OTP SMS delivery — phone number only); Twilio (fallback SMS — phone number only); Google Maps / Nominatim (map display and address lookup — coordinates only, no account linkage). Each processor is contractually bound to use your data only for the specified purpose.',
+      body: 'To deliver our service we share limited data with the following trusted processors: Moyasar (payment processing — name, email, card token); Google Maps / Nominatim (map display and address lookup — coordinates only, no account linkage). Each processor is contractually bound to use your data only for the specified purpose.',
     },
     ar: {
       title: '٤. خدمات الأطراف الثالثة',
-      body: 'لتقديم خدمتنا، نشارك بيانات محدودة مع معالجي البيانات الموثوقين التاليين: موياسر (معالجة المدفوعات — الاسم والبريد الإلكتروني ورمز البطاقة)؛ تقنيات (توصيل رسائل OTP — رقم الهاتف فقط)؛ Twilio (رسائل SMS الاحتياطية — رقم الهاتف فقط)؛ خرائط Google / Nominatim (عرض الخرائط والبحث عن العناوين — الإحداثيات فقط، بدون ربط بالحساب). كل معالج مُلزَم تعاقدياً باستخدام بياناتك للغرض المحدد فقط.',
+      body: 'لتقديم خدمتنا، نشارك بيانات محدودة مع معالجي البيانات الموثوقين التاليين: موياسر (معالجة المدفوعات — الاسم والبريد الإلكتروني ورمز البطاقة)؛ خرائط Google / Nominatim (عرض الخرائط والبحث عن العناوين — الإحداثيات فقط، بدون ربط بالحساب). كل معالج مُلزَم تعاقدياً باستخدام بياناتك للغرض المحدد فقط.',
     },
   },
   {

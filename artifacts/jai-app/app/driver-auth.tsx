@@ -15,8 +15,6 @@ import { getApiBaseUrl } from '@/lib/api';
 
 const API_BASE = getApiBaseUrl();
 
-type Step = 'info' | 'otp';
-
 export default function DriverAuth() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -24,15 +22,13 @@ export default function DriverAuth() {
   const { login: appLogin, setRole } = useApp();
   const { lang, font, toggleLanguage } = useLanguage();
   const isAR = lang === 'ar';
-  const [step, setStep] = useState<Step>('info');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [inviteCode, setInviteCode] = useState('');
-  const [otp, setOtp] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSendOtp = async () => {
+  const handleLogin = async () => {
     if (!name.trim()) { setError(isAR ? 'أدخل اسمك الكامل' : 'Enter your full name'); return; }
     if (!inviteCode.trim()) { setError(isAR ? 'أدخل رمز الدعوة' : 'Enter your invite code'); return; }
     if (phone.replace(/\D/g, '').length < 9) { setError(isAR ? 'أدخل رقم هاتف صحيح' : 'Enter a valid phone number'); return; }
@@ -40,57 +36,31 @@ export default function DriverAuth() {
     setLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
-      const resp = await fetch(`${API_BASE}/api/auth/send-otp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, invite_code: inviteCode.trim() }),
-      });
-      const data = await resp.json() as { ok?: boolean; error?: string; field?: string };
-      if (!resp.ok || !data.ok) {
-        // If the server flags this as an invite_code error show it immediately
-        // on step 1 — the OTP step is never reached and no SMS credit is spent.
-        throw new Error(data.error ?? 'Failed to send OTP');
-      }
-      setStep('otp');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not send code. Try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleVerifyOtp = async () => {
-    if (otp.length < 6) { setError(isAR ? 'أدخل الرمز المكوّن من ٦ أرقام' : 'Enter the 6-digit code'); return; }
-    setError('');
-    setLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try {
-      const resp = await fetch(`${API_BASE}/api/auth/verify-otp`, {
+      const resp = await fetch(`${API_BASE}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            phone,
-            otp,
-            name: name.trim(),
-            invite_code: inviteCode.trim(),
-            platform: Platform.OS,
-            device_name: Platform.OS === 'ios'
-              ? `iOS ${Platform.Version}`
-              : Platform.OS === 'android'
-                ? `Android ${Platform.Version}`
-                : 'Web',
-          }),
+          phone,
+          name: name.trim(),
+          invite_code: inviteCode.trim(),
+          platform: Platform.OS,
+          device_name: Platform.OS === 'ios'
+            ? `iOS ${Platform.Version}`
+            : Platform.OS === 'android'
+              ? `Android ${Platform.Version}`
+              : 'Web',
+        }),
       });
-      const data = await resp.json() as { ok?: boolean; error?: string; token?: string; user?: any };
-      if (!resp.ok || !data.ok) throw new Error(data.error ?? 'Incorrect code');
+      const data = await resp.json() as { ok?: boolean; error?: string; field?: string; token?: string; user?: any };
+      if (!resp.ok || !data.ok) {
+        throw new Error(data.error ?? 'Login failed');
+      }
       const apiUser = data.user ?? {};
 
       // Gate on server-returned role — if the invite code was invalid the server
-      // will have created/kept a 'customer' account. Send the user back to step 1
-      // so they can correct the invite code immediately without re-entering the OTP.
+      // will have created/kept a 'customer' account. Show an error immediately
+      // so they can correct the invite code.
       if (apiUser.role !== 'technician') {
-        setStep('info');
-        setOtp('');
         setError(isAR
           ? 'رمز الدعوة غير صحيح. تواصل مع المشرف للحصول على رمز صالح.'
           : 'Invalid invite code. Please check it and try again.');
@@ -106,7 +76,6 @@ export default function DriverAuth() {
         points:     apiUser.points     ?? 0,
         vehicles:   [],
       };
-      // Store auth in AppContext and as Driver
       await appLogin(mergedUser, data.token);
       await setRole('technician');
       await driverLogin({
@@ -122,7 +91,7 @@ export default function DriverAuth() {
       });
       router.replace('/(driver)');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Verification failed. Try again.');
+      setError(err instanceof Error ? err.message : 'Login failed. Try again.');
     } finally {
       setLoading(false);
     }
@@ -135,7 +104,6 @@ export default function DriverAuth() {
   };
 
   const handleBack = async () => {
-    if (step === 'otp') { setStep('info'); setOtp(''); setError(''); return; }
     await setRole(null);
     router.replace('/role');
   };
@@ -174,133 +142,83 @@ export default function DriverAuth() {
         contentContainerStyle={[styles.form, { paddingBottom: insets.bottom + 32 + (Platform.OS === 'web' ? 34 : 0) }]}
         keyboardShouldPersistTaps="handled"
       >
-        {step === 'info' ? (
-          <>
-            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
-              {isAR ? 'الاسم الكامل' : 'Full name'}
-            </Text>
-            <TextInput
-              style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
-              placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
-              placeholderTextColor="#9CA3AF"
-              value={name}
-              onChangeText={setName}
-              autoCapitalize="words"
-            />
+        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
+          {isAR ? 'الاسم الكامل' : 'Full name'}
+        </Text>
+        <TextInput
+          style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+          placeholder={isAR ? 'أحمد الدوسري' : 'Ahmed Al-Dossari'}
+          placeholderTextColor="#9CA3AF"
+          value={name}
+          onChangeText={setName}
+          autoCapitalize="words"
+        />
 
-            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
-              {isAR ? 'رمز الدعوة' : 'Invite code'}
-            </Text>
-            <TextInput
-              style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
-              placeholder={isAR ? 'JAI-TECH-XXXX' : 'JAI-TECH-XXXX'}
-              placeholderTextColor="#9CA3AF"
-              value={inviteCode}
-              onChangeText={setInviteCode}
-              autoCapitalize="characters"
-              autoCorrect={false}
-            />
+        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
+          {isAR ? 'رمز الدعوة' : 'Invite code'}
+        </Text>
+        <TextInput
+          style={[styles.input, { fontFamily: font.medium, textAlign: isAR ? 'right' : 'left' }]}
+          placeholder="JAI-TECH-XXXX"
+          placeholderTextColor="#9CA3AF"
+          value={inviteCode}
+          onChangeText={setInviteCode}
+          autoCapitalize="characters"
+          autoCorrect={false}
+        />
 
-            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
-              {isAR ? 'رقم الجوال' : 'Phone number'}
-            </Text>
-            <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
-              <View style={styles.flag}>
-                <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
-              </View>
-              <TextInput
-                style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: 'left' }]}
-                placeholder="05X XXX XXXX"
-                placeholderTextColor="#9CA3AF"
-                value={phone}
-                onChangeText={setPhone}
-                keyboardType="phone-pad"
-                maxLength={10}
-              />
-            </View>
+        <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left', marginTop: 16 }]}>
+          {isAR ? 'رقم الجوال' : 'Phone number'}
+        </Text>
+        <View style={[styles.phoneRow, { flexDirection: 'row-reverse' }]}>
+          <View style={styles.flag}>
+            <Text style={[styles.flagText, { fontFamily: font.medium }]}>🇸🇦 +966</Text>
+          </View>
+          <TextInput
+            style={[styles.input, { flex: 1, fontFamily: font.medium, textAlign: 'left' }]}
+            placeholder="05X XXX XXXX"
+            placeholderTextColor="#9CA3AF"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            maxLength={10}
+          />
+        </View>
 
-            {!!error && (
-              <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
-            )}
-
-            <TouchableOpacity activeOpacity={0.85} onPress={handleSendOtp} disabled={loading} style={styles.primaryWrap}>
-              <LinearGradient
-                colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={styles.primaryBtn}
-              >
-                <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
-                  {loading ? (isAR ? 'جارٍ الإرسال...' : 'Sending…') : (isAR ? 'إرسال الرمز' : 'Send code')}
-                </Text>
-                <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.divRow}>
-              <View style={styles.divLine} />
-              <Text style={[styles.divText, { fontFamily: font.regular }]}>{isAR ? 'أو' : 'or'}</Text>
-              <View style={styles.divLine} />
-            </View>
-
-            <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
-              <Ionicons name="person-outline" size={18} color="#6B7280" />
-              <Text style={[styles.guestText, { fontFamily: font.medium }]}>
-                {isAR ? 'متابعة كضيف' : 'Continue as guest'}
-              </Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <Text style={[styles.label, { fontFamily: font.semibold, textAlign: isAR ? 'right' : 'left' }]}>
-              {isAR ? 'رمز التحقق' : 'Verification code'}
-            </Text>
-            <Text style={[styles.hint, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>
-              {isAR
-                ? `أُرسل رمز مكوّن من ٦ أرقام إلى +966 ${phone} عبر SMS`
-                : `A 6-digit code was sent to +966 ${phone} via SMS`}
-            </Text>
-            <TextInput
-              style={[styles.input, { fontFamily: font.medium, textAlign: 'center', letterSpacing: 6, fontSize: 22 }]}
-              placeholder="------"
-              placeholderTextColor="#9CA3AF"
-              value={otp}
-              onChangeText={setOtp}
-              keyboardType="number-pad"
-              maxLength={6}
-              autoFocus
-            />
-
-            {!!error && (
-              <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
-            )}
-
-            <TouchableOpacity activeOpacity={0.85} onPress={handleVerifyOtp} disabled={loading} style={styles.primaryWrap}>
-              <LinearGradient
-                colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={styles.primaryBtn}
-              >
-                <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
-                  {loading ? (isAR ? 'جارٍ التحقق...' : 'Verifying…') : (isAR ? 'تأكيد' : 'Verify')}
-                </Text>
-                <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <TouchableOpacity onPress={() => handleSendOtp()} style={{ alignItems: 'center', marginTop: 16 }}>
-              <Text style={[styles.backText, { fontFamily: font.regular }]}>
-                {isAR ? 'إعادة إرسال الرمز' : 'Resend code'}
-              </Text>
-            </TouchableOpacity>
-          </>
+        {!!error && (
+          <Text style={[styles.error, { fontFamily: font.regular, textAlign: isAR ? 'right' : 'left' }]}>{error}</Text>
         )}
+
+        <TouchableOpacity activeOpacity={0.85} onPress={handleLogin} disabled={loading} style={styles.primaryWrap}>
+          <LinearGradient
+            colors={loading ? ['#555', '#555'] : ['#C21875', '#7B2A9E']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+            style={styles.primaryBtn}
+          >
+            <Text style={[styles.primaryText, { fontFamily: font.bold }]}>
+              {loading ? (isAR ? 'جارٍ تسجيل الدخول...' : 'Signing in…') : (isAR ? 'تسجيل الدخول' : 'Sign in')}
+            </Text>
+            <Ionicons name={isAR ? 'arrow-back-outline' : 'arrow-forward-outline'} size={18} color="#FFF" />
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <View style={styles.divRow}>
+          <View style={styles.divLine} />
+          <Text style={[styles.divText, { fontFamily: font.regular }]}>{isAR ? 'أو' : 'or'}</Text>
+          <View style={styles.divLine} />
+        </View>
+
+        <TouchableOpacity onPress={handleGuest} style={styles.guestBtn} activeOpacity={0.8}>
+          <Ionicons name="person-outline" size={18} color="#6B7280" />
+          <Text style={[styles.guestText, { fontFamily: font.medium }]}>
+            {isAR ? 'متابعة كضيف' : 'Continue as guest'}
+          </Text>
+        </TouchableOpacity>
 
         <TouchableOpacity onPress={handleBack} style={styles.backBtn} activeOpacity={0.7}>
           <Ionicons name="arrow-back-outline" size={15} color="#9CA3AF" />
           <Text style={[styles.backText, { fontFamily: font.regular }]}>
-            {step === 'otp'
-              ? (isAR ? 'تغيير رقم الجوال' : 'Change number')
-              : (isAR ? 'العودة' : 'Back to role selection')}
+            {isAR ? 'العودة' : 'Back to role selection'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
@@ -332,7 +250,6 @@ const styles = StyleSheet.create({
   form: { paddingHorizontal: 24, paddingTop: 32 },
 
   label: { color: '#6B7280', fontSize: 13, marginBottom: 8 },
-  hint: { color: '#9CA3AF', fontSize: 13, marginBottom: 20, lineHeight: 19 },
   input: {
     backgroundColor: '#FFFFFF', borderRadius: 14,
     borderWidth: 1.5, borderColor: '#EBEBF5',

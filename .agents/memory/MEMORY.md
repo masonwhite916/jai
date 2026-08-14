@@ -3,7 +3,7 @@
 - [JAI design sync](jai-design-sync.md) — share brand colors, fonts, and i18n keys across JAI artifacts
 - [Driver app abandoned](driver-app-abandoned.md) — jai-driver is abandoned; never edit artifacts/jai-driver
 - [Expo multi-artifact dev preview](expo-multi-artifact-preview.md) — the expo dev domain serves the single artifact with router="expo-domain"; set the other's router to "path" to flip it
-- [Taqnyat OTP integration](taqnyat-otp.md) — Taqnyat Verify replaces Twilio; same public API surface; single POST endpoint; result codes not HTTP status
+- [Phone-only login](phone-login.md) — OTP/Taqnyat fully removed; login is POST /api/auth/login with phone only; legacy /auth/send-otp and /auth/verify-otp kept as no-op aliases for old APKs
 - [Next.js monorepo migration](nextjs-monorepo-migration.md) — six required fixes when adding Next.js to this monorepo; see topic file before touching config
 - [React #418 in preview](jai-web-hydration-418.md) — preview instrumentation causes it on SSR-hydrating artifacts; clean browser shows zero errors; don't chase app fixes
 - [Tester browser reports hover:none](tester-hover-none.md) — Tailwind v4 media-gates hover: utilities, so the testing subagent can't verify hover/press styles; verify via emitted CSS instead

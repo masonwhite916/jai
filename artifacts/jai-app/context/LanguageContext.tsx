@@ -9,17 +9,9 @@ export const translations = {
   en: {
     // Auth
     enterPhone: 'Enter your mobile number',
-    phoneHint: "We'll send a verification code to confirm your number",
-    sendOTP: 'Send OTP',
-    enterOTP: 'Enter Verification Code',
-    otpSentTo: 'Sent to',
-    verifyAndContinue: 'Verify & Continue',
-    verifying: 'Verifying...',
+    phoneHint: 'Enter your number to sign in instantly',
     continueAsGuest: 'Continue as Guest',
-    resendCode: 'Resend code in 60s',
-    changeNumber: 'Change Number',
     phoneError: 'Please enter a valid phone number',
-    otpError: 'Please enter the 4-digit OTP',
     or: 'or',
     // Onboarding
     slide1Title: 'We Arrive When\nYou Need Us',
@@ -284,17 +276,9 @@ export const translations = {
   ar: {
     // Auth
     enterPhone: 'أدخل رقم جوالك',
-    phoneHint: 'سنرسل رمز تحقق لتأكيد رقمك',
-    sendOTP: 'إرسال رمز التحقق',
-    enterOTP: 'أدخل رمز التحقق',
-    otpSentTo: 'تم الإرسال إلى',
-    verifyAndContinue: 'تحقق ومتابعة',
-    verifying: 'جارٍ التحقق...',
+    phoneHint: 'أدخل رقمك لتسجيل الدخول فورًا',
     continueAsGuest: 'متابعة كزائر',
-    resendCode: 'إعادة إرسال الرمز خلال 60 ثانية',
-    changeNumber: 'تغيير الرقم',
     phoneError: 'يرجى إدخال رقم جوال صحيح',
-    otpError: 'يرجى إدخال رمز التحقق المكون من 4 أرقام',
     or: 'أو',
     // Onboarding
     slide1Title: 'نصل إليك\nعندما تحتاجنا',
