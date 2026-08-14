@@ -393,6 +393,42 @@ router.patch("/admin/requests/:id/cancel", requireAdmin, async (req, res) => {
   }
 });
 
+// ── GET /api/admin/users ──────────────────────────────────────────────────────
+
+router.get("/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const { role: roleFilter } = req.query as { role?: string };
+
+    const rows = await db
+      .select({
+        id:             users.id,
+        phone:          users.phone,
+        name:           users.name,
+        role:           users.role,
+        membership:     users.membership,
+        points:         users.points,
+        jobs_completed: users.jobs_completed,
+        created_at:     users.created_at,
+      })
+      .from(users)
+      .orderBy(desc(users.created_at));
+
+    const filtered = roleFilter
+      ? rows.filter((r) => r.role === roleFilter)
+      : rows;
+
+    res.json({
+      users: filtered.map((u) => ({
+        ...u,
+        created_at: u.created_at.toISOString(),
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 // ── POST /api/admin/technicians ───────────────────────────────────────────────
 
 router.post("/admin/technicians", requireAdmin, async (req, res) => {

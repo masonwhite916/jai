@@ -203,6 +203,28 @@ export const AdminCreateTechnicianResponse = zod.object({
 
 
 /**
+ * All customers and technicians with membership, join date, and request count.
+ * @summary List all registered users
+ */
+export const AdminListUsersQueryParams = zod.object({
+  "role": zod.enum(['customer', 'technician']).optional()
+})
+
+export const AdminListUsersResponse = zod.object({
+  "users": zod.array(zod.object({
+  "id": zod.number(),
+  "phone": zod.string(),
+  "name": zod.string().nullish(),
+  "role": zod.string(),
+  "membership": zod.string(),
+  "points": zod.number(),
+  "jobs_completed": zod.number(),
+  "created_at": zod.string()
+}))
+})
+
+
+/**
  * Returns saved banner text overrides and theme colour overrides. Admin token required.
  * @summary Get current site settings (banners + theme)
  */

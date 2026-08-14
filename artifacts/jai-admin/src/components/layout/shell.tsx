@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'wouter';
-import { Activity, LayoutDashboard, Map as MapIcon, Users, LogOut, Menu, X } from 'lucide-react';
+import { Activity, LayoutDashboard, Map as MapIcon, Users, UserCircle, LogOut, Menu, X } from 'lucide-react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
@@ -26,6 +26,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { label: 'Map View', path: '/map', icon: MapIcon },
     { label: 'Requests', path: '/requests', icon: Activity },
     { label: 'Technicians', path: '/technicians', icon: Users },
+    { label: 'Users', path: '/users', icon: UserCircle },
   ];
 
   return (

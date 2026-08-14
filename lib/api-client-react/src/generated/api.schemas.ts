@@ -91,6 +91,18 @@ export interface AdminTechnician {
   last_seen_at?: string | null;
 }
 
+export interface AdminUser {
+  id: number;
+  phone: string;
+  /** @nullable */
+  name?: string | null;
+  role: string;
+  membership: string;
+  points: number;
+  jobs_completed: number;
+  created_at: string;
+}
+
 export interface CreateTechnicianInput {
   name?: string;
   phone: string;
@@ -171,6 +183,22 @@ export type AdminListRequests200 = {
 
 export type AdminListTechnicians200 = {
   technicians: AdminTechnician[];
+};
+
+export type AdminListUsersParams = {
+role?: AdminListUsersRole;
+};
+
+export type AdminListUsersRole = typeof AdminListUsersRole[keyof typeof AdminListUsersRole];
+
+
+export const AdminListUsersRole = {
+  customer: 'customer',
+  technician: 'technician',
+} as const;
+
+export type AdminListUsers200 = {
+  users: AdminUser[];
 };
 
 export type AdminUploadHeroImageBody = {

@@ -177,6 +177,33 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── Admin users ─────────────────────────────────────────────────────────────
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: List all registered users
+      description: All customers and technicians with membership, join date, and request count.
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [customer, technician]
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AdminUser"
+                required: [users]
+
   # ── Admin site settings ─────────────────────────────────────────────────────
   /admin/site-settings:
     get:
@@ -444,6 +471,28 @@ components:
         last_seen_at:
           type: ["string", "null"]
       required: [id, phone, jobs_completed, earnings_total, active_jobs]
+
+    # ── Admin user ────────────────────────────────────────────────────────────
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        phone:
+          type: string
+        name:
+          type: ["string", "null"]
+        role:
+          type: string
+        membership:
+          type: string
+        points:
+          type: integer
+        jobs_completed:
+          type: integer
+        created_at:
+          type: string
+      required: [id, phone, role, membership, points, jobs_completed, created_at]
 
     # ── Create technician input ────────────────────────────────────────────────
     CreateTechnicianInput:

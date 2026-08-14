@@ -10,6 +10,7 @@ import Login from '@/pages/login';
 import Dashboard from '@/pages/dashboard';
 import Requests from '@/pages/requests';
 import Technicians from '@/pages/technicians';
+import Users from '@/pages/users';
 import MapView from '@/pages/map';
 import Layout from '@/components/layout/shell';
 import { useEffect } from 'react';
@@ -81,6 +82,9 @@ function Router() {
       </Route>
       <Route path="/technicians">
         {() => <ProtectedRoute component={Technicians} />}
+      </Route>
+      <Route path="/users">
+        {() => <ProtectedRoute component={Users} />}
       </Route>
       <Route path="/">
         {() => {
