@@ -7,6 +7,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { requireAdmin } from "../middlewares/requireAdmin";
 import { createAdminSession } from "../lib/adminSessions";
 import { techLocations } from "../lib/techLocations";
+import { dispatch } from "../lib/dispatch";
+import { notifyCustomerJobAccepted } from "../lib/pushNotifications";
 import {
   getSiteSettings,
   updateBanners,
@@ -231,7 +233,8 @@ router.patch("/admin/requests/:id/reassign", requireAdmin, async (req, res) => {
         job_completed_at: jobs.completed_at,
         job_created_at:   jobs.created_at,
         tech_name:  techniciansAlias.name,
-        tech_phone: techniciansAlias.phone,
+        tech_phone:  techniciansAlias.phone,
+        tech_rating: techniciansAlias.rating,
       })
       .from(serviceRequests)
       .innerJoin(users, eq(users.id, serviceRequests.customer_id))
@@ -243,6 +246,28 @@ router.patch("/admin/requests/:id/reassign", requireAdmin, async (req, res) => {
     if (!updated) {
       res.status(404).json({ error: "Request not found" });
       return;
+    }
+
+    // Notify customer app in real-time via WebSocket + push notification
+    if (updated.job_id) {
+      dispatch.broadcastToRoom(`job:${updated.job_id}`, {
+        type:       "job_accepted",
+        jobId:      updated.job_id,
+        requestId:  updated.req_id,
+        status:     "accepted",
+        techId:     updated.job_tech_id,
+        techName:   updated.tech_name   ?? "Technician",
+        techPhone:  updated.tech_phone  ?? "",
+        techRating: updated.tech_rating ?? 4.5,
+      });
+      dispatch.broadcastToRoom("technicians", { type: "job_taken", jobId: updated.job_id });
+      void notifyCustomerJobAccepted({
+        customerId:  updated.cust_id,
+        techName:    updated.tech_name   ?? "Technician",
+        serviceType: updated.req_service_type,
+        jobId:       updated.job_id,
+        requestId:   updated.req_id,
+      });
     }
 
     res.json({
