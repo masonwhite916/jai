@@ -153,6 +153,28 @@ paths:
                       $ref: "#/components/schemas/AdminTechnician"
                 required: [technicians]
 
+  /admin/users/{id}:
+    delete:
+      operationId: adminDeleteUser
+      tags: [admin]
+      summary: Delete a user by ID
+      description: Permanently removes the user record. Admin token required.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted successfully
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   # ── Admin site settings ─────────────────────────────────────────────────────
   /admin/site-settings:
     get:

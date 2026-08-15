@@ -402,6 +402,172 @@ router.patch("/admin/requests/:id/cancel", requireAdmin, async (req, res) => {
   }
 });
 
+// ── POST /api/admin/users ─────────────────────────────────────────────────────
+
+router.post("/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const { name, phone, role } = req.body as { name?: string; phone?: string; role?: string };
+
+    if (!phone) {
+      res.status(400).json({ error: "phone is required" });
+      return;
+    }
+    if (role !== "customer" && role !== "technician") {
+      res.status(400).json({ error: "role must be 'customer' or 'technician'" });
+      return;
+    }
+
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1);
+
+    if (existing) {
+      res.status(409).json({ error: "A user with this phone number already exists" });
+      return;
+    }
+
+    const [created] = await db
+      .insert(users)
+      .values({ phone, name: name || null, role })
+      .returning({
+        id:             users.id,
+        phone:          users.phone,
+        name:           users.name,
+        role:           users.role,
+        membership:     users.membership,
+        points:         users.points,
+        jobs_completed: users.jobs_completed,
+        created_at:     users.created_at,
+      });
+
+    res.status(201).json({
+      ...created,
+      created_at: created.created_at.toISOString(),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── GET /api/admin/users ──────────────────────────────────────────────────────
+
+router.get("/admin/users", requireAdmin, async (req, res) => {
+  try {
+    const { role: roleFilter } = req.query as { role?: string };
+
+    const rows = await db
+      .select({
+        id:             users.id,
+        phone:          users.phone,
+        name:           users.name,
+        role:           users.role,
+        membership:     users.membership,
+        points:         users.points,
+        jobs_completed: users.jobs_completed,
+        created_at:     users.created_at,
+      })
+      .from(users)
+      .orderBy(desc(users.created_at));
+
+    const filtered = roleFilter
+      ? rows.filter((r) => r.role === roleFilter)
+      : rows;
+
+    res.json({
+      users: filtered.map((u) => ({
+        ...u,
+        created_at: u.created_at.toISOString(),
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── DELETE /api/admin/users/:id ──────────────────────────────────────────────
+
+router.delete("/admin/users/:id", requireAdmin, async (req, res) => {
+  try {
+    const userId = Number(req.params.id);
+    if (isNaN(userId)) {
+      res.status(400).json({ error: "Invalid user id" });
+      return;
+    }
+
+    const deleted = await db
+      .delete(users)
+      .where(eq(users.id, userId))
+      .returning({ id: users.id });
+
+    if (!deleted.length) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    res.status(204).end();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// ── POST /api/admin/technicians ───────────────────────────────────────────────
+
+router.post("/admin/technicians", requireAdmin, async (req, res) => {
+  try {
+    const { name, phone } = req.body as { name?: string; phone?: string };
+
+    if (!phone) {
+      res.status(400).json({ error: "phone is required" });
+      return;
+    }
+
+    // Check for duplicate phone
+    const [existing] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.phone, phone))
+      .limit(1);
+
+    if (existing) {
+      res.status(409).json({ error: "A user with this phone number already exists" });
+      return;
+    }
+
+    const [created] = await db
+      .insert(users)
+      .values({ phone, name: name || null, role: "technician" })
+      .returning({
+        id:             users.id,
+        name:           users.name,
+        phone:          users.phone,
+        rating:         users.rating,
+        jobs_completed: users.jobs_completed,
+        earnings_total: users.earnings_total,
+      });
+
+    res.status(201).json({
+      id:             created.id,
+      name:           created.name,
+      phone:          created.phone,
+      rating:         created.rating,
+      jobs_completed: created.jobs_completed,
+      earnings_total: created.earnings_total,
+      active_jobs:    0,
+      last_lat:       null,
+      last_lng:       null,
+      last_seen_at:   null,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 // ── GET /api/admin/technicians ────────────────────────────────────────────────
 
 router.get("/admin/technicians", requireAdmin, async (req, res) => {
