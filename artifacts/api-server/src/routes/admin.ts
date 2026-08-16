@@ -647,6 +647,30 @@ router.put("/admin/app-config/plans", requireAdmin, async (req, res) => {
   res.json(updated);
 });
 
+// ── PATCH /api/admin/users/:id/membership ─────────────────────────────────────
+
+router.patch("/admin/users/:id/membership", requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id);
+  const { membership } = req.body as { membership: string };
+  const valid = ["none", "basic", "accidents", "rental"];
+  if (!valid.includes(membership)) {
+    res.status(400).json({ error: `membership must be one of: ${valid.join(", ")}` });
+    return;
+  }
+  try {
+    const rows = await db
+      .update(users)
+      .set({ membership: membership as any, updated_at: new Date() })
+      .where(eq(users.id, userId))
+      .returning({ id: users.id, phone: users.phone, name: users.name, membership: users.membership });
+    if (!rows.length) { res.status(404).json({ error: "User not found" }); return; }
+    res.json(rows[0]);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 // ── GET /api/site-settings (public) ──────────────────────────────────────────
 // Registered on the router but mounted at /api — consumed by jai-web
 
